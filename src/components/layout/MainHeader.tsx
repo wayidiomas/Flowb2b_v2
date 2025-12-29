@@ -35,11 +35,18 @@ function SettingsIcon() {
   )
 }
 
+interface NavChildItem {
+  label: string
+  href: string
+  permission?: keyof Permissoes
+  comingSoon?: boolean
+}
+
 interface NavItem {
   label: string
   href: string
   permission?: keyof Permissoes
-  children?: { label: string; href: string; permission?: keyof Permissoes }[]
+  children?: NavChildItem[]
 }
 
 const navigation: NavItem[] = [
@@ -62,7 +69,7 @@ const navigation: NavItem[] = [
       { label: 'Pedido de compras', href: '/compras/pedidos', permission: 'pedidos' },
       { label: 'Controle de estoque', href: '/estoque/produtos', permission: 'estoque' },
       { label: 'Notas de entrada', href: '/fiscal/notas', permission: 'financeiro' },
-      { label: 'Relatorios', href: '/relatorios', permission: 'relatorios' },
+      { label: 'Relatorios', href: '/relatorios', permission: 'relatorios', comingSoon: true },
     ],
   },
   { label: 'Suporte', href: '/suporte' },
@@ -175,14 +182,26 @@ export function MainHeader() {
               {item.children && openDropdown === item.label && (
                 <div className="absolute top-full left-0 mt-1 bg-white rounded-md shadow-lg py-2 min-w-[220px] z-50">
                   {item.children.map((child) => (
-                    <Link
-                      key={child.href}
-                      href={child.href}
-                      onClick={() => setOpenDropdown(null)}
-                      className="block px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                    >
-                      {child.label}
-                    </Link>
+                    child.comingSoon ? (
+                      <span
+                        key={child.href}
+                        className="flex items-center justify-between px-4 py-2 text-sm text-gray-400 cursor-not-allowed"
+                      >
+                        {child.label}
+                        <span className="ml-2 px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded">
+                          Em Breve
+                        </span>
+                      </span>
+                    ) : (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        onClick={() => setOpenDropdown(null)}
+                        className="block px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                      >
+                        {child.label}
+                      </Link>
+                    )
                   ))}
                 </div>
               )}
