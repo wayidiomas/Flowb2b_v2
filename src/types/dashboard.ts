@@ -41,7 +41,7 @@ export interface ProdutoCurva {
 }
 
 export interface AtividadeRecente {
-  tipo: 'pedido_venda' | 'nota_fiscal' | 'sync' | 'estoque'
+  tipo: 'pedido_venda' | 'pedido_compra' | 'nota_fiscal' | 'fornecedor' | 'sync' | 'estoque'
   titulo: string
   descricao: string
   data: string

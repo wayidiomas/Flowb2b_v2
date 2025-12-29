@@ -83,13 +83,13 @@ export function useDashboardData(): UseDashboardDataReturn {
           p_intervalo: intervalo,
         }),
 
-        // 5. Atividade recente (últimos pedidos de venda)
+        // 5. Atividade recente (view agregada de várias entidades)
         supabase
-          .from('pedidos_venda')
-          .select('numero, total, data, situacao')
+          .from('view_atividade_recente')
+          .select('tipo, titulo, descricao, data_atividade, status')
           .eq('empresa_id', empresaId)
-          .order('data', { ascending: false })
-          .limit(4),
+          .order('data_atividade', { ascending: false })
+          .limit(8),
       ])
 
       console.log('[Dashboard] Responses:', {
@@ -121,14 +121,14 @@ export function useDashboardData(): UseDashboardDataReturn {
         setPedidosPeriodo(pedidos)
       }
 
-      // Processar atividade recente
+      // Processar atividade recente (já vem formatado da view)
       if (atividadeRes.data) {
-        const atividades: AtividadeRecente[] = atividadeRes.data.map((pedido) => ({
-          tipo: 'pedido_venda' as const,
-          titulo: `Pedido #${pedido.numero}`,
-          descricao: `Valor: R$ ${Number(pedido.total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-          data: pedido.data,
-          status: 'info' as const,
+        const atividades: AtividadeRecente[] = atividadeRes.data.map((item) => ({
+          tipo: item.tipo as AtividadeRecente['tipo'],
+          titulo: item.titulo,
+          descricao: item.descricao,
+          data: item.data_atividade,
+          status: item.status as AtividadeRecente['status'],
         }))
         setAtividadeRecente(atividades)
       }
