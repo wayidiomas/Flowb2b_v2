@@ -90,24 +90,48 @@ function buildBlingPayload(data: FornecedorRequest) {
   // Campos obrigatorios
   if (data.nome) payload.nome = data.nome
 
+  // Situacao - sempre Ativo ao criar/editar
+  payload.situacao = 'A'
+
   // Campos opcionais - so adiciona se tiver valor
   if (data.codigo) payload.codigo = data.codigo
   if (data.nome_fantasia) payload.fantasia = data.nome_fantasia
   if (data.tipo_pessoa) payload.tipo = data.tipo_pessoa
 
-  // Numero do documento (CNPJ ou CPF)
+  // Numero do documento (CNPJ ou CPF) - so envia se tiver valor valido
   if (data.tipo_pessoa === 'J' && data.cnpj) {
-    payload.numeroDocumento = data.cnpj.replace(/\D/g, '')
+    const cnpjLimpo = data.cnpj.replace(/\D/g, '')
+    // So envia CNPJ se tiver 14 digitos
+    if (cnpjLimpo.length === 14) {
+      payload.numeroDocumento = cnpjLimpo
+    }
   } else if (data.tipo_pessoa === 'F' && data.cpf) {
-    payload.numeroDocumento = data.cpf.replace(/\D/g, '')
+    const cpfLimpo = data.cpf.replace(/\D/g, '')
+    // So envia CPF se tiver 11 digitos
+    if (cpfLimpo.length === 11) {
+      payload.numeroDocumento = cpfLimpo
+    }
   }
 
-  // Inscricao Estadual e indicador
-  if (data.inscricao_estadual) {
-    payload.ie = data.inscricao_estadual
-  }
-  if (data.contribuinte) {
-    payload.indicadorIe = data.contribuinte
+  // Indicador IE e Inscricao Estadual
+  // 1 = Contribuinte ICMS (IE obrigatoria)
+  // 2 = Contribuinte isento
+  // 9 = Nao contribuinte
+  if (data.ie_isento) {
+    // Se isento, indicador = 2 e nao envia IE
+    payload.indicadorIe = 2
+  } else if (data.contribuinte === '1') {
+    // Contribuinte ICMS - IE obrigatoria
+    payload.indicadorIe = 1
+    if (data.inscricao_estadual) {
+      payload.ie = data.inscricao_estadual.replace(/\D/g, '')
+    }
+  } else if (data.contribuinte === '2') {
+    // Contribuinte isento
+    payload.indicadorIe = 2
+  } else if (data.contribuinte === '9') {
+    // Nao contribuinte
+    payload.indicadorIe = 9
   }
 
   // Contato
@@ -247,7 +271,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT - Atualizar fornecedor existente
+// PUT - Atualizar fornecedor existente (apenas Supabase - Bling nao atualiza)
 export async function PUT(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -268,10 +292,10 @@ export async function PUT(request: NextRequest) {
     const supabase = createServerSupabaseClient()
     const empresaId = user.empresaId
 
-    // Buscar fornecedor atual para pegar id_bling
+    // Verificar se fornecedor existe
     const { data: existing, error: fetchError } = await supabase
       .from('fornecedores')
-      .select('id_bling')
+      .select('id, id_bling')
       .eq('id', body.id)
       .eq('empresa_id', empresaId)
       .single()
@@ -280,34 +304,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Fornecedor nao encontrado' }, { status: 404 })
     }
 
-    const idBling = existing.id_bling
-
-    // 1. Tentar atualizar no Bling se tiver id_bling
-    if (idBling) {
-      try {
-        const accessToken = await getBlingAccessToken(empresaId, supabase)
-        const blingPayload = buildBlingPayload(body)
-
-        const blingResponse = await fetch(`${BLING_CONFIG.apiUrl}/contatos/${idBling}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(blingPayload),
-        })
-
-        if (!blingResponse.ok) {
-          const errorText = await blingResponse.text()
-          console.warn('Erro ao atualizar no Bling:', blingResponse.status, errorText)
-        }
-      } catch (err) {
-        console.warn('Nao foi possivel atualizar no Bling:', err)
-      }
-    }
-
-    // 2. Atualizar no Supabase
-    const updateData = buildSupabaseData(body, empresaId, idBling, true)
+    // Atualizar apenas no Supabase
+    const updateData = buildSupabaseData(body, empresaId, existing.id_bling, true)
     const { error } = await supabase
       .from('fornecedores')
       .update(updateData)
@@ -319,7 +317,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       id: body.id,
-      id_bling: idBling,
+      id_bling: existing.id_bling,
       message: 'Fornecedor atualizado com sucesso',
     })
 
