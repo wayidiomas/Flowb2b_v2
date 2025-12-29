@@ -2,15 +2,15 @@
 
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
-import { DashboardLayout } from '@/components/layout'
+import { DashboardLayout, PageHeader } from '@/components/layout'
 import { Card } from '@/components/ui'
 
 export default function Home() {
-  const { user, empresa, loading } = useAuth()
+  const { user, loading } = useAuth()
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="flex flex-col items-center gap-3">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
           <p className="text-sm text-gray-500">Carregando...</p>
@@ -21,33 +21,8 @@ export default function Home() {
 
   return (
     <DashboardLayout>
-      {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500 mt-1">
-          Bem-vindo de volta, {user?.nome?.split(' ')[0] || 'Usuário'}
-        </p>
-      </div>
-
-      {/* Company Info Card */}
-      <Card className="mb-8" padding="md">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              {empresa?.nome_fantasia || empresa?.razao_social || 'Empresa'}
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">
-              CNPJ: {empresa?.cnpj || '-'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-success-500/10 text-success-600">
-              <span className="w-1.5 h-1.5 rounded-full bg-success-500 mr-1.5" />
-              Bling Conectado
-            </span>
-          </div>
-        </div>
-      </Card>
+      {/* Page Header with company switcher */}
+      <PageHeader title="Dashboard" />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

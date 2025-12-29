@@ -1,3 +1,5 @@
 export { Sidebar } from './Sidebar'
 export { Header } from './Header'
+export { MainHeader } from './MainHeader'
+export { PageHeader } from './PageHeader'
 export { DashboardLayout } from './DashboardLayout'
