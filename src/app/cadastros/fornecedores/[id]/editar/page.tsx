@@ -1060,7 +1060,7 @@ export default function EditarFornecedorPage() {
 
               <div className="grid grid-cols-4 gap-4 mb-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Peso</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Peso (kg)</label>
                   <input
                     type="number"
                     value={novaPolitica.peso || ''}
@@ -1118,7 +1118,7 @@ export default function EditarFornecedorPage() {
                         <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Prazo de entrega (dias)</th>
                         <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Prazo de estoque (dias)</th>
                         <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Valor minimo do pedido (R$)</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Peso</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Peso (kg)</th>
                         <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Desconto (%)</th>
                         <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Bonificacao (%)</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Observacao</th>
