@@ -13,7 +13,7 @@ import {
 function EmailIcon() {
   return (
     <svg
-      className="w-7 h-7 text-white"
+      className="w-6 h-6 text-white"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -32,7 +32,7 @@ function EmailIcon() {
 function ArrowLeftIcon() {
   return (
     <svg
-      className="w-5 h-5"
+      className="w-4 h-4"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -53,37 +53,37 @@ function CheckEmailContent() {
 
   return (
     <AuthLayout>
-      <Card className="w-full max-w-[440px]" padding="xl" shadow="lg">
+      <Card className="w-full max-w-[400px]" padding="lg" shadow="lg">
         <CardContent>
           <div className="text-center">
-            <div className="mx-auto w-14 h-14 bg-secondary-500 rounded-[14px] flex items-center justify-center mb-6 ring-[10px] ring-secondary-100">
+            <div className="mx-auto w-12 h-12 bg-secondary-500 rounded-xl flex items-center justify-center mb-4 ring-8 ring-secondary-100">
               <EmailIcon />
             </div>
-            <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
+            <h1 className="text-2xl font-semibold text-primary-700 tracking-tight mb-2">
               Verifique seu email
             </h1>
-            <p className="text-base text-gray-600 leading-6 mb-2">
+            <p className="text-sm text-gray-500 mb-1">
               Enviamos um email de confirmacao para
             </p>
             {email && (
-              <p className="text-base font-medium text-gray-900 mb-6">
+              <p className="text-sm font-medium text-gray-900 mb-4">
                 {email}
               </p>
             )}
-            <p className="text-sm text-gray-500 leading-5 mb-8">
-              Clique no link do email para ativar sua conta. Se nao encontrar,
-              verifique a pasta de spam.
+            <p className="text-xs text-gray-400 leading-4 mb-5">
+              Clique no link do email para ativar sua conta.
+              Se nao encontrar, verifique a pasta de spam.
             </p>
 
-            <div className="bg-primary-50 border border-primary-100 rounded-lg p-4 mb-8">
-              <p className="text-sm text-primary-700">
-                O link expira em <strong>24 horas</strong>.
+            <div className="bg-primary-50 border border-primary-100 rounded-lg px-3 py-2 mb-5">
+              <p className="text-xs text-primary-700">
+                O link expira em <strong>24 horas</strong>
               </p>
             </div>
 
             <Link
               href="/login"
-              className="inline-flex items-center justify-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+              className="inline-flex items-center justify-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
             >
               <ArrowLeftIcon />
               Voltar para login

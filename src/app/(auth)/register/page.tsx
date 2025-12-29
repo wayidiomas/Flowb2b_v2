@@ -17,7 +17,7 @@ import {
 function UserPlusIcon() {
   return (
     <svg
-      className="w-7 h-7 text-white"
+      className="w-6 h-6 text-white"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -47,12 +47,12 @@ function RegisterForm() {
     setError('')
 
     if (!acceptTerms) {
-      setError('Você precisa aceitar os termos para continuar')
+      setError('Voce precisa aceitar os termos para continuar')
       return
     }
 
     if (password.length < 8) {
-      setError('A senha deve ter no mínimo 8 caracteres')
+      setError('A senha deve ter no minimo 8 caracteres')
       return
     }
 
@@ -87,23 +87,24 @@ function RegisterForm() {
 
   return (
     <AuthLayout>
-      <Card className="w-full max-w-[440px]" padding="xl" shadow="lg">
+      <Card className="w-full max-w-[400px]" padding="lg" shadow="lg">
         <CardContent>
-          <div className="text-center mb-8">
-            {/* Icone */}
-            <div className="mx-auto w-14 h-14 bg-secondary-500 rounded-[14px] flex items-center justify-center mb-6 ring-[10px] ring-secondary-100">
+          {/* Header compacto */}
+          <div className="text-center mb-6">
+            <div className="mx-auto w-12 h-12 bg-secondary-500 rounded-xl flex items-center justify-center mb-4 ring-8 ring-secondary-100">
               <UserPlusIcon />
             </div>
-            <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
+            <h1 className="text-2xl font-semibold text-primary-700 tracking-tight">
               Vamos criar sua conta!
             </h1>
-            <p className="text-base text-gray-600 leading-6">
-              Preencha os dados abaixo para comecar.
+            <p className="text-sm text-gray-500 mt-1">
+              Preencha os dados abaixo
             </p>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-5">
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-error-500/10 text-error-600 p-3 rounded-lg text-sm font-medium">
+              <div className="bg-error-500/10 text-error-600 px-3 py-2 rounded-lg text-sm font-medium">
                 {error}
               </div>
             )}
@@ -114,7 +115,7 @@ function RegisterForm() {
               required
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              placeholder="Entre com seu nome"
+              placeholder="Seu nome completo"
               autoComplete="name"
             />
 
@@ -124,7 +125,7 @@ function RegisterForm() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Entre com seu email"
+              placeholder="seu@email.com"
               autoComplete="email"
             />
 
@@ -138,37 +139,35 @@ function RegisterForm() {
                 placeholder="••••••••"
                 autoComplete="new-password"
               />
-              <p className="mt-1.5 text-sm text-gray-400">
-                A senha deve ter no mínimo 8 caracteres
+              <p className="mt-1 text-xs text-gray-400">
+                Minimo 8 caracteres
               </p>
             </div>
 
-            <div className="pt-2">
-              <Checkbox
-                checked={acceptTerms}
-                onChange={(e) => setAcceptTerms(e.target.checked)}
-                label={
-                  <span>
-                    Concordo com os termos de{' '}
-                    <Link
-                      href="/politica-privacidade"
-                      className="font-bold text-primary-700 hover:underline"
-                    >
-                      Política de Privacidade
-                    </Link>
-                    {' '}e{' '}
-                    <Link
-                      href="/termos-de-uso"
-                      className="font-bold text-primary-700 hover:underline"
-                    >
-                      Termos de Uso
-                    </Link>
-                  </span>
-                }
-              />
-            </div>
+            <Checkbox
+              checked={acceptTerms}
+              onChange={(e) => setAcceptTerms(e.target.checked)}
+              label={
+                <span className="text-xs">
+                  Concordo com a{' '}
+                  <Link
+                    href="/politica-privacidade"
+                    className="font-semibold text-primary-600 hover:underline"
+                  >
+                    Privacidade
+                  </Link>
+                  {' '}e{' '}
+                  <Link
+                    href="/termos-de-uso"
+                    className="font-semibold text-primary-600 hover:underline"
+                  >
+                    Termos
+                  </Link>
+                </span>
+              }
+            />
 
-            <div className="space-y-4 pt-4">
+            <div className="space-y-3 pt-1">
               <Button
                 type="submit"
                 variant="primary"
@@ -177,26 +176,33 @@ function RegisterForm() {
                 loading={loading}
                 disabled={!acceptTerms}
               >
-                Vamos lá!
+                Criar conta
               </Button>
 
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-white px-2 text-gray-400">ou</span>
+                </div>
+              </div>
+
               <SocialButton platform="google" onClick={handleGoogleSignup}>
-                Cadastrar se com Google
+                Cadastrar com Google
               </SocialButton>
             </div>
           </form>
 
-          <div className="mt-6 text-center">
-            <span className="text-sm text-gray-600">
-              Já tem uma conta?{' '}
-            </span>
+          <p className="mt-5 text-center text-sm text-gray-600">
+            Ja tem uma conta?{' '}
             <Link
               href="/login"
-              className="text-sm font-semibold text-secondary-500 hover:text-secondary-600 transition-colors"
+              className="font-semibold text-secondary-500 hover:text-secondary-600 transition-colors"
             >
               Entrar
             </Link>
-          </div>
+          </p>
         </CardContent>
       </Card>
     </AuthLayout>

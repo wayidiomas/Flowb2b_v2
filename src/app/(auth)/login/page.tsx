@@ -17,7 +17,7 @@ import {
 function MailIcon() {
   return (
     <svg
-      className="w-7 h-7 text-white"
+      className="w-6 h-6 text-white"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -66,24 +66,24 @@ function LoginForm() {
 
   return (
     <AuthLayout>
-      <Card className="w-full max-w-[440px]" padding="xl" shadow="lg">
+      <Card className="w-full max-w-[400px]" padding="lg" shadow="lg">
         <CardContent>
-          <div className="text-center mb-8">
-            {/* Icone */}
-            <div className="mx-auto w-14 h-14 bg-secondary-500 rounded-[14px] flex items-center justify-center mb-6 ring-[10px] ring-secondary-100">
+          {/* Header compacto */}
+          <div className="text-center mb-6">
+            <div className="mx-auto w-12 h-12 bg-secondary-500 rounded-xl flex items-center justify-center mb-4 ring-8 ring-secondary-100">
               <MailIcon />
             </div>
-            <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
+            <h1 className="text-2xl font-semibold text-primary-700 tracking-tight">
               Que bom te-lo de volta!
             </h1>
-            <p className="text-base text-gray-600 leading-6">
-              Por favor entre com as suas credenciais.
+            <p className="text-sm text-gray-500 mt-1">
+              Entre com suas credenciais
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-error-500/10 text-error-600 p-3 rounded-lg text-sm font-medium">
+              <div className="bg-error-500/10 text-error-600 px-3 py-2 rounded-lg text-sm font-medium">
                 {error}
               </div>
             )}
@@ -94,30 +94,31 @@ function LoginForm() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Entre com seu email"
+              placeholder="seu@email.com"
               autoComplete="email"
             />
 
-            <Input
-              label="Senha"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="current-password"
-            />
-
-            <div className="flex justify-end">
-              <Link
-                href="/forgot-password"
-                className="text-sm font-semibold text-secondary-500 hover:text-secondary-600 transition-colors"
-              >
-                Esqueceu sua senha?
-              </Link>
+            <div>
+              <Input
+                label="Senha"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+              />
+              <div className="flex justify-end mt-1">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-medium text-secondary-500 hover:text-secondary-600 transition-colors"
+                >
+                  Esqueceu sua senha?
+                </Link>
+              </div>
             </div>
 
-            <div className="space-y-4 pt-2">
+            <div className="space-y-3 pt-2">
               <Button
                 type="submit"
                 variant="primary"
@@ -128,36 +129,41 @@ function LoginForm() {
                 Entrar
               </Button>
 
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-white px-2 text-gray-400">ou</span>
+                </div>
+              </div>
+
               <SocialButton platform="google" onClick={handleGoogleLogin}>
                 Entrar com Google
               </SocialButton>
             </div>
           </form>
 
-          <div className="mt-6 text-center">
-            <span className="text-sm text-gray-600">
-              Não tem uma conta?{' '}
-            </span>
+          <p className="mt-5 text-center text-sm text-gray-600">
+            Nao tem uma conta?{' '}
             <Link
               href="/register"
-              className="text-sm font-semibold text-secondary-500 hover:text-secondary-600 transition-colors"
+              className="font-semibold text-secondary-500 hover:text-secondary-600 transition-colors"
             >
               Cadastre-se
             </Link>
-          </div>
+          </p>
 
-          <div className="mt-6 pt-6 border-t border-gray-100 text-center">
-            <p className="text-xs text-gray-500">
-              Ao entrar, voce concorda com nossos{' '}
-              <Link href="/termos-de-uso" className="text-primary-600 hover:underline">
-                Termos de Uso
-              </Link>{' '}
-              e{' '}
-              <Link href="/politica-privacidade" className="text-primary-600 hover:underline">
-                Politica de Privacidade
-              </Link>
-            </p>
-          </div>
+          <p className="mt-4 text-center text-[11px] text-gray-400 leading-4">
+            Ao entrar, voce concorda com nossos{' '}
+            <Link href="/termos-de-uso" className="text-primary-500 hover:underline">
+              Termos
+            </Link>{' '}
+            e{' '}
+            <Link href="/politica-privacidade" className="text-primary-500 hover:underline">
+              Privacidade
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </AuthLayout>

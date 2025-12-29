@@ -14,7 +14,7 @@ import {
 function KeyIcon() {
   return (
     <svg
-      className="w-7 h-7 text-white"
+      className="w-6 h-6 text-white"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -33,7 +33,7 @@ function KeyIcon() {
 function ArrowLeftIcon() {
   return (
     <svg
-      className="w-5 h-5"
+      className="w-4 h-4"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -43,6 +43,25 @@ function ArrowLeftIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
+      />
+    </svg>
+  )
+}
+
+// Icone de check
+function CheckIcon() {
+  return (
+    <svg
+      className="w-6 h-6 text-white"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4.5 12.75l6 6 9-13.5"
       />
     </svg>
   )
@@ -82,37 +101,25 @@ export default function ForgotPasswordPage() {
 
   return (
     <AuthLayout>
-      <Card className="w-full max-w-[440px]" padding="xl" shadow="lg">
+      <Card className="w-full max-w-[400px]" padding="lg" shadow="lg">
         <CardContent>
           {success ? (
             // Estado de sucesso
             <div className="text-center">
-              <div className="mx-auto w-14 h-14 bg-success-500 rounded-full flex items-center justify-center mb-6">
-                <svg
-                  className="w-7 h-7 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4.5 12.75l6 6 9-13.5"
-                  />
-                </svg>
+              <div className="mx-auto w-12 h-12 bg-success-500 rounded-full flex items-center justify-center mb-4">
+                <CheckIcon />
               </div>
-              <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
+              <h1 className="text-2xl font-semibold text-primary-700 tracking-tight mb-2">
                 Email enviado!
               </h1>
-              <p className="text-base text-gray-600 leading-6 mb-8">
-                Enviamos as instrucoes para alterar sua senha para{' '}
+              <p className="text-sm text-gray-600 leading-5 mb-6">
+                Enviamos as instrucoes para{' '}
                 <span className="font-medium text-gray-900">{email}</span>.
                 Verifique sua caixa de entrada.
               </p>
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+                className="inline-flex items-center justify-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <ArrowLeftIcon />
                 Voltar para login
@@ -121,22 +128,21 @@ export default function ForgotPasswordPage() {
           ) : (
             // Formulario
             <>
-              <div className="text-center mb-8">
-                {/* Icone */}
-                <div className="mx-auto w-14 h-14 bg-secondary-500 rounded-[14px] flex items-center justify-center mb-6 ring-[10px] ring-secondary-100">
+              <div className="text-center mb-6">
+                <div className="mx-auto w-12 h-12 bg-secondary-500 rounded-xl flex items-center justify-center mb-4 ring-8 ring-secondary-100">
                   <KeyIcon />
                 </div>
-                <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
+                <h1 className="text-2xl font-semibold text-primary-700 tracking-tight">
                   Esqueceu sua senha?
                 </h1>
-                <p className="text-base text-gray-600 leading-6">
-                  Nao se preocupe, nos enviaremos as instrucoes para alterar sua senha.
+                <p className="text-sm text-gray-500 mt-1">
+                  Enviaremos instrucoes para seu email
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
-                  <div className="bg-error-500/10 text-error-600 p-3 rounded-lg text-sm font-medium">
+                  <div className="bg-error-500/10 text-error-600 px-3 py-2 rounded-lg text-sm font-medium">
                     {error}
                   </div>
                 )}
@@ -147,7 +153,7 @@ export default function ForgotPasswordPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Entre com seu email"
+                  placeholder="seu@email.com"
                   autoComplete="email"
                 />
 
@@ -158,14 +164,14 @@ export default function ForgotPasswordPage() {
                   fullWidth
                   loading={loading}
                 >
-                  Alterar senha
+                  Enviar instrucoes
                 </Button>
               </form>
 
-              <div className="mt-8 text-center">
+              <div className="mt-6 text-center">
                 <Link
                   href="/login"
-                  className="inline-flex items-center justify-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+                  className="inline-flex items-center justify-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
                 >
                   <ArrowLeftIcon />
                   Voltar para login

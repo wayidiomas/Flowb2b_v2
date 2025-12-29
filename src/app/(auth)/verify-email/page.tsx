@@ -14,7 +14,7 @@ import {
 function CheckIcon() {
   return (
     <svg
-      className="w-7 h-7 text-white"
+      className="w-6 h-6 text-white"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -33,7 +33,7 @@ function CheckIcon() {
 function ErrorIcon() {
   return (
     <svg
-      className="w-7 h-7 text-white"
+      className="w-6 h-6 text-white"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -52,7 +52,7 @@ function ErrorIcon() {
 function EmailIcon() {
   return (
     <svg
-      className="w-7 h-7 text-white"
+      className="w-6 h-6 text-white"
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -71,7 +71,7 @@ function EmailIcon() {
 function LoadingIcon() {
   return (
     <svg
-      className="w-7 h-7 text-white animate-spin"
+      className="w-6 h-6 text-white animate-spin"
       fill="none"
       viewBox="0 0 24 24"
     >
@@ -136,14 +136,14 @@ function VerifyEmailContent() {
       case 'loading':
         return (
           <div className="text-center">
-            <div className="mx-auto w-14 h-14 bg-primary-500 rounded-[14px] flex items-center justify-center mb-6 ring-[10px] ring-primary-100">
+            <div className="mx-auto w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center mb-4 ring-8 ring-primary-100">
               <LoadingIcon />
             </div>
-            <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
-              Verificando seu email...
+            <h1 className="text-2xl font-semibold text-primary-700 tracking-tight mb-2">
+              Verificando...
             </h1>
-            <p className="text-base text-gray-600 leading-6">
-              Aguarde enquanto confirmamos seu email.
+            <p className="text-sm text-gray-500">
+              Aguarde enquanto confirmamos seu email
             </p>
           </div>
         )
@@ -151,14 +151,14 @@ function VerifyEmailContent() {
       case 'success':
         return (
           <div className="text-center">
-            <div className="mx-auto w-14 h-14 bg-success-500 rounded-full flex items-center justify-center mb-6">
+            <div className="mx-auto w-12 h-12 bg-success-500 rounded-full flex items-center justify-center mb-4">
               <CheckIcon />
             </div>
-            <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
+            <h1 className="text-2xl font-semibold text-primary-700 tracking-tight mb-2">
               Email confirmado!
             </h1>
-            <p className="text-base text-gray-600 leading-6 mb-8">
-              Seu email foi confirmado com sucesso. Agora voce pode acessar sua conta.
+            <p className="text-sm text-gray-500 mb-5">
+              Sua conta foi ativada com sucesso
             </p>
             <Link href="/login">
               <Button variant="primary" size="lg" fullWidth>
@@ -171,14 +171,14 @@ function VerifyEmailContent() {
       case 'already-confirmed':
         return (
           <div className="text-center">
-            <div className="mx-auto w-14 h-14 bg-secondary-500 rounded-[14px] flex items-center justify-center mb-6 ring-[10px] ring-secondary-100">
+            <div className="mx-auto w-12 h-12 bg-secondary-500 rounded-xl flex items-center justify-center mb-4 ring-8 ring-secondary-100">
               <EmailIcon />
             </div>
-            <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
-              Email ja confirmado
+            <h1 className="text-2xl font-semibold text-primary-700 tracking-tight mb-2">
+              Ja confirmado
             </h1>
-            <p className="text-base text-gray-600 leading-6 mb-8">
-              Seu email ja foi confirmado anteriormente. Voce pode acessar sua conta normalmente.
+            <p className="text-sm text-gray-500 mb-5">
+              Seu email ja foi confirmado anteriormente
             </p>
             <Link href="/login">
               <Button variant="primary" size="lg" fullWidth>
@@ -191,15 +191,14 @@ function VerifyEmailContent() {
       case 'no-token':
         return (
           <div className="text-center">
-            <div className="mx-auto w-14 h-14 bg-warning-500 rounded-full flex items-center justify-center mb-6">
+            <div className="mx-auto w-12 h-12 bg-warning-500 rounded-full flex items-center justify-center mb-4">
               <ErrorIcon />
             </div>
-            <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
+            <h1 className="text-2xl font-semibold text-primary-700 tracking-tight mb-2">
               Link invalido
             </h1>
-            <p className="text-base text-gray-600 leading-6 mb-8">
-              O link de confirmacao esta incompleto ou invalido.
-              Por favor, use o link completo enviado para seu email.
+            <p className="text-sm text-gray-500 mb-5">
+              Use o link completo enviado para seu email
             </p>
             <Link href="/login">
               <Button variant="secondary" size="lg" fullWidth>
@@ -212,16 +211,16 @@ function VerifyEmailContent() {
       case 'error':
         return (
           <div className="text-center">
-            <div className="mx-auto w-14 h-14 bg-error-500 rounded-full flex items-center justify-center mb-6">
+            <div className="mx-auto w-12 h-12 bg-error-500 rounded-full flex items-center justify-center mb-4">
               <ErrorIcon />
             </div>
-            <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
+            <h1 className="text-2xl font-semibold text-primary-700 tracking-tight mb-2">
               Erro na verificacao
             </h1>
-            <p className="text-base text-gray-600 leading-6 mb-8">
-              {errorMessage || 'Ocorreu um erro ao verificar seu email. O link pode estar expirado ou invalido.'}
+            <p className="text-sm text-gray-500 mb-5">
+              {errorMessage || 'O link pode estar expirado ou invalido'}
             </p>
-            <div className="space-y-3">
+            <div className="space-y-2">
               <Link href="/register">
                 <Button variant="primary" size="lg" fullWidth>
                   Criar nova conta
@@ -240,7 +239,7 @@ function VerifyEmailContent() {
 
   return (
     <AuthLayout>
-      <Card className="w-full max-w-[440px]" padding="xl" shadow="lg">
+      <Card className="w-full max-w-[400px]" padding="lg" shadow="lg">
         <CardContent>
           {renderContent()}
         </CardContent>
