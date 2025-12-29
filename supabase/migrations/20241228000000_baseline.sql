@@ -1,0 +1,40 @@
+-- ============================================
+-- BASELINE MIGRATION - FlowB2B
+-- ============================================
+-- Este arquivo documenta o estado atual do banco.
+-- NAO EXECUTAR - as tabelas ja existem no Supabase.
+-- Serve como referencia para futuras migrations.
+-- ============================================
+
+-- Tabelas existentes (24 total):
+-- 1.  empresas (1 registro) - Central multi-tenant
+-- 2.  users (0 registros) - RLS ativo
+-- 3.  bling_tokens (1 registro)
+-- 4.  fornecedores (104 registros)
+-- 5.  produtos (3.563 registros)
+-- 6.  fornecedores_produtos (3.918 registros)
+-- 7.  clientes (869 registros)
+-- 8.  pedidos_venda (23.238 registros)
+-- 9.  itens_pedido_venda (42.481 registros)
+-- 10. parcelas_pedido_venda (23.304 registros)
+-- 11. pedidos_compra (294 registros)
+-- 12. itens_pedido_compra (6.016 registros)
+-- 13. parcelas_pedido_compra (42 registros)
+-- 14. notas_fiscais (837 registros)
+-- 15. detalhes_nota_fiscal (720 registros)
+-- 16. produtos_detalhes_nota_fiscal (10.820 registros)
+-- 17. movimentacao_estoque (6.586 registros)
+-- 18. formas_de_pagamento (43 registros)
+-- 19. politica_compra (5 registros)
+-- 20. cron_jobs (4.018 registros) - RLS ativo
+-- 21. analise_vendas_estoque (0 registros)
+-- 22. sugestoes_pedido_compra (0 registros)
+-- 23. impostos_produto (0 registros)
+-- 24. prazos_entrega (0 registros)
+
+-- ============================================
+-- IMPORTANTE: Tabela users precisa de ajuste!
+-- ============================================
+-- A tabela users atual usa auth.users (Supabase Auth)
+-- mas o CLAUDE.md especifica autenticacao propria.
+-- Criar migration separada para ajustar isso.
