@@ -188,7 +188,7 @@ export default function ControleEstoquePage() {
     fetchResumo()
   }, [fetchResumo])
 
-  // Buscar produtos - usando query simples com ilike separados
+  // Buscar produtos - usando RPC flowb2b_search_produto
   const searchProdutos = useCallback(async (term: string) => {
     if (!term || term.length < 2 || !empresaId) {
       setSearchResults([])
@@ -198,47 +198,29 @@ export default function ControleEstoquePage() {
 
     setLoading(true)
     try {
-      // Escapar caracteres especiais para evitar erro 400
-      const safeTerm = term.replace(/[%_]/g, '')
-
-      const { data, error } = await supabase
-        .from('produtos')
-        .select('id, codigo, nome, gtin, preco, precocusto, estoque_atual')
-        .eq('empresa_id', empresaId)
-        .ilike('nome', `%${safeTerm}%`)
-        .limit(10)
+      const { data, error } = await supabase.rpc('flowb2b_search_produto', {
+        p_empresa_id: empresaId,
+        p_search_term: term
+      })
 
       if (error) {
         console.error('Erro ao buscar produtos:', error)
-        // Tentar busca por codigo/gtin se nome falhar
-        const { data: data2, error: error2 } = await supabase
-          .from('produtos')
-          .select('id, codigo, nome, gtin, preco, precocusto, estoque_atual')
-          .eq('empresa_id', empresaId)
-          .or(`codigo.ilike.%${safeTerm}%,gtin.ilike.%${safeTerm}%`)
-          .limit(10)
-
-        if (!error2 && data2) {
-          setSearchResults(data2)
-          setShowSearchResults(true)
-        }
+        setSearchResults([])
         return
       }
 
-      // Se não encontrou por nome, buscar por codigo/gtin
-      if (data && data.length === 0) {
-        const { data: data2 } = await supabase
-          .from('produtos')
-          .select('id, codigo, nome, gtin, preco, precocusto, estoque_atual')
-          .eq('empresa_id', empresaId)
-          .or(`codigo.ilike.%${safeTerm}%,gtin.ilike.%${safeTerm}%`)
-          .limit(10)
+      // Converter formato da RPC para o formato esperado
+      const produtos: Produto[] = (data || []).slice(0, 10).map((p: any) => ({
+        id: p.produto_id,
+        codigo: p.codigo || '',
+        nome: p.nome || '',
+        gtin: p.gtin || null,
+        preco: p.preco || 0,
+        precocusto: null,
+        estoque_atual: p.estoque_atual || 0,
+      }))
 
-        setSearchResults(data2 || [])
-      } else {
-        setSearchResults(data || [])
-      }
-
+      setSearchResults(produtos)
       setShowSearchResults(true)
     } catch (err) {
       console.error('Erro:', err)
