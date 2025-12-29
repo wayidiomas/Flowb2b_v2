@@ -128,6 +128,11 @@ export default function ControleEstoquePage() {
 
   // Modal
   const [showNovoLancamentoModal, setShowNovoLancamentoModal] = useState(false)
+  const [modalStep, setModalStep] = useState<'search' | 'form'>('form')
+  const [modalSearchTerm, setModalSearchTerm] = useState('')
+  const [modalSearchResults, setModalSearchResults] = useState<Produto[]>([])
+  const [modalSearchLoading, setModalSearchLoading] = useState(false)
+  const [modalSelectedProduct, setModalSelectedProduct] = useState<Produto | null>(null)
   const [novoLancamento, setNovoLancamento] = useState({
     tipo: 'Entrada' as 'Entrada' | 'Saida',
     quantidade: '',
@@ -317,14 +322,15 @@ export default function ControleEstoquePage() {
 
   // Salvar novo lancamento
   const handleSaveLancamento = async () => {
-    if (!selectedProduct || !empresaId || !novoLancamento.quantidade) return
+    const produto = modalSelectedProduct
+    if (!produto || !empresaId || !novoLancamento.quantidade) return
 
     setSavingLancamento(true)
     try {
       const { error } = await supabase
         .from('movimentacao_estoque')
         .insert({
-          produto_id: selectedProduct.id,
+          produto_id: produto.id,
           empresa_id: empresaId,
           data: new Date().toISOString(),
           tipo: novoLancamento.tipo,
@@ -341,31 +347,29 @@ export default function ControleEstoquePage() {
 
       // Atualizar estoque do produto
       const novoEstoque = novoLancamento.tipo === 'Entrada'
-        ? selectedProduct.estoque_atual + parseFloat(novoLancamento.quantidade)
-        : selectedProduct.estoque_atual - parseFloat(novoLancamento.quantidade)
+        ? produto.estoque_atual + parseFloat(novoLancamento.quantidade)
+        : produto.estoque_atual - parseFloat(novoLancamento.quantidade)
 
       await supabase
         .from('produtos')
         .update({ estoque_atual: novoEstoque })
-        .eq('id', selectedProduct.id)
+        .eq('id', produto.id)
         .eq('empresa_id', empresaId)
 
-      // Atualizar estado local
-      setSelectedProduct({ ...selectedProduct, estoque_atual: novoEstoque })
+      // Se tinha produto selecionado na pagina principal, atualizar ele
+      if (selectedProduct && selectedProduct.id === produto.id) {
+        setSelectedProduct({ ...selectedProduct, estoque_atual: novoEstoque })
+        fetchMovimentacoes(selectedProduct.id)
+      } else {
+        // Se nao tinha, selecionar o produto do modal na pagina principal
+        setSelectedProduct({ ...produto, estoque_atual: novoEstoque })
+      }
 
-      // Recarregar movimentacoes e resumo
-      fetchMovimentacoes(selectedProduct.id)
+      // Recarregar resumo
       fetchResumo()
 
       // Fechar modal e limpar form
-      setShowNovoLancamentoModal(false)
-      setNovoLancamento({
-        tipo: 'Entrada',
-        quantidade: '',
-        precoCompra: '',
-        precoCusto: '',
-        observacao: '',
-      })
+      handleCloseModal()
     } catch (err) {
       console.error('Erro:', err)
       alert('Erro ao salvar lancamento')
@@ -409,6 +413,109 @@ export default function ControleEstoquePage() {
     } catch (err) {
       console.error('Erro:', err)
     }
+  }
+
+  // Abrir modal de novo lancamento
+  const handleOpenNovoLancamento = () => {
+    if (selectedProduct) {
+      // Se já tem produto selecionado, vai direto pro form
+      setModalSelectedProduct(selectedProduct)
+      setModalStep('form')
+    } else {
+      // Se não tem produto, mostra busca primeiro
+      setModalSelectedProduct(null)
+      setModalSearchTerm('')
+      setModalSearchResults([])
+      setModalStep('search')
+    }
+    setShowNovoLancamentoModal(true)
+  }
+
+  // Buscar produtos no modal
+  const searchProdutosModal = useCallback(async (term: string) => {
+    if (!term || term.length < 2 || !empresaId) {
+      setModalSearchResults([])
+      return
+    }
+
+    setModalSearchLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('flowb2b_search_produto', {
+        p_empresa_id: empresaId,
+        p_search_term: term
+      })
+
+      if (error) {
+        console.error('Erro ao buscar produtos:', error)
+        setModalSearchResults([])
+        return
+      }
+
+      const produtos: Produto[] = (data || []).slice(0, 10).map((p: any) => ({
+        id: p.produto_id,
+        codigo: p.codigo || '',
+        nome: p.nome || '',
+        gtin: p.gtin || null,
+        preco: p.preco || 0,
+        precocusto: null,
+        valor_de_compra: null,
+        estoque_atual: p.estoque_atual || 0,
+      }))
+
+      setModalSearchResults(produtos)
+    } catch (err) {
+      console.error('Erro:', err)
+    } finally {
+      setModalSearchLoading(false)
+    }
+  }, [empresaId])
+
+  // Debounce modal search
+  useEffect(() => {
+    if (!showNovoLancamentoModal || modalStep !== 'search') return
+
+    const timer = setTimeout(() => {
+      searchProdutosModal(modalSearchTerm)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [modalSearchTerm, searchProdutosModal, showNovoLancamentoModal, modalStep])
+
+  // Selecionar produto no modal
+  const handleSelectProductModal = async (produto: Produto) => {
+    // Buscar precos de compra e custo
+    const { data: precoData } = await supabase
+      .from('fornecedores_produtos')
+      .select('valor_de_compra, precocusto')
+      .eq('produto_id', produto.id)
+      .eq('empresa_id', empresaId)
+      .limit(1)
+      .single()
+
+    const produtoComPrecos: Produto = {
+      ...produto,
+      valor_de_compra: precoData?.valor_de_compra || null,
+      precocusto: precoData?.precocusto || null,
+    }
+
+    setModalSelectedProduct(produtoComPrecos)
+    setModalStep('form')
+  }
+
+  // Fechar modal e resetar
+  const handleCloseModal = () => {
+    setShowNovoLancamentoModal(false)
+    setModalStep('form')
+    setModalSearchTerm('')
+    setModalSearchResults([])
+    setModalSelectedProduct(null)
+    setNovoLancamento({
+      tipo: 'Entrada',
+      quantidade: '',
+      precoCompra: '',
+      precoCusto: '',
+      observacao: '',
+    })
   }
 
   // Paginacao
@@ -709,9 +816,8 @@ export default function ControleEstoquePage() {
             <div className="px-[18px] py-4">
               {/* Novo Lancamento Button */}
               <button
-                onClick={() => selectedProduct && setShowNovoLancamentoModal(true)}
-                disabled={!selectedProduct}
-                className="w-full flex items-center gap-2 px-3 py-3 text-[#009E3F] font-medium text-sm border-b border-[#EFEFEF] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                onClick={handleOpenNovoLancamento}
+                className="w-full flex items-center gap-2 px-3 py-3 text-[#009E3F] font-medium text-sm border-b border-[#EFEFEF] hover:bg-gray-50 transition-colors"
               >
                 <PlusIcon />
                 Novo lancamento
@@ -761,104 +867,202 @@ export default function ControleEstoquePage() {
       </div>
 
       {/* Modal Novo Lancamento */}
-      {showNovoLancamentoModal && selectedProduct && (
+      {showNovoLancamentoModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-[20px] w-full max-w-[500px] mx-4 shadow-xl">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#EFEFEF]">
-              <h3 className="text-lg font-medium text-[#344054]">Novo lancamento</h3>
+              <h3 className="text-lg font-medium text-[#344054]">
+                {modalStep === 'search' ? 'Selecionar produto' : 'Novo lancamento'}
+              </h3>
               <button
-                onClick={() => setShowNovoLancamentoModal(false)}
+                onClick={handleCloseModal}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <XIcon />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="px-6 py-5 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                {/* Tipo */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                  <select
-                    value={novoLancamento.tipo}
-                    onChange={(e) => setNovoLancamento({ ...novoLancamento, tipo: e.target.value as 'Entrada' | 'Saida' })}
-                    className="block w-full px-3 py-2.5 text-sm bg-white border border-[#D0D5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            {/* Step 1: Search Product */}
+            {modalStep === 'search' && (
+              <div className="px-6 py-5">
+                <p className="text-sm text-gray-500 mb-4">
+                  Busque e selecione um produto para registrar a movimentacao
+                </p>
+
+                {/* Search Input */}
+                <div className="relative mb-4">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#898989]">
+                    <SearchIcon />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Pesquisar por nome, EAN ou codigo..."
+                    value={modalSearchTerm}
+                    onChange={(e) => setModalSearchTerm(e.target.value)}
+                    autoFocus
+                    className="block w-full pl-10 pr-4 py-2.5 text-[13px] text-gray-900 placeholder:text-[#C9C9C9] bg-white border border-[#D0D5DD] rounded-[14px] shadow-xs focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+
+                {/* Search Results */}
+                <div className="max-h-[300px] overflow-y-auto border border-[#EFEFEF] rounded-lg">
+                  {modalSearchLoading ? (
+                    <div className="p-4 text-center text-gray-500 text-sm">
+                      Buscando...
+                    </div>
+                  ) : modalSearchTerm.length < 2 ? (
+                    <div className="p-4 text-center text-gray-400 text-sm">
+                      Digite pelo menos 2 caracteres para buscar
+                    </div>
+                  ) : modalSearchResults.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500 text-sm">
+                      Nenhum produto encontrado
+                    </div>
+                  ) : (
+                    modalSearchResults.map((produto) => (
+                      <button
+                        key={produto.id}
+                        onClick={() => handleSelectProductModal(produto)}
+                        className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-[#EFEFEF] last:border-b-0 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-[#344054]">{produto.nome}</p>
+                            <p className="text-xs text-gray-500">
+                              {produto.gtin || produto.codigo} - Estoque: {produto.estoque_atual}
+                            </p>
+                          </div>
+                          <span className="text-sm text-[#336FB6] font-medium">
+                            {formatCurrency(produto.preco)}
+                          </span>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-end gap-3 pt-4">
+                  <button
+                    onClick={handleCloseModal}
+                    className="px-6 py-2.5 text-sm font-medium text-white bg-[#5C5C5C] hover:bg-[#4A4A4A] rounded-lg transition-colors"
                   >
-                    <option value="Entrada">Entrada</option>
-                    <option value="Saida">Saida</option>
-                  </select>
-                </div>
-
-                {/* Quantidade */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
-                  <input
-                    type="number"
-                    placeholder="0,000000"
-                    value={novoLancamento.quantidade}
-                    onChange={(e) => setNovoLancamento({ ...novoLancamento, quantidade: e.target.value })}
-                    className="block w-full px-3 py-2.5 text-sm bg-white border border-[#D0D5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  />
+                    Cancelar
+                  </button>
                 </div>
               </div>
+            )}
 
-              <div className="grid grid-cols-2 gap-4">
-                {/* Preco de Compra */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Preco de compra</label>
-                  <input
-                    type="number"
-                    placeholder="745,00000"
-                    value={novoLancamento.precoCompra}
-                    onChange={(e) => setNovoLancamento({ ...novoLancamento, precoCompra: e.target.value })}
-                    className="block w-full px-3 py-2.5 text-sm bg-white border border-[#D0D5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  />
+            {/* Step 2: Lancamento Form */}
+            {modalStep === 'form' && modalSelectedProduct && (
+              <>
+                {/* Produto Selecionado */}
+                <div className="px-6 pt-4">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-[#344054]">{modalSelectedProduct.nome}</p>
+                      <p className="text-xs text-gray-500">
+                        {modalSelectedProduct.gtin || modalSelectedProduct.codigo} - Estoque: {modalSelectedProduct.estoque_atual}
+                      </p>
+                    </div>
+                    {!selectedProduct && (
+                      <button
+                        onClick={() => setModalStep('search')}
+                        className="text-xs text-[#336FB6] hover:underline"
+                      >
+                        Alterar
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Preco de Custo */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Preco de custo</label>
-                  <input
-                    type="number"
-                    placeholder="0,000000"
-                    value={novoLancamento.precoCusto}
-                    onChange={(e) => setNovoLancamento({ ...novoLancamento, precoCusto: e.target.value })}
-                    className="block w-full px-3 py-2.5 text-sm bg-white border border-[#D0D5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  />
+                {/* Modal Body */}
+                <div className="px-6 py-5 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Tipo */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                      <select
+                        value={novoLancamento.tipo}
+                        onChange={(e) => setNovoLancamento({ ...novoLancamento, tipo: e.target.value as 'Entrada' | 'Saida' })}
+                        className="block w-full px-3 py-2.5 text-sm bg-white border border-[#D0D5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="Entrada">Entrada</option>
+                        <option value="Saida">Saida</option>
+                      </select>
+                    </div>
+
+                    {/* Quantidade */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
+                      <input
+                        type="number"
+                        placeholder="0,000000"
+                        value={novoLancamento.quantidade}
+                        onChange={(e) => setNovoLancamento({ ...novoLancamento, quantidade: e.target.value })}
+                        className="block w-full px-3 py-2.5 text-sm bg-white border border-[#D0D5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Preco de Compra */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Preco de compra</label>
+                      <input
+                        type="number"
+                        placeholder="745,00000"
+                        value={novoLancamento.precoCompra}
+                        onChange={(e) => setNovoLancamento({ ...novoLancamento, precoCompra: e.target.value })}
+                        className="block w-full px-3 py-2.5 text-sm bg-white border border-[#D0D5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                    </div>
+
+                    {/* Preco de Custo */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Preco de custo</label>
+                      <input
+                        type="number"
+                        placeholder="0,000000"
+                        value={novoLancamento.precoCusto}
+                        onChange={(e) => setNovoLancamento({ ...novoLancamento, precoCusto: e.target.value })}
+                        className="block w-full px-3 py-2.5 text-sm bg-white border border-[#D0D5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Observacoes */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Observacoes</label>
+                    <textarea
+                      rows={4}
+                      placeholder="Digite observacoes..."
+                      value={novoLancamento.observacao}
+                      onChange={(e) => setNovoLancamento({ ...novoLancamento, observacao: e.target.value })}
+                      className="block w-full px-3 py-2.5 text-sm bg-white border border-[#D0D5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Observacoes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Observacoes</label>
-                <textarea
-                  rows={4}
-                  placeholder="Digite observacoes..."
-                  value={novoLancamento.observacao}
-                  onChange={(e) => setNovoLancamento({ ...novoLancamento, observacao: e.target.value })}
-                  className="block w-full px-3 py-2.5 text-sm bg-white border border-[#D0D5DD] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#EFEFEF]">
-              <button
-                onClick={() => setShowNovoLancamentoModal(false)}
-                className="px-6 py-2.5 text-sm font-medium text-white bg-[#5C5C5C] hover:bg-[#4A4A4A] rounded-lg transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveLancamento}
-                disabled={savingLancamento || !novoLancamento.quantidade}
-                className="px-6 py-2.5 text-sm font-medium text-white bg-[#22C55E] hover:bg-[#16A34A] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {savingLancamento ? 'Salvando...' : 'Salvar'}
-              </button>
-            </div>
+                {/* Modal Footer */}
+                <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#EFEFEF]">
+                  <button
+                    onClick={handleCloseModal}
+                    className="px-6 py-2.5 text-sm font-medium text-white bg-[#5C5C5C] hover:bg-[#4A4A4A] rounded-lg transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSaveLancamento}
+                    disabled={savingLancamento || !novoLancamento.quantidade}
+                    className="px-6 py-2.5 text-sm font-medium text-white bg-[#22C55E] hover:bg-[#16A34A] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {savingLancamento ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
