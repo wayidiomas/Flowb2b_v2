@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout'
+import { LogoMark } from '@/components/ui'
 import type {
   FornecedorFormData,
   TipoPessoa,
@@ -86,6 +87,40 @@ export default function NovoFornecedorPage() {
       ...prev,
       endereco: { ...prev.endereco, [field]: value }
     }))
+  }
+
+  // Buscar endereco via CEP (ViaCEP API)
+  const [loadingCep, setLoadingCep] = useState(false)
+
+  const handleCepBlur = async () => {
+    const cep = formData.endereco?.cep?.replace(/\D/g, '')
+    if (!cep || cep.length !== 8) return
+
+    setLoadingCep(true)
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`)
+      const data = await response.json()
+
+      if (data.erro) {
+        console.warn('CEP nao encontrado')
+        return
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        endereco: {
+          ...prev.endereco,
+          logradouro: data.logradouro || prev.endereco?.logradouro || '',
+          bairro: data.bairro || prev.endereco?.bairro || '',
+          cidade: data.localidade || prev.endereco?.cidade || '',
+          uf: data.uf || prev.endereco?.uf || '',
+        }
+      }))
+    } catch (err) {
+      console.error('Erro ao buscar CEP:', err)
+    } finally {
+      setLoadingCep(false)
+    }
   }
 
   const handleRelacaoVendaChange = (relacao: RelacaoVenda) => {
@@ -471,13 +506,25 @@ export default function NovoFornecedorPage() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">CEP</label>
-                <input
-                  type="text"
-                  value={formData.endereco?.cep || ''}
-                  onChange={(e) => handleEnderecoChange('cep', e.target.value)}
-                  placeholder="00000-000"
-                  className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={formData.endereco?.cep || ''}
+                    onChange={(e) => handleEnderecoChange('cep', e.target.value)}
+                    onBlur={handleCepBlur}
+                    placeholder="00000-000"
+                    maxLength={9}
+                    className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                  />
+                  {loadingCep && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <svg className="animate-spin h-4 w-4 text-[#336FB6]" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Logradouro</label>
@@ -538,10 +585,18 @@ export default function NovoFornecedorPage() {
           )}
 
           {/* Info message */}
-          <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-700">
-              Apos salvar, voce podera adicionar politicas de compra e vincular produtos ao fornecedor.
-            </p>
+          <div className="mt-8 p-4 bg-[#EBF3FF] border border-[#336FB6]/20 rounded-xl flex items-center gap-4">
+            <div className="flex-shrink-0 w-12 h-12 bg-[#336FB6]/10 rounded-full flex items-center justify-center">
+              <LogoMark size={28} color="#336FB6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-[#336FB6]">
+                Dica FlowB2B
+              </p>
+              <p className="text-sm text-[#5A7BA6]">
+                Apos salvar, voce podera adicionar politicas de compra e vincular produtos ao fornecedor.
+              </p>
+            </div>
           </div>
         </div>
       </div>
