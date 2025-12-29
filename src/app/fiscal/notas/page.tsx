@@ -1,11 +1,23 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import type { NotaFiscalListItem } from '@/types/notaFiscal'
 import { SITUACAO_NOTA } from '@/types/notaFiscal'
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts'
 
 // Icons
 function SearchIcon() {
@@ -188,6 +200,52 @@ export default function NotasEntradaPage() {
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedNotas = filteredNotas.slice(startIndex, startIndex + itemsPerPage)
 
+  // Dados para grafico de evolucao mensal
+  const notasPorMes = useMemo(() => {
+    const meses: Record<string, number> = {}
+
+    notas.forEach((nota) => {
+      if (nota.data_emissao) {
+        const date = new Date(nota.data_emissao)
+        const mesAno = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        meses[mesAno] = (meses[mesAno] || 0) + 1
+      }
+    })
+
+    // Ordenar e pegar ultimos 12 meses
+    return Object.entries(meses)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-12)
+      .map(([mes, total]) => {
+        const [ano, mesNum] = mes.split('-')
+        const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+        return {
+          mes: `${mesesNomes[parseInt(mesNum) - 1]}/${ano.slice(2)}`,
+          total,
+        }
+      })
+  }, [notas])
+
+  // Dados para grafico de top fornecedores
+  const topFornecedores = useMemo(() => {
+    const fornecedores: Record<string, number> = {}
+
+    notas.forEach((nota) => {
+      const nome = nota.fornecedor_nome || nota.contato_nome || 'Desconhecido'
+      // Truncar nome longo
+      const nomeReduzido = nome.length > 20 ? nome.substring(0, 20) + '...' : nome
+      fornecedores[nomeReduzido] = (fornecedores[nomeReduzido] || 0) + 1
+    })
+
+    return Object.entries(fornecedores)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([nome, total]) => ({ nome, total }))
+  }, [notas])
+
+  // Cores para o grafico de barras
+  const COLORS = ['#336FB6', '#4A90D9', '#6BB3F0', '#8ECFFF', '#B5E0FF']
+
   // Gerar paginas para navegacao
   const getPageNumbers = () => {
     const pages: (number | string)[] = []
@@ -249,6 +307,100 @@ export default function NotasEntradaPage() {
         title="Notas de Entrada"
         subtitle={`${filteredNotas.length} notas fiscais`}
       />
+
+      {/* Charts Section */}
+      {!loading && notas.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Evolucao Mensal */}
+          <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-6">
+            <h3 className="text-sm font-medium text-[#344054] mb-4">Notas por Mes</h3>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={notasPorMes} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorNotas" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#336FB6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#336FB6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EDEDED" />
+                  <XAxis
+                    dataKey="mes"
+                    tick={{ fontSize: 11, fill: '#838383' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: '#838383' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #EDEDED',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                    }}
+                    formatter={(value) => [`${value} notas`, 'Total']}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="total"
+                    stroke="#336FB6"
+                    strokeWidth={2}
+                    fill="url(#colorNotas)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Top Fornecedores */}
+          <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-6">
+            <h3 className="text-sm font-medium text-[#344054] mb-4">Top 5 Fornecedores</h3>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={topFornecedores}
+                  layout="vertical"
+                  margin={{ top: 0, right: 30, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#EDEDED" />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 11, fill: '#838383' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="nome"
+                    tick={{ fontSize: 11, fill: '#344054' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={130}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #EDEDED',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                    }}
+                    formatter={(value) => [`${value} notas`, 'Total']}
+                  />
+                  <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+                    {topFornecedores.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Card Container */}
       <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
