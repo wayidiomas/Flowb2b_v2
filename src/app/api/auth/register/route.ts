@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
-import { hashPassword, generateToken, setAuthCookie } from '@/lib/auth'
+import { hashPassword } from '@/lib/auth'
+import { sendEmailConfirmation } from '@/lib/email'
 import type { RegisterCredentials, AuthResponse } from '@/types/auth'
 
 export async function POST(request: NextRequest) {
@@ -46,11 +47,18 @@ export async function POST(request: NextRequest) {
     // Verificar se email já existe
     const { data: existingUser } = await supabase
       .from('users')
-      .select('id')
+      .select('id, email_confirmed_at')
       .eq('email', email.toLowerCase())
       .single()
 
     if (existingUser) {
+      // Se o email existe mas não foi confirmado, informar ao usuário
+      if (!existingUser.email_confirmed_at) {
+        return NextResponse.json<AuthResponse>(
+          { success: false, error: 'Este email já está cadastrado. Verifique sua caixa de entrada para confirmar.' },
+          { status: 409 }
+        )
+      }
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Este email já está cadastrado' },
         { status: 409 }
@@ -60,10 +68,13 @@ export async function POST(request: NextRequest) {
     // Criar hash da senha
     const passwordHash = await hashPassword(password)
 
-    // Gerar UUID para o novo usuário (auth própria, não depende de auth.uid())
+    // Gerar UUID para o novo usuário
     const newUserId = crypto.randomUUID()
 
-    // Inserir novo usuário
+    // Gerar token de confirmação de email
+    const confirmationToken = crypto.randomUUID()
+
+    // Inserir novo usuário (inativo até confirmar email)
     const { data: newUser, error: insertError } = await supabase
       .from('users')
       .insert({
@@ -72,7 +83,9 @@ export async function POST(request: NextRequest) {
         email: email.toLowerCase(),
         password_hash: passwordHash,
         role: 'user',
-        ativo: true,
+        ativo: false, // Inativo até confirmar email
+        confirmation_token: confirmationToken,
+        confirmation_sent_at: new Date().toISOString(),
       })
       .select()
       .single()
@@ -85,23 +98,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Gerar token JWT (sem empresa_id por enquanto - usuário precisa vincular depois)
-    const token = await generateToken({
-      userId: newUser.id,
-      empresaId: newUser.empresa_id || 0,
-      email: newUser.email,
-      role: newUser.role,
-    })
+    // Montar URL de confirmação
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const confirmationUrl = `${baseUrl}/verify-email?token=${confirmationToken}`
 
-    // Definir cookie
-    await setAuthCookie(token)
+    // Enviar email de confirmação
+    const emailResult = await sendEmailConfirmation(
+      newUser.email,
+      newUser.nome,
+      confirmationUrl
+    )
 
-    // Retornar usuário (sem password_hash)
-    const { password_hash: _, ...userWithoutPassword } = newUser
+    if (!emailResult.success) {
+      console.error('Failed to send confirmation email:', emailResult.error)
+      // Não falhar o registro, apenas logar o erro
+    }
 
     return NextResponse.json<AuthResponse>({
       success: true,
-      user: userWithoutPassword,
+      message: 'Conta criada! Verifique seu email para confirmar o cadastro.',
+      requiresEmailConfirmation: true,
     })
   } catch (error) {
     console.error('Register error:', error)

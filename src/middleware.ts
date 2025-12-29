@@ -13,6 +13,8 @@ const publicRoutes = [
   '/login',
   '/register',
   '/forgot-password',
+  '/verify-email',
+  '/check-email',
   '/termos-de-uso',
   '/politica-privacidade',
 ]
@@ -26,6 +28,7 @@ const publicApiRoutes = [
   '/api/auth/reset-password',
   '/api/auth/magic-link',
   '/api/auth/verify-magic-link',
+  '/api/auth/verify-email',
 ]
 
 export async function middleware(request: NextRequest) {

@@ -17,12 +17,11 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerSupabaseClient()
 
-    // Buscar usuário pelo email
+    // Buscar usuário pelo email (sem filtro de ativo para dar mensagem correta)
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
       .eq('email', email.toLowerCase())
-      .eq('ativo', true)
       .single()
 
     if (error || !user) {
@@ -32,11 +31,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar senha
+    // Verificar senha primeiro
     const isValidPassword = await verifyPassword(password, user.password_hash)
     if (!isValidPassword) {
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Credenciais inválidas' },
+        { status: 401 }
+      )
+    }
+
+    // Verificar se email foi confirmado
+    if (!user.email_confirmed_at) {
+      return NextResponse.json<AuthResponse>(
+        {
+          success: false,
+          error: 'Email ainda não confirmado. Verifique sua caixa de entrada.',
+          requiresEmailConfirmation: true,
+        },
+        { status: 401 }
+      )
+    }
+
+    // Verificar se usuário está ativo
+    if (!user.ativo) {
+      return NextResponse.json<AuthResponse>(
+        { success: false, error: 'Conta desativada. Entre em contato com o suporte.' },
         { status: 401 }
       )
     }

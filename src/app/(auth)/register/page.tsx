@@ -62,7 +62,7 @@ function RegisterForm() {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, email, password }),
+        body: JSON.stringify({ nome, email, password, acceptedTerms: acceptTerms }),
       })
 
       const data = await response.json()
@@ -71,8 +71,8 @@ function RegisterForm() {
         throw new Error(data.error || 'Erro ao criar conta')
       }
 
-      // Redireciona para login com mensagem de sucesso
-      router.push('/login?registered=true')
+      // Redireciona para pagina de verificacao de email
+      router.push(`/check-email?email=${encodeURIComponent(email)}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar conta')
     } finally {

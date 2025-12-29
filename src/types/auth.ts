@@ -70,7 +70,9 @@ export interface VerifyMagicLinkResponse {
 export interface AuthResponse {
   success: boolean
   user?: Omit<User, 'password_hash'>
+  message?: string
   error?: string
+  requiresEmailConfirmation?: boolean
 }
 
 export interface SessionUser {
