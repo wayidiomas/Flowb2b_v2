@@ -457,9 +457,15 @@ function PurchasesBarChart({
 // Formatar periodo para exibicao
 function formatPeriodo(periodo: string, intervalo: IntervaloGrafico): string {
   if (intervalo === '12_meses') {
-    // "2025 Dec" -> "Dec"
+    // "2025 Dec" -> "Dec" ou "Dec'24" se for ano diferente
     const parts = periodo.split(' ')
-    return parts[1] || periodo
+    const year = parts[0]
+    const month = parts[1] || periodo
+    const currentYear = new Date().getFullYear().toString()
+    if (year !== currentYear) {
+      return `${month}'${year.slice(2)}`
+    }
+    return month
   }
   // "2025-12-28" -> "28"
   const parts = periodo.split('-')
