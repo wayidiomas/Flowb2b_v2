@@ -176,27 +176,6 @@ export function MainHeader() {
 
         {/* Right side */}
         <div className="flex items-center gap-4">
-          {/* Company selector */}
-          <div className="relative">
-            <button
-              onClick={() => setUserMenuOpen(false)}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-md px-3 py-1.5 transition-colors"
-            >
-              <div className="text-left">
-                <p className="text-white text-sm font-medium leading-tight">
-                  {empresa?.nome_fantasia || 'Selecione'}
-                </p>
-                <p className="text-white/60 text-[10px] leading-tight">
-                  Trocar empresa
-                </p>
-              </div>
-              <ChevronDownIcon className="w-3 h-3 text-white/70" />
-            </button>
-          </div>
-
-          {/* Divider */}
-          <div className="w-px h-8 bg-white/20" />
-
           {/* User info with dropdown */}
           <div className="relative" ref={userMenuRef}>
             <button
