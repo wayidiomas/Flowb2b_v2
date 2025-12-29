@@ -3,17 +3,34 @@
 import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { AuthLayout } from '@/components/auth'
 import {
   Button,
   Input,
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
-  Logo,
   SocialButton,
   Checkbox,
 } from '@/components/ui'
+
+// Icone de usuario
+function UserPlusIcon() {
+  return (
+    <svg
+      className="w-7 h-7 text-white"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z"
+      />
+    </svg>
+  )
+}
 
 function RegisterForm() {
   const [nome, setNome] = useState('')
@@ -69,160 +86,126 @@ function RegisterForm() {
   }
 
   return (
-    <div className="min-h-screen flex bg-gradient-brand">
-      {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:flex-1 flex-col items-center justify-center px-8">
-        <div className="max-w-md text-center">
-          <p className="text-3xl font-semibold text-white tracking-tight mb-4">
-            Bem-vindo a
-          </p>
-          <Logo variant="light" size="xl" />
-
-          <p className="mt-8 text-gray-200 leading-relaxed">
-            Simplifique sua gestão de compras B2B com integração direta ao Bling.
-            Controle estoque, pedidos e fornecedores em um só lugar.
-          </p>
-
-          {/* Social Proof */}
-          <div className="mt-8 flex items-center justify-center gap-4">
-            <div className="flex -space-x-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div
-                  key={i}
-                  className="w-10 h-10 rounded-full bg-white/20 border-2 border-white flex items-center justify-center text-white text-sm font-medium"
-                >
-                  {String.fromCharCode(64 + i)}
-                </div>
-              ))}
+    <AuthLayout>
+      <Card className="w-full max-w-[440px]" padding="xl" shadow="lg">
+        <CardContent>
+          <div className="text-center mb-8">
+            {/* Icone */}
+            <div className="mx-auto w-14 h-14 bg-secondary-500 rounded-[14px] flex items-center justify-center mb-6 ring-[10px] ring-secondary-100">
+              <UserPlusIcon />
             </div>
-            <p className="text-gray-200 font-medium">
-              Junte-se a 10.000+ usuários
+            <h1 className="text-[30px] font-semibold text-primary-700 tracking-[-1.2px] mb-3">
+              Vamos criar sua conta!
+            </h1>
+            <p className="text-base text-gray-600 leading-6">
+              Preencha os dados abaixo para comecar.
             </p>
           </div>
-        </div>
-      </div>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div className="bg-error-500/10 text-error-600 p-3 rounded-lg text-sm font-medium">
+                {error}
+              </div>
+            )}
 
-      {/* Right Side - Register Form */}
-      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-        <Card className="w-full max-w-[440px]" padding="xl" shadow="lg">
-          <CardHeader>
-            <CardTitle>Vamos criar sua conta!</CardTitle>
-          </CardHeader>
+            <Input
+              label="Nome"
+              type="text"
+              required
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Entre com seu nome"
+              autoComplete="name"
+            />
 
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="bg-error-500/10 text-error-600 p-3 rounded-lg text-sm font-medium">
-                  {error}
-                </div>
-              )}
+            <Input
+              label="Email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Entre com seu email"
+              autoComplete="email"
+            />
 
+            <div>
               <Input
-                label="Nome"
-                type="text"
+                label="Senha"
+                type="password"
                 required
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                placeholder="Entre com seu nome"
-                autoComplete="name"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
               />
-
-              <Input
-                label="Email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Entre com seu email"
-                autoComplete="email"
-              />
-
-              <div>
-                <Input
-                  label="Senha"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                />
-                <p className="mt-1.5 text-sm text-gray-400">
-                  A senha deve ter no mínimo 8 caracteres
-                </p>
-              </div>
-
-              <div className="pt-2">
-                <Checkbox
-                  checked={acceptTerms}
-                  onChange={(e) => setAcceptTerms(e.target.checked)}
-                  label={
-                    <span>
-                      Concordo com os termos de{' '}
-                      <Link
-                        href="/politica-privacidade"
-                        className="font-bold text-primary-700 hover:underline"
-                      >
-                        Política de Privacidade
-                      </Link>
-                      {' '}e{' '}
-                      <Link
-                        href="/termos-uso"
-                        className="font-bold text-primary-700 hover:underline"
-                      >
-                        Termos de Uso
-                      </Link>
-                    </span>
-                  }
-                />
-              </div>
-
-              <div className="space-y-4 pt-4">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  fullWidth
-                  loading={loading}
-                  disabled={!acceptTerms}
-                >
-                  Vamos lá!
-                </Button>
-
-                <SocialButton platform="google" onClick={handleGoogleSignup}>
-                  Cadastrar se com Google
-                </SocialButton>
-              </div>
-            </form>
-
-            <div className="mt-6 text-center">
-              <span className="text-sm text-gray-600">
-                Já tem uma conta?{' '}
-              </span>
-              <Link
-                href="/login"
-                className="text-sm font-semibold text-secondary-500 hover:text-secondary-600 transition-colors"
-              >
-                Entrar
-              </Link>
+              <p className="mt-1.5 text-sm text-gray-400">
+                A senha deve ter no mínimo 8 caracteres
+              </p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Footer */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-        <p className="text-sm text-white/80">
-          &copy; FlowB2B, {new Date().getFullYear()}
-        </p>
-      </div>
-    </div>
+            <div className="pt-2">
+              <Checkbox
+                checked={acceptTerms}
+                onChange={(e) => setAcceptTerms(e.target.checked)}
+                label={
+                  <span>
+                    Concordo com os termos de{' '}
+                    <Link
+                      href="/politica-privacidade"
+                      className="font-bold text-primary-700 hover:underline"
+                    >
+                      Política de Privacidade
+                    </Link>
+                    {' '}e{' '}
+                    <Link
+                      href="/termos-de-uso"
+                      className="font-bold text-primary-700 hover:underline"
+                    >
+                      Termos de Uso
+                    </Link>
+                  </span>
+                }
+              />
+            </div>
+
+            <div className="space-y-4 pt-4">
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                fullWidth
+                loading={loading}
+                disabled={!acceptTerms}
+              >
+                Vamos lá!
+              </Button>
+
+              <SocialButton platform="google" onClick={handleGoogleSignup}>
+                Cadastrar se com Google
+              </SocialButton>
+            </div>
+          </form>
+
+          <div className="mt-6 text-center">
+            <span className="text-sm text-gray-600">
+              Já tem uma conta?{' '}
+            </span>
+            <Link
+              href="/login"
+              className="text-sm font-semibold text-secondary-500 hover:text-secondary-600 transition-colors"
+            >
+              Entrar
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    </AuthLayout>
   )
 }
 
 function RegisterFallback() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-brand">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#2293f9] to-[#0a489d]">
       <div className="flex flex-col items-center gap-3">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white" />
         <p className="text-sm text-white/80">Carregando...</p>

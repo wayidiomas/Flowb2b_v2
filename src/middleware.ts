@@ -9,10 +9,24 @@ const JWT_SECRET = new TextEncoder().encode(
 const COOKIE_NAME = 'flowb2b-auth-token'
 
 // Rotas públicas (não precisam de autenticação)
-const publicRoutes = ['/login', '/register', '/forgot-password']
+const publicRoutes = [
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/termos-de-uso',
+  '/politica-privacidade',
+]
 
 // Rotas de API públicas
-const publicApiRoutes = ['/api/auth/login', '/api/auth/register']
+const publicApiRoutes = [
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/me',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+  '/api/auth/magic-link',
+  '/api/auth/verify-magic-link',
+]
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

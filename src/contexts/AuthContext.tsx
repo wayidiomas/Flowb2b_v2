@@ -29,15 +29,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     try {
       const response = await fetch('/api/auth/me')
-      if (response.ok) {
+      const contentType = response.headers.get('content-type')
+
+      // Verificar se a resposta e JSON antes de parsear
+      if (response.ok && contentType?.includes('application/json')) {
         const data = await response.json()
         if (data.success) {
           setUser(data.user)
           setEmpresa(data.user.empresa)
+        } else {
+          setUser(null)
+          setEmpresa(null)
         }
+      } else {
+        setUser(null)
+        setEmpresa(null)
       }
     } catch (error) {
       console.error('Error refreshing user:', error)
+      setUser(null)
+      setEmpresa(null)
     }
   }
 
