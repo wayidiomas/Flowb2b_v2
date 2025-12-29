@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
+import { useDashboardData } from '@/hooks'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { Card } from '@/components/ui'
 import {
@@ -17,26 +18,87 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts'
+import { PIE_COLORS, BAR_COLORS, type IntervaloGrafico } from '@/types/dashboard'
+
+// Formatar valor em reais
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value)
+}
+
+// Formatar valor compacto (ex: 64K, 1.2M)
+function formatCompact(value: number): string {
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}M`
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(0)}K`
+  }
+  return value.toString()
+}
+
+// Formatar tempo relativo
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (diffHours < 1) return 'Agora'
+  if (diffHours < 24) return `Ha ${diffHours} hora${diffHours > 1 ? 's' : ''}`
+  if (diffDays === 1) return 'Ontem'
+  if (diffDays < 7) return `Ha ${diffDays} dias`
+  return date.toLocaleDateString('pt-BR')
+}
 
 export default function Home() {
-  const { loading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  const {
+    metrics,
+    fornecedores,
+    produtosCurvaA,
+    pedidosPeriodo,
+    atividadeRecente,
+    loading,
+    intervalo,
+    setIntervalo,
+  } = useDashboardData()
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="flex flex-col items-center gap-3">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
-          <p className="text-sm text-gray-500">Carregando...</p>
+          <p className="text-sm text-gray-500">Carregando dashboard...</p>
         </div>
       </div>
     )
   }
 
+  // Dados para sparklines das metricas
+  const comprasSparkData = [
+    { value: 30 }, { value: 25 }, { value: 35 }, { value: 28 },
+    { value: 40 }, { value: 35 }, { value: 50 }, { value: metrics?.compras_totais ? 55 : 45 },
+  ]
+  const estoqueSparkData = [
+    { value: 20 }, { value: 25 }, { value: 30 }, { value: 35 },
+    { value: 32 }, { value: 40 }, { value: 45 }, { value: 50 },
+  ]
+  const baixoEstoqueSparkData = [
+    { value: 50 }, { value: 45 }, { value: 40 }, { value: 35 },
+    { value: 30 }, { value: 35 }, { value: 25 }, { value: 20 },
+  ]
+  const curvaASparkData = [
+    { value: 35 }, { value: 40 }, { value: 38 }, { value: 45 },
+    { value: 42 }, { value: 50 }, { value: 48 }, { value: 55 },
+  ]
+
   return (
     <DashboardLayout>
-      {/* Page Header with company switcher */}
       <PageHeader title="Dashboard" />
 
       {/* Principais Metricas */}
@@ -45,39 +107,27 @@ export default function Home() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <MetricCard
             label="Compras totais"
-            sublabel="Este mes"
-            value="R$ 200.000,00"
-            data={[
-              { value: 30 }, { value: 25 }, { value: 35 }, { value: 28 },
-              { value: 40 }, { value: 35 }, { value: 50 }, { value: 45 },
-            ]}
+            sublabel="Pedidos emitidos"
+            value={formatCurrency(metrics?.compras_totais || 0)}
+            data={comprasSparkData}
             color="#336FB6"
           />
           <MetricCard
             label="Produtos com baixo estoque"
-            value="R$ 43,00"
-            data={[
-              { value: 50 }, { value: 45 }, { value: 40 }, { value: 35 },
-              { value: 30 }, { value: 35 }, { value: 25 }, { value: 20 },
-            ]}
+            value={`${metrics?.produtos_baixo_estoque || 0} produtos`}
+            data={baixoEstoqueSparkData}
             color="#E91E63"
           />
           <MetricCard
             label="Valor em Estoque"
-            value="R$ 400.000,00"
-            data={[
-              { value: 20 }, { value: 25 }, { value: 30 }, { value: 35 },
-              { value: 32 }, { value: 40 }, { value: 45 }, { value: 50 },
-            ]}
+            value={formatCurrency(metrics?.valor_estoque || 0)}
+            data={estoqueSparkData}
             color="#4CAF50"
           />
           <MetricCard
             label="Produtos em curva A"
-            value="75 produtos"
-            data={[
-              { value: 35 }, { value: 40 }, { value: 38 }, { value: 45 },
-              { value: 42 }, { value: 50 }, { value: 48 }, { value: 55 },
-            ]}
+            value={`${metrics?.produtos_curva_a || 0} produtos`}
+            data={curvaASparkData}
             color="#9C27B0"
           />
         </div>
@@ -88,13 +138,23 @@ export default function Home() {
         {/* Principais Fornecedores - Pie Chart */}
         <Card padding="md">
           <h3 className="text-base font-semibold text-gray-900 mb-4">Principais fornecedores</h3>
-          <SuppliersPieChart />
+          {fornecedores.length > 0 ? (
+            <SuppliersPieChart data={fornecedores} />
+          ) : (
+            <EmptyState message="Nenhum dado de fornecedor" />
+          )}
         </Card>
 
         {/* Principais Produtos Curva A - Bar Chart */}
         <Card padding="md">
-          <h3 className="text-base font-semibold text-gray-900 mb-4">Principais produtos curva A x Numero de Vendas</h3>
-          <ProductsBarChart />
+          <h3 className="text-base font-semibold text-gray-900 mb-4">
+            Principais produtos curva A x Numero de Vendas
+          </h3>
+          {produtosCurvaA.length > 0 ? (
+            <ProductsBarChart data={produtosCurvaA} />
+          ) : (
+            <EmptyState message="Nenhum produto curva A" />
+          )}
         </Card>
       </div>
 
@@ -103,12 +163,28 @@ export default function Home() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-gray-900">Pedido de compras por periodo</h3>
           <div className="flex gap-2">
-            <PeriodButton label="7 dias" active={false} />
-            <PeriodButton label="30 dias" active={false} />
-            <PeriodButton label="12 meses" active={true} />
+            <PeriodButton
+              label="7 dias"
+              active={intervalo === '7_dias'}
+              onClick={() => setIntervalo('7_dias')}
+            />
+            <PeriodButton
+              label="30 dias"
+              active={intervalo === '30_dias'}
+              onClick={() => setIntervalo('30_dias')}
+            />
+            <PeriodButton
+              label="12 meses"
+              active={intervalo === '12_meses'}
+              onClick={() => setIntervalo('12_meses')}
+            />
           </div>
         </div>
-        <PurchasesBarChart />
+        {pedidosPeriodo.length > 0 ? (
+          <PurchasesBarChart data={pedidosPeriodo} intervalo={intervalo} />
+        ) : (
+          <EmptyState message="Nenhum pedido no periodo" />
+        )}
       </Card>
 
       {/* Bottom Row */}
@@ -143,32 +219,21 @@ export default function Home() {
         {/* Atividade Recente */}
         <Card padding="md" className="lg:col-span-2">
           <h3 className="text-base font-semibold text-gray-900 mb-4">Atividade Recente</h3>
-          <div className="space-y-4">
-            <ActivityItem
-              title="Sincronizacao concluida"
-              description="Produtos sincronizados com Bling"
-              time="Ha 2 horas"
-              type="success"
-            />
-            <ActivityItem
-              title="Novo pedido de venda"
-              description="Pedido #12345 - Cliente ABC Ltda"
-              time="Ha 3 horas"
-              type="info"
-            />
-            <ActivityItem
-              title="Estoque baixo"
-              description="15 produtos abaixo do estoque minimo"
-              time="Ha 5 horas"
-              type="warning"
-            />
-            <ActivityItem
-              title="Nota fiscal emitida"
-              description="NF-e 000123456 - R$ 5.432,10"
-              time="Ontem"
-              type="info"
-            />
-          </div>
+          {atividadeRecente.length > 0 ? (
+            <div className="space-y-4">
+              {atividadeRecente.map((atividade, index) => (
+                <ActivityItem
+                  key={index}
+                  title={atividade.titulo}
+                  description={atividade.descricao}
+                  time={formatRelativeTime(atividade.data)}
+                  type={atividade.status}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState message="Nenhuma atividade recente" />
+          )}
           <Link
             href="/atividades"
             className="inline-flex items-center gap-1 mt-4 text-sm font-medium text-primary-600 hover:text-primary-700"
@@ -181,6 +246,13 @@ export default function Home() {
         </Card>
       </div>
     </DashboardLayout>
+  )
+}
+
+// ===== EMPTY STATE =====
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex items-center justify-center h-48 text-gray-400 text-sm">{message}</div>
   )
 }
 
@@ -223,42 +295,41 @@ function MetricCard({
 }
 
 // ===== SUPPLIERS PIE CHART =====
-const supplierData = [
-  { name: 'Fornecedor 1', value: 27, color: '#5B93D3' },
-  { name: 'Fornecedor 2', value: 27, color: '#2660A5' },
-  { name: 'Fornecedor 3', value: 27, color: '#FFBE4A' },
-  { name: 'Outros', value: 19, color: '#4CAF50' },
-]
-
-function SuppliersPieChart() {
+function SuppliersPieChart({ data }: { data: { fornecedor_nome: string; percentual: number }[] }) {
   return (
     <div className="flex items-center justify-center gap-6">
       <div className="w-40 h-40">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
-              data={supplierData}
+              data={data}
               cx="50%"
               cy="50%"
               innerRadius={0}
               outerRadius={70}
-              dataKey="value"
-              label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
+              dataKey="percentual"
+              nameKey="fornecedor_nome"
+              label={({ value }) => `${Number(value).toFixed(0)}%`}
               labelLine={false}
             >
-              {supplierData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
+              {data.map((_, index) => (
+                <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip formatter={(value) => `${value}%`} />
+            <Tooltip formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Percentual']} />
           </PieChart>
         </ResponsiveContainer>
       </div>
       <div className="space-y-2">
-        {supplierData.map((item) => (
-          <div key={item.name} className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-            <span className="text-sm text-gray-600">{item.name}</span>
+        {data.map((item, index) => (
+          <div key={item.fornecedor_nome} className="flex items-center gap-2">
+            <div
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
+            />
+            <span className="text-xs text-gray-600 max-w-[140px] truncate" title={item.fornecedor_nome}>
+              {item.fornecedor_nome}
+            </span>
           </div>
         ))}
       </div>
@@ -267,33 +338,27 @@ function SuppliersPieChart() {
 }
 
 // ===== PRODUCTS HORIZONTAL BAR CHART =====
-const productsData = [
-  { name: 'Racao Golden Premium', vendas: 150 },
-  { name: 'Racao Golden Special', vendas: 120 },
-  { name: 'Racao Golden Cat', vendas: 95 },
-  { name: 'Racao Golden Filhote', vendas: 60 },
-  { name: 'Racao Golden Senior', vendas: 25 },
-]
+function ProductsBarChart({ data }: { data: { produto_nome: string; numero_vendas: number }[] }) {
+  const chartData = data.map((p) => ({
+    name: p.produto_nome.length > 20 ? p.produto_nome.substring(0, 20) + '...' : p.produto_nome,
+    vendas: Number(p.numero_vendas),
+  }))
 
-function ProductsBarChart() {
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           layout="vertical"
-          data={productsData}
+          data={chartData}
           margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-          <XAxis type="number" domain={[0, 150]} tickCount={6} />
-          <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 12 }} />
+          <XAxis type="number" />
+          <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
           <Tooltip />
           <Bar dataKey="vendas" radius={[0, 4, 4, 0]}>
-            {productsData.map((_, index) => (
-              <Cell
-                key={`cell-${index}`}
-                fill={['#2660A5', '#336FB6', '#FFBE4A', '#5B93D3', '#8BB8E8'][index]}
-              />
+            {chartData.map((_, index) => (
+              <Cell key={`cell-${index}`} fill={BAR_COLORS[index % BAR_COLORS.length]} />
             ))}
           </Bar>
         </BarChart>
@@ -303,38 +368,28 @@ function ProductsBarChart() {
 }
 
 // ===== PURCHASES VERTICAL BAR CHART =====
-const purchasesData = [
-  { month: 'JAN', valor: 3200000 },
-  { month: 'FEB', valor: 2800000 },
-  { month: 'MAR', valor: 3500000 },
-  { month: 'APR', valor: 2500000 },
-  { month: 'MAY', valor: 2800000 },
-  { month: 'JUN', valor: 3800000 },
-  { month: 'JUL', valor: 3000000 },
-  { month: 'AUG', valor: 2200000 },
-  { month: 'SEP', valor: 4200000 },
-  { month: 'OCT', valor: 2500000 },
-  { month: 'NOV', valor: 3000000 },
-  { month: 'DEC', valor: 5800000 },
-]
-
-function PurchasesBarChart() {
-  const formatValue = (value: number) => {
-    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
-    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
-    return value.toString()
-  }
+function PurchasesBarChart({
+  data,
+  intervalo,
+}: {
+  data: { periodo: string; total_pedidos: number }[]
+  intervalo: IntervaloGrafico
+}) {
+  const chartData = data.map((p) => ({
+    periodo: formatPeriodo(p.periodo, intervalo),
+    valor: Number(p.total_pedidos),
+  }))
 
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={purchasesData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+        <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-          <YAxis tickFormatter={formatValue} tick={{ fontSize: 11 }} />
+          <XAxis dataKey="periodo" tick={{ fontSize: 11 }} />
+          <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} />
           <Tooltip
-            formatter={(value) => [`R$ ${formatValue(Number(value ?? 0))}`, 'Valor']}
-            labelStyle={{ fontWeight: 'bold' }}
+            formatter={(value) => [formatCurrency(Number(value)), 'Total']}
+            labelFormatter={(label) => `Periodo: ${label}`}
           />
           <Bar dataKey="valor" fill="#336FB6" radius={[4, 4, 0, 0]} />
         </BarChart>
@@ -343,16 +398,34 @@ function PurchasesBarChart() {
   )
 }
 
+// Formatar periodo para exibicao
+function formatPeriodo(periodo: string, intervalo: IntervaloGrafico): string {
+  if (intervalo === '12_meses') {
+    // "2025 Dec" -> "Dec"
+    const parts = periodo.split(' ')
+    return parts[1] || periodo
+  }
+  // "2025-12-28" -> "28"
+  const parts = periodo.split('-')
+  return parts[2] || periodo
+}
+
 // ===== PERIOD BUTTON =====
-function PeriodButton({ label, active }: { label: string; active: boolean }) {
+function PeriodButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
   return (
     <button
+      onClick={onClick}
       className={`
         px-4 py-1.5 rounded-full text-sm font-medium transition-colors
-        ${active
-          ? 'bg-[#2660A5] text-white'
-          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-        }
+        ${active ? 'bg-[#2660A5] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
       `}
     >
       {label}
@@ -372,7 +445,11 @@ function PlusIcon() {
 function SyncIcon() {
   return (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+      />
     </svg>
   )
 }
@@ -380,7 +457,11 @@ function SyncIcon() {
 function AlertIcon() {
   return (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+      />
     </svg>
   )
 }
@@ -388,7 +469,11 @@ function AlertIcon() {
 function DocumentIcon() {
   return (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+      />
     </svg>
   )
 }
@@ -411,9 +496,7 @@ function QuickAction({
       <div className="w-10 h-10 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center group-hover:bg-primary-50 group-hover:text-primary-600 transition-colors">
         {icon}
       </div>
-      <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
-        {label}
-      </span>
+      <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">{label}</span>
     </Link>
   )
 }
