@@ -98,6 +98,7 @@ interface ProdutoFornecedorDetalhado {
   dias_estoque?: number
   perc_estoque_atual?: number
   periodo_ultima_venda?: number
+  dias_sem_venda?: number  // NOVO: dias desde a última venda
   fornecedor_id: number
   valor_de_compra?: number
   precocusto?: number
@@ -381,12 +382,15 @@ export default function EditarFornecedorPage() {
     try {
       const empresaId = empresa?.id || user?.empresa_id
 
+      // Não enviar prazo_estoque - calculado pelo trigger no Supabase
+      const { prazo_estoque: _, ...politicaData } = novaPolitica
+
       const { data, error } = await supabase
         .from('politica_compra')
         .insert({
           fornecedor_id: parseInt(fornecedorId),
           empresa_id: empresaId,
-          ...novaPolitica
+          ...politicaData
         })
         .select()
         .single()
@@ -923,13 +927,22 @@ export default function EditarFornecedorPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de estoque (dias)</label>
-                  <input
-                    type="number"
-                    value={novaPolitica.prazo_estoque}
-                    onChange={(e) => setNovaPolitica(prev => ({ ...prev, prazo_estoque: parseInt(e.target.value) || 0 }))}
-                    className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Prazo de estoque (dias) <span className="text-gray-400 text-xs">(calculado)</span>
+                  </label>
+                  <div className="flex items-center h-[42px] px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50">
+                    {(() => {
+                      const mediaPagamento = novaPolitica.forma_pagamento_dias.length > 0
+                        ? novaPolitica.forma_pagamento_dias.reduce((a, b) => a + b, 0) / novaPolitica.forma_pagamento_dias.length
+                        : 0
+                      const prazoEstoque = Math.round(mediaPagamento + novaPolitica.prazo_entrega)
+                      return prazoEstoque > 0 ? (
+                        <span className="text-gray-900 font-medium">{prazoEstoque} dias</span>
+                      ) : (
+                        <span className="text-gray-400">Preencha pagamento e entrega</span>
+                      )
+                    })()}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Valor minimo do pedido (R$)</label>
@@ -1060,7 +1073,7 @@ export default function EditarFornecedorPage() {
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Data ult. venda</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Dias de estoque</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Estoque atual</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Periodo ult. venda</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Dias sem venda</th>
                       <th className="px-4 py-3 w-12"></th>
                     </tr>
                   </thead>
@@ -1092,9 +1105,10 @@ export default function EditarFornecedorPage() {
                           }).format(Number(value))
                         }
 
-                        // Calcular percentual de estoque (perc_estoque_atual vem da view)
-                        const percEstoque = prod.perc_estoque_atual ? Number(prod.perc_estoque_atual) : 0
+                        // Valores calculados da view
                         const diasEstoque = prod.dias_estoque ? Number(prod.dias_estoque) : 0
+                        const estoqueAtual = prod.estoque_atual ? Number(prod.estoque_atual) : 0
+                        const diasSemVenda = prod.dias_sem_venda ? Number(prod.dias_sem_venda) : null
 
                         return (
                           <tr key={prod.produto_id} className={`border-b border-gray-100 ${index % 2 === 1 ? 'bg-gray-50' : ''}`}>
@@ -1110,28 +1124,32 @@ export default function EditarFornecedorPage() {
                             <td className="px-4 py-3 text-sm text-gray-900 text-center">{prod.qtd_ultima_compra || '-'}</td>
                             <td className="px-4 py-3 text-sm text-gray-900 text-center">{formatDate(prod.data_ultima_venda)}</td>
                             <td className="px-4 py-3 text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full ${
-                                      diasEstoque > 50 ? 'bg-green-500' :
-                                      diasEstoque > 20 ? 'bg-yellow-500' : 'bg-red-500'
-                                    }`}
-                                    style={{ width: `${Math.min(diasEstoque, 100)}%` }}
-                                  />
-                                </div>
-                                <span className="text-sm text-gray-600">({diasEstoque}/100)</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={`px-2 py-1 text-xs rounded ${
-                                percEstoque > 50 ? 'bg-green-100 text-green-700' :
-                                percEstoque > 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                              <span className={`px-2 py-1 text-xs font-medium rounded ${
+                                diasEstoque > 60 ? 'bg-green-100 text-green-700' :
+                                diasEstoque > 30 ? 'bg-yellow-100 text-yellow-700' :
+                                diasEstoque > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
                               }`}>
-                                {percEstoque}% ({prod.estoque_atual || 0})
+                                {diasEstoque > 0 ? `${diasEstoque} dias` : '-'}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-900 text-center">{prod.periodo_ultima_venda || '-'}</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`px-2 py-1 text-xs font-medium rounded ${
+                                estoqueAtual > 10 ? 'bg-green-100 text-green-700' :
+                                estoqueAtual > 0 ? 'bg-yellow-100 text-yellow-700' :
+                                estoqueAtual < 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'
+                              }`}>
+                                {estoqueAtual}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`px-2 py-1 text-xs font-medium rounded ${
+                                diasSemVenda === null ? 'bg-gray-100 text-gray-500' :
+                                diasSemVenda <= 7 ? 'bg-green-100 text-green-700' :
+                                diasSemVenda <= 30 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                              }`}>
+                                {diasSemVenda !== null ? `${diasSemVenda} dias` : '-'}
+                              </span>
+                            </td>
                             <td className="px-4 py-3">
                               <Link href={`/estoque/produtos/${prod.produto_id}`} className="text-gray-400 hover:text-gray-600">
                                 <ExternalLinkIcon />
