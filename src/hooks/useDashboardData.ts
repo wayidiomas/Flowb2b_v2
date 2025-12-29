@@ -31,8 +31,8 @@ interface UseDashboardDataReturn {
 }
 
 export function useDashboardData(): UseDashboardDataReturn {
-  const { user } = useAuth()
-  const empresaId = user?.empresa_id
+  const { user, empresa } = useAuth()
+  const empresaId = empresa?.id
 
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
@@ -44,7 +44,10 @@ export function useDashboardData(): UseDashboardDataReturn {
   const [intervalo, setIntervalo] = useState<IntervaloGrafico>('12_meses')
 
   const fetchData = useCallback(async () => {
+    console.log('[Dashboard] empresaId:', empresaId)
+
     if (!empresaId) {
+      console.log('[Dashboard] No empresaId, skipping fetch')
       setLoading(false)
       return
     }
@@ -52,6 +55,7 @@ export function useDashboardData(): UseDashboardDataReturn {
     try {
       setLoading(true)
       setError(null)
+      console.log('[Dashboard] Fetching data for empresa:', empresaId)
 
       // Buscar todos os dados em paralelo
       const [metricsRes, fornecedoresRes, produtosRes, pedidosRes, atividadeRes] = await Promise.all([
@@ -87,6 +91,14 @@ export function useDashboardData(): UseDashboardDataReturn {
           .order('data', { ascending: false })
           .limit(4),
       ])
+
+      console.log('[Dashboard] Responses:', {
+        metrics: metricsRes,
+        fornecedores: fornecedoresRes,
+        produtos: produtosRes,
+        pedidos: pedidosRes,
+        atividade: atividadeRes,
+      })
 
       // Processar métricas
       if (metricsRes.data) {
@@ -159,8 +171,8 @@ export function useDashboardData(): UseDashboardDataReturn {
 
 // Hook auxiliar para buscar produtos por curva
 export function useProdutosCurva(curva?: 'A' | 'B' | 'C') {
-  const { user } = useAuth()
-  const empresaId = user?.empresa_id
+  const { empresa } = useAuth()
+  const empresaId = empresa?.id
   const [data, setData] = useState<ProdutoCurvaA[]>([])
   const [loading, setLoading] = useState(true)
 

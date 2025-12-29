@@ -1,8 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
-import { useDashboardData } from '@/hooks'
+import { useDashboardData, useProdutosCurva } from '@/hooks'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { Card } from '@/components/ui'
 import {
@@ -55,8 +56,11 @@ function formatRelativeTime(dateStr: string): string {
   return date.toLocaleDateString('pt-BR')
 }
 
+type CurvaType = 'A' | 'B' | 'C' | undefined
+
 export default function Home() {
   const { loading: authLoading } = useAuth()
+  const [curvaSelecionada, setCurvaSelecionada] = useState<CurvaType>('A')
   const {
     metrics,
     fornecedores,
@@ -67,6 +71,8 @@ export default function Home() {
     intervalo,
     setIntervalo,
   } = useDashboardData()
+
+  const { data: produtosCurva, loading: loadingCurva } = useProdutosCurva(curvaSelecionada)
 
   if (authLoading || loading) {
     return (
@@ -245,6 +251,59 @@ export default function Home() {
           </Link>
         </Card>
       </div>
+
+      {/* Tabela de Produtos por Curva */}
+      <Card className="mt-6" padding="md">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-gray-900">Produtos por Curva</h3>
+          <div className="flex gap-2">
+            <CurvaButton
+              label="Curva A"
+              active={curvaSelecionada === 'A'}
+              onClick={() => setCurvaSelecionada('A')}
+              color="bg-green-500"
+            />
+            <CurvaButton
+              label="Curva B"
+              active={curvaSelecionada === 'B'}
+              onClick={() => setCurvaSelecionada('B')}
+              color="bg-yellow-500"
+            />
+            <CurvaButton
+              label="Curva C"
+              active={curvaSelecionada === 'C'}
+              onClick={() => setCurvaSelecionada('C')}
+              color="bg-red-500"
+            />
+            <CurvaButton
+              label="Todas"
+              active={curvaSelecionada === undefined}
+              onClick={() => setCurvaSelecionada(undefined)}
+              color="bg-gray-500"
+            />
+          </div>
+        </div>
+
+        {loadingCurva ? (
+          <div className="flex items-center justify-center h-48">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+          </div>
+        ) : produtosCurva.length > 0 ? (
+          <ProdutosCurvaTable data={produtosCurva} />
+        ) : (
+          <EmptyState message="Nenhum produto encontrado" />
+        )}
+
+        <Link
+          href={`/estoque/produtos${curvaSelecionada ? `?curva=${curvaSelecionada}` : ''}`}
+          className="inline-flex items-center gap-1 mt-4 text-sm font-medium text-primary-600 hover:text-primary-700"
+        >
+          Ver todos os produtos
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </Link>
+      </Card>
     </DashboardLayout>
   )
 }
@@ -528,6 +587,115 @@ function ActivityItem({
         <p className="text-sm text-gray-500 truncate">{description}</p>
       </div>
       <span className="text-xs text-gray-400 whitespace-nowrap">{time}</span>
+    </div>
+  )
+}
+
+// ===== CURVA BUTTON =====
+function CurvaButton({
+  label,
+  active,
+  onClick,
+  color,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+  color: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors
+        ${active ? 'bg-[#2660A5] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
+      `}
+    >
+      <div className={`w-2.5 h-2.5 rounded-full ${active ? 'bg-white' : color}`} />
+      {label}
+    </button>
+  )
+}
+
+// ===== PRODUTOS CURVA TABLE =====
+interface ProdutoCurvaData {
+  produto_id: number
+  produto_nome: string
+  numero_vendas: number
+  curva?: string
+  quantidade_em_estoque?: number
+}
+
+function ProdutosCurvaTable({ data }: { data: ProdutoCurvaData[] }) {
+  const curvaColors: Record<string, string> = {
+    A: 'bg-green-100 text-green-700',
+    B: 'bg-yellow-100 text-yellow-700',
+    C: 'bg-red-100 text-red-700',
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-gray-200">
+            <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Produto
+            </th>
+            <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Curva
+            </th>
+            <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Vendas
+            </th>
+            <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Estoque
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.slice(0, 10).map((produto) => (
+            <tr
+              key={produto.produto_id}
+              className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+            >
+              <td className="py-3 px-4">
+                <span className="text-sm text-gray-900 font-medium" title={produto.produto_nome}>
+                  {produto.produto_nome.length > 40
+                    ? produto.produto_nome.substring(0, 40) + '...'
+                    : produto.produto_nome}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-center">
+                <span
+                  className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                    curvaColors[produto.curva || 'C'] || 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {produto.curva || '-'}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-right">
+                <span className="text-sm text-gray-700">
+                  {Number(produto.numero_vendas).toLocaleString('pt-BR')}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-right">
+                <span
+                  className={`text-sm font-medium ${
+                    (produto.quantidade_em_estoque || 0) <= 0
+                      ? 'text-red-600'
+                      : (produto.quantidade_em_estoque || 0) < 10
+                        ? 'text-yellow-600'
+                        : 'text-gray-700'
+                  }`}
+                >
+                  {(produto.quantidade_em_estoque || 0).toLocaleString('pt-BR')}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
