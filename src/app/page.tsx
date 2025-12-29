@@ -896,6 +896,7 @@ interface ProdutoRotatividadeData {
   produto_id: number
   produto_nome: string
   produto_codigo: string
+  produto_gtin: string
   quantidade_vendida: number
   quantidade_comprada: number
   estoque_atual: number
@@ -906,8 +907,50 @@ interface ProdutoRotatividadeData {
 }
 
 function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }) {
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredData = data.filter((produto) => {
+    if (!searchTerm.trim()) return true
+    const search = searchTerm.toLowerCase().trim()
+    return (
+      produto.produto_nome?.toLowerCase().includes(search) ||
+      produto.produto_codigo?.toLowerCase().includes(search) ||
+      produto.produto_gtin?.toLowerCase().includes(search)
+    )
+  })
+
   return (
     <div className="overflow-x-auto">
+      {/* Filtro de pesquisa */}
+      <div className="mb-4">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Pesquisar por nome, código ou EAN..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
       <table className="w-full">
         <thead>
           <tr className="border-b border-gray-200">
@@ -957,7 +1000,13 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
           </tr>
         </thead>
         <tbody>
-          {data.slice(0, 10).map((produto) => (
+          {filteredData.length === 0 ? (
+            <tr>
+              <td colSpan={7} className="py-8 text-center text-sm text-gray-500">
+                Nenhum produto encontrado para &quot;{searchTerm}&quot;
+              </td>
+            </tr>
+          ) : filteredData.slice(0, 10).map((produto) => (
             <tr
               key={produto.produto_id}
               className="border-b border-gray-100 hover:bg-gray-50 transition-colors"

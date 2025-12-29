@@ -76,6 +76,7 @@ export interface ProdutoAltaRotatividade {
   produto_id: number
   produto_nome: string
   produto_codigo: string
+  produto_gtin: string
   quantidade_vendida: number
   quantidade_comprada: number
   estoque_atual: number
