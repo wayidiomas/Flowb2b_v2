@@ -71,10 +71,36 @@ const navigation: NavItem[] = [
 export function MainHeader() {
   const pathname = usePathname()
   const { user, empresa, logout } = useAuth()
+  const { hasPermission, isAdmin } = usePermissions()
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
+
+  // Filtrar navegacao baseado em permissoes
+  const filteredNavigation = useMemo(() => {
+    return navigation.map(item => {
+      // Se o item principal requer permissao e usuario nao tem, esconder
+      if (item.permission && !hasPermission(item.permission)) {
+        return null
+      }
+
+      // Filtrar filhos baseado em permissoes
+      if (item.children) {
+        const filteredChildren = item.children.filter(child => {
+          if (!child.permission) return true
+          return hasPermission(child.permission)
+        })
+
+        // Se nao sobrou nenhum filho, esconder o item pai
+        if (filteredChildren.length === 0) return null
+
+        return { ...item, children: filteredChildren }
+      }
+
+      return item
+    }).filter(Boolean) as NavItem[]
+  }, [hasPermission])
 
   // Fecha dropdowns ao clicar fora
   useEffect(() => {
@@ -116,7 +142,7 @@ export function MainHeader() {
 
         {/* Navigation */}
         <nav className="flex items-center gap-1 ml-4" ref={dropdownRef}>
-          {navigation.map((item) => (
+          {filteredNavigation.map((item) => (
             <div key={item.href} className="relative">
               {item.children ? (
                 // Item com dropdown
