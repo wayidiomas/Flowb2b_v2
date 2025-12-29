@@ -82,6 +82,8 @@ export default function FornecedoresPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [cnpjFilter, setCnpjFilter] = useState('')
+  const [produtosRange, setProdutosRange] = useState<[number, number]>([0, 0])
+  const [maxProdutos, setMaxProdutos] = useState(0)
   const filterDropdownRef = useRef<HTMLDivElement>(null)
   const itemsPerPage = 10
 
@@ -136,9 +138,16 @@ export default function FornecedoresPage() {
           produtos_vinculados: Number(f.produtos_vinculados) || 0
         }))
 
+        // Calcular max de produtos vinculados para o slider
+        const max = Math.max(...fornecedoresFormatados.map(f => f.produtos_vinculados || 0), 0)
+        setMaxProdutos(max)
+        setProdutosRange([0, max])
+
         setFornecedores(fornecedoresFormatados)
       } else {
         setFornecedores([])
+        setMaxProdutos(0)
+        setProdutosRange([0, 0])
       }
     } catch (err) {
       console.error('Erro:', err)
@@ -166,15 +175,26 @@ export default function FornecedoresPage() {
     const fornCpfClean = forn.cpf?.replace(/\D/g, '') || ''
     const matchesDoc = !docFilterClean || fornCnpjClean.includes(docFilterClean) || fornCpfClean.includes(docFilterClean)
 
-    return matchesSearch && matchesDoc
+    // Filtro por range de produtos vinculados
+    const produtosCount = forn.produtos_vinculados || 0
+    const matchesProdutos = produtosCount >= produtosRange[0] && produtosCount <= produtosRange[1]
+
+    return matchesSearch && matchesDoc && matchesProdutos
   })
 
   // Verificar se ha filtros ativos
-  const hasActiveFilters = cnpjFilter !== ''
+  const hasActiveFilters = cnpjFilter !== '' || (produtosRange[0] > 0 || produtosRange[1] < maxProdutos)
+
+  // Contar filtros ativos
+  const activeFiltersCount = [
+    cnpjFilter !== '',
+    produtosRange[0] > 0 || produtosRange[1] < maxProdutos
+  ].filter(Boolean).length
 
   // Limpar filtros
   const clearFilters = () => {
     setCnpjFilter('')
+    setProdutosRange([0, maxProdutos])
     setShowFilterDropdown(false)
     setCurrentPage(1)
   }
@@ -295,9 +315,9 @@ export default function FornecedoresPage() {
                 >
                   <FilterIcon />
                   Filtros
-                  {hasActiveFilters && (
+                  {activeFiltersCount > 0 && (
                     <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#336FB6] text-xs text-white">
-                      1
+                      {activeFiltersCount}
                     </span>
                   )}
                 </button>
@@ -331,6 +351,58 @@ export default function FornecedoresPage() {
                           }}
                           className="block w-full px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         />
+                      </div>
+
+                      {/* Filtro por quantidade de produtos vinculados */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Produtos vinculados
+                        </label>
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="text-sm text-gray-600 min-w-[30px]">{produtosRange[0]}</span>
+                          <div className="flex-1 relative">
+                            {/* Track background */}
+                            <div className="h-2 bg-gray-200 rounded-full" />
+                            {/* Active track */}
+                            <div
+                              className="absolute top-0 h-2 bg-[#336FB6] rounded-full"
+                              style={{
+                                left: `${maxProdutos > 0 ? (produtosRange[0] / maxProdutos) * 100 : 0}%`,
+                                width: `${maxProdutos > 0 ? ((produtosRange[1] - produtosRange[0]) / maxProdutos) * 100 : 100}%`
+                              }}
+                            />
+                            {/* Min slider */}
+                            <input
+                              type="range"
+                              min={0}
+                              max={maxProdutos}
+                              value={produtosRange[0]}
+                              onChange={(e) => {
+                                const value = Math.min(Number(e.target.value), produtosRange[1])
+                                setProdutosRange([value, produtosRange[1]])
+                                setCurrentPage(1)
+                              }}
+                              className="absolute top-0 w-full h-2 appearance-none bg-transparent pointer-events-auto cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#336FB6] [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer"
+                            />
+                            {/* Max slider */}
+                            <input
+                              type="range"
+                              min={0}
+                              max={maxProdutos}
+                              value={produtosRange[1]}
+                              onChange={(e) => {
+                                const value = Math.max(Number(e.target.value), produtosRange[0])
+                                setProdutosRange([produtosRange[0], value])
+                                setCurrentPage(1)
+                              }}
+                              className="absolute top-0 w-full h-2 appearance-none bg-transparent pointer-events-auto cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#336FB6] [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer"
+                            />
+                          </div>
+                          <span className="text-sm text-gray-600 min-w-[30px] text-right">{produtosRange[1]}</span>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          De {produtosRange[0]} a {produtosRange[1]} produtos
+                        </p>
                       </div>
 
                       {/* Botoes de Acao */}
