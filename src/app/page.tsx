@@ -293,16 +293,6 @@ export default function Home() {
         ) : (
           <EmptyState message="Nenhum produto encontrado" />
         )}
-
-        <Link
-          href={`/estoque/produtos${curvaSelecionada ? `?curva=${curvaSelecionada}` : ''}`}
-          className="inline-flex items-center gap-1 mt-4 text-sm font-medium text-primary-600 hover:text-primary-700"
-        >
-          Ver todos os produtos
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </Link>
       </Card>
     </DashboardLayout>
   )
@@ -356,8 +346,8 @@ function MetricCard({
 // ===== SUPPLIERS PIE CHART =====
 function SuppliersPieChart({ data }: { data: { fornecedor_nome: string; percentual: number }[] }) {
   return (
-    <div className="flex items-center justify-center gap-6">
-      <div className="w-40 h-40">
+    <div className="flex items-center justify-center gap-8">
+      <div className="w-44 h-44">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -365,30 +355,37 @@ function SuppliersPieChart({ data }: { data: { fornecedor_nome: string; percentu
               cx="50%"
               cy="50%"
               innerRadius={0}
-              outerRadius={70}
+              outerRadius={75}
               dataKey="percentual"
               nameKey="fornecedor_nome"
-              label={({ value }) => `${Number(value).toFixed(0)}%`}
-              labelLine={false}
             >
               {data.map((_, index) => (
                 <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Percentual']} />
+            <Tooltip
+              formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Participacao']}
+              contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+            />
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {data.map((item, index) => (
-          <div key={item.fornecedor_nome} className="flex items-center gap-2">
+          <div key={item.fornecedor_nome} className="flex items-center gap-3">
             <div
-              className="w-3 h-3 rounded-full"
+              className="w-3 h-3 rounded-full shrink-0"
               style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
             />
-            <span className="text-xs text-gray-600 max-w-[140px] truncate" title={item.fornecedor_nome}>
-              {item.fornecedor_nome}
-            </span>
+            <div className="flex flex-col">
+              <span
+                className="text-sm text-gray-700 font-medium max-w-[160px] truncate"
+                title={item.fornecedor_nome}
+              >
+                {item.fornecedor_nome}
+              </span>
+              <span className="text-xs text-gray-500">{Number(item.percentual).toFixed(1)}%</span>
+            </div>
           </div>
         ))}
       </div>
@@ -628,89 +625,154 @@ interface ProdutoCurvaData {
 }
 
 function ProdutosCurvaTable({ data }: { data: ProdutoCurvaData[] }) {
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+  const totalPages = Math.ceil(data.length / itemsPerPage)
+
   const curvaColors: Record<string, string> = {
     A: 'bg-green-100 text-green-700',
     B: 'bg-yellow-100 text-yellow-700',
     C: 'bg-red-100 text-red-700',
   }
 
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const paginatedData = data.slice(startIndex, startIndex + itemsPerPage)
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-gray-200">
-            <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
-              Produto
-            </th>
-            <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
-              Curva
-            </th>
-            <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
-              Vendas
-            </th>
-            <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
-              Estoque
-            </th>
-            <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
-              Status
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.slice(0, 10).map((produto) => (
-            <tr
-              key={produto.produto_id}
-              className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-            >
-              <td className="py-3 px-4">
-                <span className="text-sm text-gray-900 font-medium" title={produto.produto_nome}>
-                  {produto.produto_nome.length > 40
-                    ? produto.produto_nome.substring(0, 40) + '...'
-                    : produto.produto_nome}
-                </span>
-              </td>
-              <td className="py-3 px-4 text-center">
-                <span
-                  className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                    curvaColors[produto.curva || 'C'] || 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {produto.curva || '-'}
-                </span>
-              </td>
-              <td className="py-3 px-4 text-right">
-                <span className="text-sm text-gray-700">
-                  {Number(produto.numero_vendas).toLocaleString('pt-BR')}
-                </span>
-              </td>
-              <td className="py-3 px-4 text-right">
-                <span
-                  className={`text-sm font-medium ${
-                    (produto.quantidade_em_estoque || 0) <= 0
-                      ? 'text-red-600'
-                      : (produto.quantidade_em_estoque || 0) < 10
-                        ? 'text-yellow-600'
-                        : 'text-gray-700'
-                  }`}
-                >
-                  {(produto.quantidade_em_estoque || 0).toLocaleString('pt-BR')}
-                </span>
-              </td>
-              <td className="py-3 px-4 text-center">
-                {produto.condicao_de_ruptura ? (
-                  <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-                    Ruptura
-                  </span>
-                ) : (
-                  <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                    OK
-                  </span>
-                )}
-              </td>
+    <div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-200">
+              <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+                Produto
+              </th>
+              <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+                Curva
+              </th>
+              <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+                Vendas
+              </th>
+              <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+                Estoque
+              </th>
+              <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+                Status
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {paginatedData.map((produto) => (
+              <tr
+                key={produto.produto_id}
+                className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+              >
+                <td className="py-3 px-4">
+                  <span className="text-sm text-gray-900 font-medium" title={produto.produto_nome}>
+                    {produto.produto_nome.length > 40
+                      ? produto.produto_nome.substring(0, 40) + '...'
+                      : produto.produto_nome}
+                  </span>
+                </td>
+                <td className="py-3 px-4 text-center">
+                  <span
+                    className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      curvaColors[produto.curva || 'C'] || 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {produto.curva || '-'}
+                  </span>
+                </td>
+                <td className="py-3 px-4 text-right">
+                  <span className="text-sm text-gray-700">
+                    {Number(produto.numero_vendas).toLocaleString('pt-BR')}
+                  </span>
+                </td>
+                <td className="py-3 px-4 text-right">
+                  <span
+                    className={`text-sm font-medium ${
+                      (produto.quantidade_em_estoque || 0) <= 0
+                        ? 'text-red-600'
+                        : (produto.quantidade_em_estoque || 0) < 10
+                          ? 'text-yellow-600'
+                          : 'text-gray-700'
+                    }`}
+                  >
+                    {(produto.quantidade_em_estoque || 0).toLocaleString('pt-BR')}
+                  </span>
+                </td>
+                <td className="py-3 px-4 text-center">
+                  {produto.condicao_de_ruptura ? (
+                    <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                      Ruptura
+                    </span>
+                  ) : (
+                    <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                      OK
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Paginacao */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+          <span className="text-sm text-gray-500">
+            Mostrando {startIndex + 1}-{Math.min(startIndex + itemsPerPage, data.length)} de{' '}
+            {data.length} produtos
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((page) => {
+                  if (totalPages <= 5) return true
+                  if (page === 1 || page === totalPages) return true
+                  if (Math.abs(page - currentPage) <= 1) return true
+                  return false
+                })
+                .map((page, index, arr) => (
+                  <span key={page}>
+                    {index > 0 && arr[index - 1] !== page - 1 && (
+                      <span className="px-1 text-gray-400">...</span>
+                    )}
+                    <button
+                      onClick={() => setCurrentPage(page)}
+                      className={`min-w-[32px] h-8 rounded-lg text-sm font-medium transition-colors ${
+                        currentPage === page
+                          ? 'bg-primary-600 text-white'
+                          : 'hover:bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  </span>
+                ))}
+            </div>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
