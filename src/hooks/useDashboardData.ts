@@ -184,7 +184,7 @@ export function useProdutosCurva(curva?: 'A' | 'B' | 'C') {
 
       let query = supabase
         .from('view_produtos_curva')
-        .select('produto_id, produto_nome, numero_vendas, curva, quantidade_em_estoque')
+        .select('produto_id, produto_nome, numero_vendas, curva, quantidade_em_estoque, condicao_de_ruptura')
         .eq('empresa_id', empresaId)
         .order('numero_vendas', { ascending: false })
         .limit(50)

@@ -624,6 +624,7 @@ interface ProdutoCurvaData {
   numero_vendas: number
   curva?: string
   quantidade_em_estoque?: number
+  condicao_de_ruptura?: boolean
 }
 
 function ProdutosCurvaTable({ data }: { data: ProdutoCurvaData[] }) {
@@ -649,6 +650,9 @@ function ProdutosCurvaTable({ data }: { data: ProdutoCurvaData[] }) {
             </th>
             <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
               Estoque
+            </th>
+            <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Status
             </th>
           </tr>
         </thead>
@@ -691,6 +695,17 @@ function ProdutosCurvaTable({ data }: { data: ProdutoCurvaData[] }) {
                 >
                   {(produto.quantidade_em_estoque || 0).toLocaleString('pt-BR')}
                 </span>
+              </td>
+              <td className="py-3 px-4 text-center">
+                {produto.condicao_de_ruptura ? (
+                  <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                    Ruptura
+                  </span>
+                ) : (
+                  <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                    OK
+                  </span>
+                )}
               </td>
             </tr>
           ))}
