@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -29,6 +30,30 @@ function PlusIcon() {
   return (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+  )
+}
+
+function UploadIcon() {
+  return (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+    </svg>
+  )
+}
+
+function UserPlusIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
     </svg>
   )
 }
@@ -70,9 +95,18 @@ export interface EmpresaFormData {
   logotipo: string
 }
 
+interface Colaborador {
+  id: number
+  nome: string
+  email: string
+  cargo?: string
+}
+
 interface EmpresaFormProps {
   initialData?: Partial<EmpresaFormData>
   isEditing?: boolean
+  colaboradores?: Colaborador[]
+  onAddColaborador?: () => void
 }
 
 const segmentOptions = ['Industria', 'Servico', 'Varejo', 'E-commerce']
@@ -84,11 +118,13 @@ const funcionariosOptions = ['1-10', '11-50', '51-200', '201-500', '500+']
 
 type TabType = 'contato' | 'endereco' | 'logotipo' | 'colaboradores'
 
-export function EmpresaForm({ initialData, isEditing = false }: EmpresaFormProps) {
+export function EmpresaForm({ initialData, isEditing = false, colaboradores = [], onAddColaborador }: EmpresaFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('contato')
   const [cnaeInput, setCnaeInput] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [formData, setFormData] = useState<EmpresaFormData>({
     razao_social: initialData?.razao_social || '',
@@ -161,6 +197,79 @@ export function EmpresaForm({ initialData, isEditing = false }: EmpresaFormProps
     }))
   }
 
+  // Upload de logotipo
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validar tipo de arquivo
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      alert('Formato de arquivo invalido. Use JPG, PNG, GIF ou WebP.')
+      return
+    }
+
+    // Validar tamanho (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Arquivo muito grande. Tamanho maximo: 2MB.')
+      return
+    }
+
+    setUploadingLogo(true)
+
+    try {
+      // Gerar nome unico para o arquivo
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+      const filePath = `logotipos/${fileName}`
+
+      // Upload para Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('empresas')
+        .upload(filePath, file)
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      // Obter URL publica
+      const { data: { publicUrl } } = supabase.storage
+        .from('empresas')
+        .getPublicUrl(filePath)
+
+      setFormData((prev) => ({ ...prev, logotipo: publicUrl }))
+    } catch (err) {
+      console.error('Erro ao fazer upload do logotipo:', err)
+      alert('Erro ao fazer upload do logotipo. Tente novamente.')
+    } finally {
+      setUploadingLogo(false)
+      // Limpar input para permitir reenvio do mesmo arquivo
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleRemoveLogo = async () => {
+    if (!formData.logotipo) return
+
+    try {
+      // Extrair o path do arquivo da URL
+      const url = new URL(formData.logotipo)
+      const pathParts = url.pathname.split('/empresas/')
+      if (pathParts.length > 1) {
+        const filePath = pathParts[1]
+
+        // Remover do Storage
+        await supabase.storage.from('empresas').remove([filePath])
+      }
+    } catch (err) {
+      console.error('Erro ao remover logotipo anterior:', err)
+    }
+
+    setFormData((prev) => ({ ...prev, logotipo: '' }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -217,7 +326,7 @@ export function EmpresaForm({ initialData, isEditing = false }: EmpresaFormProps
     { key: 'contato', label: 'Contato' },
     { key: 'endereco', label: 'Endereco' },
     { key: 'logotipo', label: 'Logotipo' },
-    { key: 'colaboradores', label: 'Colaboradores', count: 0 },
+    { key: 'colaboradores', label: 'Colaboradores', count: colaboradores.length },
   ]
 
   return (
@@ -725,21 +834,142 @@ export function EmpresaForm({ initialData, isEditing = false }: EmpresaFormProps
           )}
 
           {activeTab === 'logotipo' && (
-            <div className="text-center py-8">
-              <div className="w-32 h-32 mx-auto bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-                {formData.logotipo ? (
-                  <img src={formData.logotipo} alt="Logotipo" className="max-w-full max-h-full object-contain" />
-                ) : (
-                  <span className="text-gray-400 text-sm">Sem logotipo</span>
-                )}
-              </div>
-              <p className="text-sm text-gray-500">Upload de logotipo em desenvolvimento</p>
+            <div className="py-4">
+              {/* Input de arquivo oculto */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                onChange={handleLogoUpload}
+                className="hidden"
+              />
+
+              {formData.logotipo ? (
+                // Exibir logotipo atual
+                <div className="flex flex-col items-center">
+                  <div className="relative w-48 h-48 bg-gray-50 rounded-lg border border-gray-200 overflow-hidden mb-4">
+                    <Image
+                      src={formData.logotipo}
+                      alt="Logotipo da empresa"
+                      fill
+                      className="object-contain p-4"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingLogo}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {uploadingLogo ? 'Enviando...' : 'Alterar logotipo'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveLogo}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                    >
+                      <TrashIcon />
+                      Remover
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // Area de upload
+                <div
+                  onClick={() => !uploadingLogo && fileInputRef.current?.click()}
+                  className={`
+                    border-2 border-dashed border-gray-300 rounded-lg p-12
+                    flex flex-col items-center justify-center cursor-pointer
+                    hover:border-[#336FB6] hover:bg-gray-50 transition-colors
+                    ${uploadingLogo ? 'opacity-50 cursor-not-allowed' : ''}
+                  `}
+                >
+                  {uploadingLogo ? (
+                    <>
+                      <svg className="animate-spin h-8 w-8 text-[#336FB6] mb-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <p className="text-sm text-gray-600">Enviando...</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-gray-400 mb-4">
+                        <UploadIcon />
+                      </div>
+                      <p className="text-sm font-medium text-gray-700 mb-1">
+                        Clique para fazer upload
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        JPG, PNG, GIF ou WebP (max. 2MB)
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'colaboradores' && (
-            <div className="text-center py-8">
-              <p className="text-sm text-gray-500">Gerenciamento de colaboradores em desenvolvimento</p>
+            <div className="py-4">
+              {/* Botao Adicionar Colaborador */}
+              <div className="flex justify-end mb-4">
+                <button
+                  type="button"
+                  onClick={onAddColaborador}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
+                >
+                  <UserPlusIcon />
+                  Adicionar colaborador
+                </button>
+              </div>
+
+              {/* Lista de Colaboradores */}
+              {colaboradores.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Nome
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          E-mail
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Cargo
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {colaboradores.map((colab) => (
+                        <tr key={colab.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                            {colab.nome}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {colab.email}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {colab.cargo || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                  <div className="text-gray-400 mb-3">
+                    <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-gray-500 mb-1">Nenhum colaborador cadastrado</p>
+                  <p className="text-xs text-gray-400">Clique no botao acima para adicionar colaboradores</p>
+                </div>
+              )}
             </div>
           )}
         </div>
