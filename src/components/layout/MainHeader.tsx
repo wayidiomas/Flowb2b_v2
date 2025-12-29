@@ -2,26 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-
-// Logo FlowB2B branco
-function LogoWhite() {
-  return (
-    <div className="flex items-center gap-2">
-      <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-        <circle cx="16" cy="16" r="14" fill="white" fillOpacity="0.2" />
-        <path
-          d="M10 12h12M10 16h8M10 20h10"
-          stroke="white"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-      </svg>
-      <span className="text-white font-semibold text-lg">FlowB2B</span>
-    </div>
-  )
-}
 
 // Icone de seta para baixo
 function ChevronDownIcon({ className = 'w-3 h-3' }: { className?: string }) {
@@ -118,7 +101,14 @@ export function MainHeader() {
       <div className="h-full flex items-center px-12 gap-6">
         {/* Logo */}
         <Link href="/" className="shrink-0">
-          <LogoWhite />
+          <Image
+            src="/assets/branding/logo-white.png"
+            alt="FlowB2B"
+            width={120}
+            height={38}
+            className="object-contain"
+            priority
+          />
         </Link>
 
         {/* Navigation */}
