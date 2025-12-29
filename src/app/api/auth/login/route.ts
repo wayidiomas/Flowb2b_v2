@@ -40,17 +40,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar se email foi confirmado
-    if (!user.email_confirmed_at) {
-      return NextResponse.json<AuthResponse>(
-        {
-          success: false,
-          error: 'Email ainda não confirmado. Verifique sua caixa de entrada.',
-          requiresEmailConfirmation: true,
-        },
-        { status: 401 }
-      )
-    }
+    // TODO: Reabilitar verificação de email quando domínio verificado no Resend
+    // if (!user.email_confirmed_at) {
+    //   return NextResponse.json<AuthResponse>(
+    //     {
+    //       success: false,
+    //       error: 'Email ainda não confirmado. Verifique sua caixa de entrada.',
+    //       requiresEmailConfirmation: true,
+    //     },
+    //     { status: 401 }
+    //   )
+    // }
 
     // Verificar se usuário está ativo
     if (!user.ativo) {

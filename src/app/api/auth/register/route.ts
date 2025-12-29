@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { hashPassword } from '@/lib/auth'
-import { sendEmailConfirmation } from '@/lib/email'
+// import { sendEmailConfirmation } from '@/lib/email' // TODO: Reabilitar quando domínio verificado
 import type { RegisterCredentials, AuthResponse } from '@/types/auth'
 
 export async function POST(request: NextRequest) {
@@ -71,10 +71,7 @@ export async function POST(request: NextRequest) {
     // Gerar UUID para o novo usuário
     const newUserId = crypto.randomUUID()
 
-    // Gerar token de confirmação de email
-    const confirmationToken = crypto.randomUUID()
-
-    // Inserir novo usuário (inativo até confirmar email)
+    // Inserir novo usuário (ativo imediatamente - verificação de email desabilitada)
     const { data: newUser, error: insertError } = await supabase
       .from('users')
       .insert({
@@ -83,9 +80,7 @@ export async function POST(request: NextRequest) {
         email: email.toLowerCase(),
         password_hash: passwordHash,
         role: 'user',
-        ativo: false, // Inativo até confirmar email
-        confirmation_token: confirmationToken,
-        confirmation_sent_at: new Date().toISOString(),
+        ativo: true,
       })
       .select()
       .single()
@@ -98,26 +93,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Montar URL de confirmação
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const confirmationUrl = `${baseUrl}/verify-email?token=${confirmationToken}`
-
-    // Enviar email de confirmação
-    const emailResult = await sendEmailConfirmation(
-      newUser.email,
-      newUser.nome,
-      confirmationUrl
-    )
-
-    if (!emailResult.success) {
-      console.error('Failed to send confirmation email:', emailResult.error)
-      // Não falhar o registro, apenas logar o erro
-    }
+    // TODO: Reabilitar verificação de email quando domínio estiver verificado no Resend
+    // const confirmationToken = crypto.randomUUID()
+    // const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    // const confirmationUrl = `${baseUrl}/verify-email?token=${confirmationToken}`
+    // await sendEmailConfirmation(newUser.email, newUser.nome, confirmationUrl)
 
     return NextResponse.json<AuthResponse>({
       success: true,
-      message: 'Conta criada! Verifique seu email para confirmar o cadastro.',
-      requiresEmailConfirmation: true,
+      message: 'Conta criada com sucesso!',
     })
   } catch (error) {
     console.error('Register error:', error)

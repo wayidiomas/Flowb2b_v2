@@ -86,6 +86,7 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/'
+  const justRegistered = searchParams.get('registered') === 'true'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -126,6 +127,11 @@ function LoginForm() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {justRegistered && (
+              <div className="bg-success-500/10 text-success-600 px-3 py-2 rounded-lg text-sm font-medium">
+                Conta criada com sucesso! Faca login para continuar.
+              </div>
+            )}
             {error && (
               <div className="bg-error-500/10 text-error-600 px-3 py-2 rounded-lg text-sm font-medium">
                 {error}

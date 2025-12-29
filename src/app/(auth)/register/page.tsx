@@ -115,8 +115,8 @@ function RegisterForm() {
         throw new Error(data.error || 'Erro ao criar conta')
       }
 
-      // Redireciona para pagina de verificacao de email
-      router.push(`/check-email?email=${encodeURIComponent(email)}`)
+      // Redireciona para login após criar conta
+      router.push('/login?registered=true')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar conta')
     } finally {
