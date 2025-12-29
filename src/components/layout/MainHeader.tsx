@@ -46,7 +46,7 @@ const navigation: NavItem[] = [
     label: 'Cadastros',
     href: '/cadastros',
     children: [
-      { label: 'Cadastro de funcionarios', href: '/cadastros/funcionarios' },
+      { label: 'Cadastro de funcionarios', href: '/cadastros/colaboradores' },
       { label: 'Cadastro de fornecedores', href: '/cadastros/fornecedores' },
       { label: 'Cadastro de produtos', href: '/cadastros/produtos' },
       { label: 'Minhas empresas', href: '/cadastros/empresas' },
