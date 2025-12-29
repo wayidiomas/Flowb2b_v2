@@ -65,7 +65,7 @@ interface EmpresaListItem {
 }
 
 export default function MinhasEmpresasPage() {
-  const { user } = useAuth()
+  const { user, empresa } = useAuth()
   const [empresas, setEmpresas] = useState<EmpresaListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -81,41 +81,34 @@ export default function MinhasEmpresasPage() {
       }
 
       try {
-        // Buscar empresas vinculadas ao usuario usando a tabela de relacionamento
-        const { data, error } = await supabase
-          .from('users_empresas')
-          .select(`
-            empresa_id,
-            empresas (
-              id,
-              razao_social,
-              nome_fantasia,
-              endereco_resumido,
-              numero_colaboradores,
-              ativo,
-              unidade
-            )
-          `)
-          .eq('user_id', user.id)
-          .eq('ativo', true)
+        // O usuario tem empresa_id diretamente na tabela users
+        // Buscar a empresa vinculada ao usuario
+        const empresaId = empresa?.id || user?.empresa_id
 
-        if (error) {
-          console.error('Erro ao buscar empresas:', error)
-          // Fallback: buscar todas as empresas se nao houver relacao
-          const { data: allEmpresas } = await supabase
+        if (empresaId) {
+          // Buscar a empresa do usuario
+          const { data, error } = await supabase
+            .from('empresas')
+            .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade')
+            .eq('id', empresaId)
+
+          if (error) {
+            console.error('Erro ao buscar empresa:', error)
+          } else if (data) {
+            setEmpresas(data)
+          }
+        } else {
+          // Fallback: buscar todas as empresas disponiveis
+          const { data, error } = await supabase
             .from('empresas')
             .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade')
             .order('razao_social')
 
-          if (allEmpresas) {
-            setEmpresas(allEmpresas)
+          if (error) {
+            console.error('Erro ao buscar empresas:', error)
+          } else if (data) {
+            setEmpresas(data)
           }
-        } else if (data) {
-          // Extrair as empresas do relacionamento
-          const empresasList = data
-            .map((item) => item.empresas as unknown as EmpresaListItem)
-            .filter((e): e is EmpresaListItem => e !== null)
-          setEmpresas(empresasList)
         }
       } catch (err) {
         console.error('Erro:', err)
@@ -125,7 +118,7 @@ export default function MinhasEmpresasPage() {
     }
 
     fetchEmpresas()
-  }, [user?.id])
+  }, [user?.id, user?.empresa_id, empresa?.id])
 
   // Filtrar empresas por termo de busca
   const filteredEmpresas = empresas.filter((empresa) => {
