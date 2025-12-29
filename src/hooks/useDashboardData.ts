@@ -10,6 +10,9 @@ import type {
   PedidoPeriodo,
   AtividadeRecente,
   IntervaloGrafico,
+  TopProdutoVendido,
+  ProdutoAltaRotatividade,
+  VariacaoEstoque,
 } from '@/types/dashboard'
 
 interface UseDashboardDataReturn {
@@ -19,6 +22,9 @@ interface UseDashboardDataReturn {
   produtosCurvaA: ProdutoCurvaA[]
   pedidosPeriodo: PedidoPeriodo[]
   atividadeRecente: AtividadeRecente[]
+  topProdutosVendidos: TopProdutoVendido[]
+  produtosAltaRotatividade: ProdutoAltaRotatividade[]
+  variacaoEstoque: VariacaoEstoque[]
 
   // Estado
   loading: boolean
@@ -39,6 +45,9 @@ export function useDashboardData(): UseDashboardDataReturn {
   const [produtosCurvaA, setProdutosCurvaA] = useState<ProdutoCurvaA[]>([])
   const [pedidosPeriodo, setPedidosPeriodo] = useState<PedidoPeriodo[]>([])
   const [atividadeRecente, setAtividadeRecente] = useState<AtividadeRecente[]>([])
+  const [topProdutosVendidos, setTopProdutosVendidos] = useState<TopProdutoVendido[]>([])
+  const [produtosAltaRotatividade, setProdutosAltaRotatividade] = useState<ProdutoAltaRotatividade[]>([])
+  const [variacaoEstoque, setVariacaoEstoque] = useState<VariacaoEstoque[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [intervalo, setIntervalo] = useState<IntervaloGrafico>('12_meses')
@@ -58,7 +67,16 @@ export function useDashboardData(): UseDashboardDataReturn {
       console.log('[Dashboard] Fetching data for empresa:', empresaId)
 
       // Buscar todos os dados em paralelo
-      const [metricsRes, fornecedoresRes, produtosRes, pedidosRes, atividadeRes] = await Promise.all([
+      const [
+        metricsRes,
+        fornecedoresRes,
+        produtosRes,
+        pedidosRes,
+        atividadeRes,
+        topVendidosRes,
+        altaRotatividadeRes,
+        variacaoEstoqueRes,
+      ] = await Promise.all([
         // 1. Métricas principais
         supabase.rpc('get_dashboard_metrics', {
           p_empresa_id: empresaId,
@@ -88,6 +106,26 @@ export function useDashboardData(): UseDashboardDataReturn {
           p_empresa_id: empresaId,
           p_limit_per_type: 2,
         }),
+
+        // 6. Top produtos vendidos por período
+        supabase.rpc('get_top_produtos_vendidos', {
+          p_empresa_id: empresaId,
+          p_intervalo: intervalo,
+          p_limit: 10,
+        }),
+
+        // 7. Produtos de alta rotatividade
+        supabase.rpc('get_produtos_alta_rotatividade', {
+          p_empresa_id: empresaId,
+          p_dias: 90,
+          p_limit: 10,
+        }),
+
+        // 8. Variação do valor em estoque
+        supabase.rpc('get_variacao_valor_estoque', {
+          p_empresa_id: empresaId,
+          p_intervalo: intervalo,
+        }),
       ])
 
       console.log('[Dashboard] Responses:', {
@@ -96,6 +134,9 @@ export function useDashboardData(): UseDashboardDataReturn {
         produtos: produtosRes,
         pedidos: pedidosRes,
         atividade: atividadeRes,
+        topVendidos: topVendidosRes,
+        altaRotatividade: altaRotatividadeRes,
+        variacaoEstoque: variacaoEstoqueRes,
       })
 
       // Processar métricas
@@ -138,6 +179,21 @@ export function useDashboardData(): UseDashboardDataReturn {
         setAtividadeRecente(atividades)
       }
 
+      // Processar top produtos vendidos
+      if (topVendidosRes.data) {
+        setTopProdutosVendidos(topVendidosRes.data as TopProdutoVendido[])
+      }
+
+      // Processar produtos de alta rotatividade
+      if (altaRotatividadeRes.data) {
+        setProdutosAltaRotatividade(altaRotatividadeRes.data as ProdutoAltaRotatividade[])
+      }
+
+      // Processar variação do estoque
+      if (variacaoEstoqueRes.data) {
+        setVariacaoEstoque(variacaoEstoqueRes.data as VariacaoEstoque[])
+      }
+
       // Verificar erros
       const errors = [metricsRes.error, fornecedoresRes.error, produtosRes.error, pedidosRes.error]
         .filter(Boolean)
@@ -166,6 +222,9 @@ export function useDashboardData(): UseDashboardDataReturn {
     produtosCurvaA,
     pedidosPeriodo,
     atividadeRecente,
+    topProdutosVendidos,
+    produtosAltaRotatividade,
+    variacaoEstoque,
     loading,
     error,
     refetch: fetchData,

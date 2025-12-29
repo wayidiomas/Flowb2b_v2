@@ -50,6 +50,39 @@ export interface AtividadeRecente {
 
 export type IntervaloGrafico = '7_dias' | '30_dias' | '12_meses'
 
+// Top produtos vendidos
+export interface TopProdutoVendido {
+  produto_id: number
+  produto_nome: string
+  produto_codigo: string
+  quantidade_vendida: number
+  valor_total: number
+  numero_pedidos: number
+}
+
+// Produtos de alta rotatividade
+export interface ProdutoAltaRotatividade {
+  produto_id: number
+  produto_nome: string
+  produto_codigo: string
+  quantidade_vendida: number
+  quantidade_comprada: number
+  estoque_atual: number
+  vendas_por_dia: number
+  compras_por_dia: number
+  indice_rotatividade: number
+  dias_estoque: number | null
+}
+
+// Variação do valor em estoque
+export interface VariacaoEstoque {
+  data: string
+  valor_total: number
+  quantidade_total: number
+  variacao_valor: number | null
+  variacao_percentual: number | null
+}
+
 // Cores para os gráficos
 export const CHART_COLORS = {
   primary: '#336FB6',
