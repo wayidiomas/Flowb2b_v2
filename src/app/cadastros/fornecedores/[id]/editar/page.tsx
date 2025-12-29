@@ -147,16 +147,39 @@ export default function EditarFornecedorPage() {
   // Políticas de compra
   const [politicas, setPoliticas] = useState<PoliticaCompra[]>([])
   const [novaPolitica, setNovaPolitica] = useState<PoliticaCompraFormData>({
-    forma_pagamento_dias: [21, 28, 35],
-    prazo_entrega: 3,
-    prazo_estoque: 28,
-    valor_minimo: 300,
-    peso: 10000,
-    desconto: 10,
-    bonificacao: 10,
+    forma_pagamento_dias: [],
+    prazo_entrega: 0,
+    prazo_estoque: 0,
+    valor_minimo: 0,
+    peso: 0,
+    desconto: 0,
+    bonificacao: 0,
     observacao: '',
     estoque_eficiente: true
   })
+
+  // Estado para novo dia de pagamento
+  const [novoDiaPagamento, setNovoDiaPagamento] = useState<string>('')
+
+  // Adicionar dia de pagamento
+  const handleAddDiaPagamento = () => {
+    const dia = parseInt(novoDiaPagamento)
+    if (dia > 0 && !novaPolitica.forma_pagamento_dias.includes(dia)) {
+      setNovaPolitica(prev => ({
+        ...prev,
+        forma_pagamento_dias: [...prev.forma_pagamento_dias, dia].sort((a, b) => a - b)
+      }))
+      setNovoDiaPagamento('')
+    }
+  }
+
+  // Remover dia de pagamento
+  const handleRemoveDiaPagamento = (dia: number) => {
+    setNovaPolitica(prev => ({
+      ...prev,
+      forma_pagamento_dias: prev.forma_pagamento_dias.filter(d => d !== dia)
+    }))
+  }
 
   // Produtos (usando view fornecedor_produtos_detalhados)
   const [produtos, setProdutos] = useState<ProdutoFornecedorDetalhado[]>([])
@@ -373,16 +396,17 @@ export default function EditarFornecedorPage() {
       if (data) {
         setPoliticas(prev => [...prev, data])
         setNovaPolitica({
-          forma_pagamento_dias: [21, 28, 35],
-          prazo_entrega: 3,
-          prazo_estoque: 28,
-          valor_minimo: 300,
-          peso: 10000,
-          desconto: 10,
-          bonificacao: 10,
+          forma_pagamento_dias: [],
+          prazo_entrega: 0,
+          prazo_estoque: 0,
+          valor_minimo: 0,
+          peso: 0,
+          desconto: 0,
+          bonificacao: 0,
           observacao: '',
           estoque_eficiente: true
         })
+        setNovoDiaPagamento('')
       }
     } catch (err) {
       console.error('Erro ao adicionar política:', err)
@@ -841,18 +865,53 @@ export default function EditarFornecedorPage() {
             <div>
               {/* Form para adicionar política */}
               <div className="grid grid-cols-4 gap-4 mb-4">
-                <div>
+                <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Formas de Pagamento (dias)</label>
-                  <input
-                    type="text"
-                    value={novaPolitica.forma_pagamento_dias.join(' ')}
-                    onChange={(e) => setNovaPolitica(prev => ({
-                      ...prev,
-                      forma_pagamento_dias: e.target.value.split(' ').map(n => parseInt(n) || 0).filter(n => n > 0)
-                    }))}
-                    placeholder="21 28 35"
-                    className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-                  />
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex flex-wrap items-center gap-2 min-h-[42px] px-3 py-2 border border-gray-300 rounded-lg bg-white">
+                      {novaPolitica.forma_pagamento_dias.length === 0 ? (
+                        <span className="text-sm text-gray-400">Adicione os dias...</span>
+                      ) : (
+                        novaPolitica.forma_pagamento_dias.map(dia => (
+                          <span
+                            key={dia}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#336FB6] text-white text-sm rounded-full"
+                          >
+                            {dia}d
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDiaPagamento(dia)}
+                              className="ml-0.5 hover:bg-white/20 rounded-full p-0.5"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </span>
+                        ))
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        value={novoDiaPagamento}
+                        onChange={(e) => setNovoDiaPagamento(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddDiaPagamento())}
+                        placeholder="Dias"
+                        min="1"
+                        className="w-20 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddDiaPagamento}
+                        className="p-2 bg-[#336FB6] text-white rounded-lg hover:bg-[#2660A5] transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de entrega (dias)</label>
@@ -923,27 +982,7 @@ export default function EditarFornecedorPage() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Estoque</label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <span className="text-sm text-gray-700">Eficiente</span>
-                    <div
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        novaPolitica.estoque_eficiente ? 'bg-[#336FB6]' : 'bg-gray-300'
-                      }`}
-                      onClick={() => setNovaPolitica(prev => ({ ...prev, estoque_eficiente: !prev.estoque_eficiente }))}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          novaPolitica.estoque_eficiente ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </div>
-                    <span className="text-sm text-gray-700">Manual</span>
-                  </label>
-                </div>
-
+              <div className="flex items-center justify-end mb-6">
                 <button
                   onClick={handleAddPolitica}
                   className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
