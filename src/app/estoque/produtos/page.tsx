@@ -13,6 +13,7 @@ interface Produto {
   gtin: string | null
   preco: number
   precocusto: number | null
+  valor_de_compra: number | null
   estoque_atual: number
 }
 
@@ -217,6 +218,7 @@ export default function ControleEstoquePage() {
         gtin: p.gtin || null,
         preco: p.preco || 0,
         precocusto: null,
+        valor_de_compra: null,
         estoque_atual: p.estoque_atual || 0,
       }))
 
@@ -268,7 +270,7 @@ export default function ControleEstoquePage() {
         tipo: m.tipo,
         quantidade: m.quantidade,
         preco_venda: selectedProduct?.preco || null,
-        valor_de_compra: null,
+        valor_de_compra: selectedProduct?.valor_de_compra || null,
         preco_custo: selectedProduct?.precocusto || null,
         observacao: m.observacao,
         origem: m.origem,
@@ -283,12 +285,27 @@ export default function ControleEstoquePage() {
     }
   }, [empresaId, selectedProduct])
 
-  // Quando selecionar um produto
-  const handleSelectProduct = (produto: Produto) => {
-    setSelectedProduct(produto)
+  // Quando selecionar um produto - buscar precos de fornecedores_produtos
+  const handleSelectProduct = async (produto: Produto) => {
     setSearchTerm('')
     setShowSearchResults(false)
-    fetchMovimentacoes(produto.id)
+
+    // Buscar precos de compra e custo de fornecedores_produtos
+    const { data: precoData } = await supabase
+      .from('fornecedores_produtos')
+      .select('valor_de_compra, precocusto')
+      .eq('produto_id', produto.id)
+      .eq('empresa_id', empresaId)
+      .limit(1)
+      .single()
+
+    const produtoComPrecos: Produto = {
+      ...produto,
+      valor_de_compra: precoData?.valor_de_compra || null,
+      precocusto: precoData?.precocusto || null,
+    }
+
+    setSelectedProduct(produtoComPrecos)
   }
 
   // Atualizar movimentacoes quando selectedProduct mudar
@@ -571,11 +588,13 @@ export default function ControleEstoquePage() {
                               </td>
                             </tr>
                           ) : (
-                            paginatedMovimentacoes.map((mov, index) => (
+                            paginatedMovimentacoes.map((mov) => (
                               <tr
                                 key={mov.movimentacao_id}
-                                className={`border-b border-[#EFEFEF] hover:bg-gray-50 ${
-                                  index % 2 === 1 ? 'bg-[#F9F9F9]' : 'bg-white'
+                                className={`border-b border-[#EFEFEF] transition-colors ${
+                                  mov.tipo === 'Entrada'
+                                    ? 'bg-green-50 hover:bg-green-100'
+                                    : 'bg-red-50 hover:bg-red-100'
                                 }`}
                               >
                                 <td className="px-4 py-3 text-[13px] text-[#344054]">
