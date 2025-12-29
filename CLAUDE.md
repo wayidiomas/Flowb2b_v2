@@ -491,18 +491,32 @@ O sistema usa autenticação do Bling via OAuth 2.0. Os tokens são gerenciados:
 ## Variáveis de Ambiente Necessárias
 
 ```env
+# ===========================================
 # Supabase
+# ===========================================
 NEXT_PUBLIC_SUPABASE_URL=https://asahknimbggpzpoebmej.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-# Bling OAuth
+# ===========================================
+# Bling OAuth 2.0
+# ===========================================
 BLING_CLIENT_ID=2abf4c9c9645a7a08016d39c71f0b5d458b799d9
 BLING_CLIENT_SECRET=your_client_secret
-BLING_REDIRECT_URI=your_redirect_uri
+BLING_REDIRECT_URI=https://flowb2b-v2.onrender.com/api/auth/bling/callback
+BLING_API_URL=https://api.bling.com.br/Api/v3
 
-# APIs
-FLOWB2BAPI_URL=https://flowb2bapi-dev.onrender.com
-VALIDACAO_EAN_URL=https://your-validacao-ean-url
+# ===========================================
+# APIs Internas
+# ===========================================
+FLOWB2BAPI_URL=https://flowb2bapi-ymtn.onrender.com
+VALIDACAO_EAN_URL=https://validacao-ean-cwrd.onrender.com
+
+# ===========================================
+# Next.js & Auth
+# ===========================================
+NEXT_PUBLIC_APP_URL=https://flowb2b-v2.onrender.com
+JWT_SECRET=your_jwt_secret
 ```
 
 ---

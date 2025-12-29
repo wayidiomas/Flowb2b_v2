@@ -3,6 +3,8 @@ import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { exchangeCodeForTokens, getBlingBasicAuth } from '@/lib/bling'
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -66,12 +68,17 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServerSupabaseClient()
 
-    // Verificar se usuário tem empresa_id
-    let empresaId = user.empresaId
+    // Usar o empresaId do state (pode ser diferente do user.empresaId)
+    // Isso permite conectar uma empresa recém-criada que ainda não está no JWT
+    let empresaId = stateData.empresaId
 
-    // Se não tem empresa, buscar ou criar
+    // Se não tem empresa no state, usar do usuário
     if (!empresaId) {
-      // TODO: Redirecionar para onboarding de empresa
+      empresaId = user.empresaId
+    }
+
+    // Se ainda não tem empresa, redirecionar para onboarding
+    if (!empresaId) {
       return NextResponse.redirect(
         new URL('/onboarding?step=empresa&bling_connected=pending', request.url)
       )
@@ -110,9 +117,19 @@ export async function GET(request: NextRequest) {
       })
       .eq('id', empresaId)
 
-    // Redirecionar para dashboard com sucesso
+    // Disparar sync first-time em background (fire and forget)
+    console.log(`[Bling Callback] Disparando sync first-time para empresa ${empresaId}`)
+    fetch(`${APP_URL}/api/sync/first-time`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empresa_id: empresaId }),
+    }).catch((err) => {
+      console.error('[Bling Callback] Erro ao disparar sync:', err)
+    })
+
+    // Redirecionar para página de sync status
     return NextResponse.redirect(
-      new URL('/dashboard?success=Bling conectado com sucesso!', request.url)
+      new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=Bling conectado! Sincronização iniciada.`, request.url)
     )
   } catch (error) {
     console.error('Bling callback error:', error)

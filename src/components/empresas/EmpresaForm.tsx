@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { BlingConnectModal } from '@/components/bling/BlingConnectModal'
 
 // Icons
 function XIcon() {
@@ -125,6 +126,11 @@ export function EmpresaForm({ initialData, isEditing = false, colaboradores = []
   const [activeTab, setActiveTab] = useState<TabType>('contato')
   const [cnaeInput, setCnaeInput] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Estados para o modal do Bling
+  const [showBlingModal, setShowBlingModal] = useState(false)
+  const [createdEmpresaId, setCreatedEmpresaId] = useState<number | null>(null)
+  const [createdEmpresaNome, setCreatedEmpresaNome] = useState<string>('')
 
   const [formData, setFormData] = useState<EmpresaFormData>({
     razao_social: initialData?.razao_social || '',
@@ -305,21 +311,41 @@ export function EmpresaForm({ initialData, isEditing = false, colaboradores = []
           .eq('id', initialData.id)
 
         if (error) throw error
+        router.push('/cadastros/empresas')
       } else {
-        const { error } = await supabase
+        // Criar nova empresa e obter o ID
+        const { data: newEmpresa, error } = await supabase
           .from('empresas')
           .insert(dataToSave)
+          .select('id')
+          .single()
 
         if (error) throw error
-      }
 
-      router.push('/cadastros/empresas')
+        // Mostrar modal para conectar Bling
+        setCreatedEmpresaId(newEmpresa.id)
+        setCreatedEmpresaNome(formData.nome_fantasia || formData.razao_social)
+        setShowBlingModal(true)
+      }
     } catch (err) {
       console.error('Erro ao salvar empresa:', err)
       alert('Erro ao salvar empresa. Tente novamente.')
     } finally {
       setLoading(false)
     }
+  }
+
+  // Handler para conectar Bling (passa empresaId via URL)
+  const handleBlingConnect = () => {
+    if (createdEmpresaId) {
+      window.location.href = `/api/auth/bling/connect?empresaId=${createdEmpresaId}`
+    }
+  }
+
+  // Handler para pular conexao Bling
+  const handleBlingSkip = () => {
+    setShowBlingModal(false)
+    router.push('/cadastros/empresas')
   }
 
   const tabs: { key: TabType; label: string; count?: number }[] = [
@@ -974,6 +1000,15 @@ export function EmpresaForm({ initialData, isEditing = false, colaboradores = []
           )}
         </div>
       </div>
+
+      {/* Modal para conectar Bling apos criar empresa */}
+      <BlingConnectModal
+        isOpen={showBlingModal}
+        onClose={() => setShowBlingModal(false)}
+        onSkip={handleBlingSkip}
+        onConnect={handleBlingConnect}
+        empresaNome={createdEmpresaNome}
+      />
     </form>
   )
 }

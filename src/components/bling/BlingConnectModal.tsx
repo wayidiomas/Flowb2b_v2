@@ -15,6 +15,7 @@ interface BlingConnectModalProps {
   isOpen: boolean
   onClose: () => void
   onSkip?: () => void
+  onConnect?: () => void  // Callback customizado para conectar (opcional)
   empresaNome?: string
 }
 
@@ -73,14 +74,20 @@ export function BlingConnectModal({
   isOpen,
   onClose,
   onSkip,
+  onConnect,
   empresaNome,
 }: BlingConnectModalProps) {
   const [isConnecting, setIsConnecting] = useState(false)
 
   const handleConnect = () => {
     setIsConnecting(true)
-    // Redireciona para o OAuth do Bling
-    window.location.href = '/api/auth/bling/connect'
+    // Se foi passado um callback customizado, usar ele
+    if (onConnect) {
+      onConnect()
+    } else {
+      // Comportamento padrao: redireciona para o OAuth do Bling
+      window.location.href = '/api/auth/bling/connect'
+    }
   }
 
   const handleSkip = () => {
