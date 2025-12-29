@@ -915,11 +915,13 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
   const filteredData = data.filter((produto) => {
     if (!searchTerm.trim()) return true
     const search = searchTerm.toLowerCase().trim()
-    return (
-      produto.produto_nome?.toLowerCase().includes(search) ||
-      produto.produto_codigo?.toLowerCase().includes(search) ||
-      produto.produto_gtin?.toLowerCase().includes(search)
-    )
+
+    // Ensure string conversion for safety
+    const nome = String(produto.produto_nome || '').toLowerCase()
+    const codigo = String(produto.produto_codigo || '').toLowerCase()
+    const gtin = String(produto.produto_gtin || '').toLowerCase()
+
+    return nome.includes(search) || codigo.includes(search) || gtin.includes(search)
   })
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage)
