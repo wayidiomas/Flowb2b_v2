@@ -930,7 +930,17 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
               Dias Estoque
             </th>
             <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
-              Rotatividade
+              <div className="flex items-center justify-center gap-1">
+                Rotatividade
+                <span
+                  className="cursor-help text-gray-400 hover:text-gray-600"
+                  title="Índice de giro do produto. Fórmula: √(vendido × comprado) / dias × 100. Quanto maior, mais o produto movimenta (compra e vende)."
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </span>
+              </div>
             </th>
           </tr>
         </thead>
@@ -994,13 +1004,36 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
               </td>
               <td className="py-3 px-4 text-center">
                 <div className="flex items-center justify-center gap-2">
-                  <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  {/* Flag de estado */}
+                  <span
+                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      Number(produto.indice_rotatividade) >= 200
+                        ? 'bg-green-100 text-green-700'
+                        : Number(produto.indice_rotatividade) >= 100
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {Number(produto.indice_rotatividade) >= 200
+                      ? 'Alta'
+                      : Number(produto.indice_rotatividade) >= 100
+                        ? 'Média'
+                        : 'Baixa'}
+                  </span>
+                  {/* Barra de progresso */}
+                  <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-primary-600 rounded-full"
+                      className={`h-full rounded-full ${
+                        Number(produto.indice_rotatividade) >= 200
+                          ? 'bg-green-500'
+                          : Number(produto.indice_rotatividade) >= 100
+                            ? 'bg-yellow-500'
+                            : 'bg-gray-400'
+                      }`}
                       style={{ width: `${Math.min(Number(produto.indice_rotatividade) / 3, 100)}%` }}
                     />
                   </div>
-                  <span className="text-xs text-gray-600 font-medium">
+                  <span className="text-xs text-gray-600 font-medium w-8">
                     {Number(produto.indice_rotatividade).toFixed(0)}
                   </span>
                 </div>
