@@ -784,7 +784,7 @@ export default function ControleEstoquePage() {
                             <YAxis tick={{ fontSize: 11, fill: '#666' }} />
                             <Tooltip
                               contentStyle={{ borderRadius: '8px', border: '1px solid #EFEFEF' }}
-                              formatter={(value: number) => [value.toLocaleString('pt-BR'), '']}
+                              formatter={(value) => [Number(value).toLocaleString('pt-BR'), '']}
                             />
                             <Legend wrapperStyle={{ fontSize: '12px' }} />
                             <Bar dataKey="entradas" name="Entradas" fill="#22C55E" radius={[4, 4, 0, 0]} />
