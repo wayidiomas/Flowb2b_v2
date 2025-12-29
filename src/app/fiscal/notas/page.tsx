@@ -48,14 +48,6 @@ function DocumentIcon() {
   )
 }
 
-function DownloadIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-    </svg>
-  )
-}
-
 function XIcon() {
   return (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -498,17 +490,6 @@ export default function NotasEntradaPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
-                        {nota.link_pdf && (
-                          <a
-                            href={nota.link_pdf}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-[#336FB6] hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Baixar PDF"
-                          >
-                            <DownloadIcon />
-                          </a>
-                        )}
                         {nota.link_danfe && (
                           <a
                             href={nota.link_danfe}
@@ -520,9 +501,9 @@ export default function NotasEntradaPage() {
                             <DocumentIcon />
                           </a>
                         )}
-                        {nota.xml_url && (
+                        {nota.chave_acesso && (
                           <a
-                            href={nota.xml_url}
+                            href={`https://www.bling.com.br/relatorios/nfe.xml.php?chaveAcesso=${nota.chave_acesso}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center justify-center px-2 py-1 text-[10px] font-medium text-gray-600 hover:text-[#336FB6] hover:bg-blue-50 rounded transition-colors"
