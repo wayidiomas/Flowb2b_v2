@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDashboardData, useProdutosCurva } from '@/hooks'
 import { DashboardLayout, PageHeader } from '@/components/layout'
-import { Card } from '@/components/ui'
+import { Card, TableSkeleton, ChartSkeleton, Skeleton } from '@/components/ui'
 import {
   LineChart,
   Line,
@@ -353,8 +353,21 @@ export default function Home() {
         </div>
 
         {loadingCurva ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Produto</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Curva</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Vendas</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Estoque</th>
+                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <TableSkeleton columns={5} rows={5} />
+              </tbody>
+            </table>
           </div>
         ) : produtosCurva.length > 0 ? (
           <ProdutosCurvaTable data={produtosCurva} />
