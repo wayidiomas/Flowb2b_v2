@@ -927,7 +927,17 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
               Vendas/Dia
             </th>
             <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
-              Dias Estoque
+              <div className="flex items-center justify-center gap-1">
+                Dias Estoque
+                <span
+                  className="cursor-help text-gray-400 hover:text-gray-600"
+                  title="Quantidade de dias que o estoque atual durará, baseado na média de vendas diárias. Fórmula: estoque atual / (vendas / dias)."
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </span>
+              </div>
             </th>
             <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
               <div className="flex items-center justify-center gap-1">
