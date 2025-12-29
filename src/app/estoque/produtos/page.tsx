@@ -259,13 +259,13 @@ export default function ControleEstoquePage() {
     return () => clearTimeout(timer)
   }, [searchTerm, searchProdutos])
 
-  // Buscar movimentacoes do produto selecionado usando RPC
+  // Buscar movimentacoes do produto selecionado
   const fetchMovimentacoes = useCallback(async (produtoId: number) => {
     if (!empresaId) return
 
     setLoadingMovimentacoes(true)
     try {
-      // Usar a RPC search_produto_movimentacao para buscar movimentacoes do produto
+      // Buscar movimentacoes do produto
       const { data, error } = await supabase
         .from('movimentacao_estoque')
         .select('*')
@@ -327,12 +327,12 @@ export default function ControleEstoquePage() {
     setSelectedProduct(produtoComPrecos)
   }
 
-  // Atualizar movimentacoes quando selectedProduct mudar
+  // Atualizar movimentacoes quando selectedProduct ou empresaId mudar
   useEffect(() => {
-    if (selectedProduct) {
+    if (selectedProduct && empresaId) {
       fetchMovimentacoes(selectedProduct.id)
     }
-  }, [selectedProduct, fetchMovimentacoes])
+  }, [selectedProduct, empresaId, fetchMovimentacoes])
 
   // Salvar novo lancamento
   const handleSaveLancamento = async () => {
