@@ -4,6 +4,21 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { Card } from '@/components/ui'
+import {
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts'
 
 export default function Home() {
   const { loading } = useAuth()
@@ -32,26 +47,38 @@ export default function Home() {
             label="Compras totais"
             sublabel="Este mes"
             value="R$ 200.000,00"
-            trend="up"
-            color="blue"
+            data={[
+              { value: 30 }, { value: 25 }, { value: 35 }, { value: 28 },
+              { value: 40 }, { value: 35 }, { value: 50 }, { value: 45 },
+            ]}
+            color="#336FB6"
           />
           <MetricCard
             label="Produtos com baixo estoque"
             value="R$ 43,00"
-            trend="down"
-            color="pink"
+            data={[
+              { value: 50 }, { value: 45 }, { value: 40 }, { value: 35 },
+              { value: 30 }, { value: 35 }, { value: 25 }, { value: 20 },
+            ]}
+            color="#E91E63"
           />
           <MetricCard
             label="Valor em Estoque"
             value="R$ 400.000,00"
-            trend="up"
-            color="green"
+            data={[
+              { value: 20 }, { value: 25 }, { value: 30 }, { value: 35 },
+              { value: 32 }, { value: 40 }, { value: 45 }, { value: 50 },
+            ]}
+            color="#4CAF50"
           />
           <MetricCard
             label="Produtos em curva A"
             value="75 produtos"
-            trend="up"
-            color="purple"
+            data={[
+              { value: 35 }, { value: 40 }, { value: 38 }, { value: 45 },
+              { value: 42 }, { value: 50 }, { value: 48 }, { value: 55 },
+            ]}
+            color="#9C27B0"
           />
         </div>
       </Card>
@@ -61,34 +88,13 @@ export default function Home() {
         {/* Principais Fornecedores - Pie Chart */}
         <Card padding="md">
           <h3 className="text-base font-semibold text-gray-900 mb-4">Principais fornecedores</h3>
-          <div className="flex items-center justify-center gap-8">
-            <PieChart />
-            <div className="space-y-2">
-              <LegendItem color="#5B93D3" label="Fornecedor 1" />
-              <LegendItem color="#2660A5" label="Fornecedor 2" />
-              <LegendItem color="#FFBE4A" label="Fornecedor 3" />
-              <LegendItem color="#4CAF50" label="Outros" />
-            </div>
-          </div>
+          <SuppliersPieChart />
         </Card>
 
         {/* Principais Produtos Curva A - Bar Chart */}
         <Card padding="md">
           <h3 className="text-base font-semibold text-gray-900 mb-4">Principais produtos curva A x Numero de Vendas</h3>
-          <div className="space-y-3">
-            <HorizontalBar label="Racao Golden" value={150} maxValue={150} color="#2660A5" />
-            <HorizontalBar label="Racao Golden" value={120} maxValue={150} color="#336FB6" />
-            <HorizontalBar label="Racao Golden" value={95} maxValue={150} color="#FFBE4A" />
-            <HorizontalBar label="Racao Golden" value={60} maxValue={150} color="#5B93D3" />
-            <HorizontalBar label="Racao Golden" value={25} maxValue={150} color="#8BB8E8" />
-          </div>
-          <div className="flex justify-between mt-3 text-xs text-gray-400">
-            <span>0</span>
-            <span>25</span>
-            <span>50</span>
-            <span>75</span>
-            <span>150</span>
-          </div>
+          <ProductsBarChart />
         </Card>
       </div>
 
@@ -102,7 +108,7 @@ export default function Home() {
             <PeriodButton label="12 meses" active={true} />
           </div>
         </div>
-        <VerticalBarChart />
+        <PurchasesBarChart />
       </Card>
 
       {/* Bottom Row */}
@@ -178,27 +184,20 @@ export default function Home() {
   )
 }
 
-// ===== METRIC CARD =====
+// ===== METRIC CARD WITH SPARKLINE =====
 function MetricCard({
   label,
   sublabel,
   value,
-  trend,
+  data,
   color,
 }: {
   label: string
   sublabel?: string
   value: string
-  trend: 'up' | 'down'
-  color: 'blue' | 'pink' | 'green' | 'purple'
+  data: { value: number }[]
+  color: string
 }) {
-  const colors = {
-    blue: '#336FB6',
-    pink: '#E91E63',
-    green: '#4CAF50',
-    purple: '#9C27B0',
-  }
-
   return (
     <div className="flex items-center gap-3">
       <div className="flex-1">
@@ -206,92 +205,140 @@ function MetricCard({
         <p className="text-xl font-semibold text-gray-900">{value}</p>
         {sublabel && <p className="text-[10px] text-gray-400">{sublabel}</p>}
       </div>
-      <SparkLine color={colors[color]} trend={trend} />
-    </div>
-  )
-}
-
-// ===== SPARKLINE =====
-function SparkLine({ color, trend }: { color: string; trend: 'up' | 'down' }) {
-  const path = trend === 'up'
-    ? 'M0,20 Q10,18 20,15 T40,10 T60,8 T80,5'
-    : 'M0,5 Q10,8 20,10 T40,15 T60,18 T80,20'
-
-  return (
-    <svg width="80" height="24" viewBox="0 0 80 24" fill="none">
-      <path d={path} stroke={color} strokeWidth="2" fill="none" />
-    </svg>
-  )
-}
-
-// ===== PIE CHART =====
-function PieChart() {
-  return (
-    <svg width="160" height="160" viewBox="0 0 160 160">
-      {/* Slice 1 - 27% - Light Blue */}
-      <path
-        d="M80,80 L80,10 A70,70 0 0,1 145,95 Z"
-        fill="#5B93D3"
-      />
-      {/* Slice 2 - 27% - Dark Blue */}
-      <path
-        d="M80,80 L145,95 A70,70 0 0,1 50,140 Z"
-        fill="#2660A5"
-      />
-      {/* Slice 3 - 27% - Yellow */}
-      <path
-        d="M80,80 L50,140 A70,70 0 0,1 15,65 Z"
-        fill="#FFBE4A"
-      />
-      {/* Slice 4 - 19% - Green */}
-      <path
-        d="M80,80 L15,65 A70,70 0 0,1 80,10 Z"
-        fill="#4CAF50"
-      />
-      {/* Labels */}
-      <text x="110" y="35" fill="#333" fontSize="12" fontWeight="500">27%</text>
-      <text x="130" y="100" fill="#333" fontSize="12" fontWeight="500">27%</text>
-      <text x="35" y="130" fill="#333" fontSize="12" fontWeight="500">27%</text>
-      <text x="25" y="55" fill="#333" fontSize="12" fontWeight="500">19%</text>
-    </svg>
-  )
-}
-
-// ===== LEGEND ITEM =====
-function LegendItem({ color, label }: { color: string; label: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-      <span className="text-sm text-gray-600">{label}</span>
-    </div>
-  )
-}
-
-// ===== HORIZONTAL BAR =====
-function HorizontalBar({
-  label,
-  value,
-  maxValue,
-  color,
-}: {
-  label: string
-  value: number
-  maxValue: number
-  color: string
-}) {
-  const percentage = (value / maxValue) * 100
-
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-gray-600 w-24 truncate">{label}</span>
-      <div className="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
-        <div
-          className="h-full rounded-full flex items-center justify-end pr-2"
-          style={{ width: `${percentage}%`, backgroundColor: color }}
-        >
-          <span className="text-[10px] text-white font-medium">{value}</span>
-        </div>
+      <div className="w-20 h-10">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data}>
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke={color}
+              strokeWidth={2}
+              dot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
+    </div>
+  )
+}
+
+// ===== SUPPLIERS PIE CHART =====
+const supplierData = [
+  { name: 'Fornecedor 1', value: 27, color: '#5B93D3' },
+  { name: 'Fornecedor 2', value: 27, color: '#2660A5' },
+  { name: 'Fornecedor 3', value: 27, color: '#FFBE4A' },
+  { name: 'Outros', value: 19, color: '#4CAF50' },
+]
+
+function SuppliersPieChart() {
+  return (
+    <div className="flex items-center justify-center gap-6">
+      <div className="w-40 h-40">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={supplierData}
+              cx="50%"
+              cy="50%"
+              innerRadius={0}
+              outerRadius={70}
+              dataKey="value"
+              label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
+              labelLine={false}
+            >
+              {supplierData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(value) => `${value}%`} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="space-y-2">
+        {supplierData.map((item) => (
+          <div key={item.name} className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+            <span className="text-sm text-gray-600">{item.name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ===== PRODUCTS HORIZONTAL BAR CHART =====
+const productsData = [
+  { name: 'Racao Golden Premium', vendas: 150 },
+  { name: 'Racao Golden Special', vendas: 120 },
+  { name: 'Racao Golden Cat', vendas: 95 },
+  { name: 'Racao Golden Filhote', vendas: 60 },
+  { name: 'Racao Golden Senior', vendas: 25 },
+]
+
+function ProductsBarChart() {
+  return (
+    <div className="h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          layout="vertical"
+          data={productsData}
+          margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+          <XAxis type="number" domain={[0, 150]} tickCount={6} />
+          <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 12 }} />
+          <Tooltip />
+          <Bar dataKey="vendas" radius={[0, 4, 4, 0]}>
+            {productsData.map((_, index) => (
+              <Cell
+                key={`cell-${index}`}
+                fill={['#2660A5', '#336FB6', '#FFBE4A', '#5B93D3', '#8BB8E8'][index]}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ===== PURCHASES VERTICAL BAR CHART =====
+const purchasesData = [
+  { month: 'JAN', valor: 3200000 },
+  { month: 'FEB', valor: 2800000 },
+  { month: 'MAR', valor: 3500000 },
+  { month: 'APR', valor: 2500000 },
+  { month: 'MAY', valor: 2800000 },
+  { month: 'JUN', valor: 3800000 },
+  { month: 'JUL', valor: 3000000 },
+  { month: 'AUG', valor: 2200000 },
+  { month: 'SEP', valor: 4200000 },
+  { month: 'OCT', valor: 2500000 },
+  { month: 'NOV', valor: 3000000 },
+  { month: 'DEC', valor: 5800000 },
+]
+
+function PurchasesBarChart() {
+  const formatValue = (value: number) => {
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`
+    return value.toString()
+  }
+
+  return (
+    <div className="h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={purchasesData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+          <YAxis tickFormatter={formatValue} tick={{ fontSize: 11 }} />
+          <Tooltip
+            formatter={(value) => [`R$ ${formatValue(Number(value ?? 0))}`, 'Valor']}
+            labelStyle={{ fontWeight: 'bold' }}
+          />
+          <Bar dataKey="valor" fill="#336FB6" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   )
 }
@@ -310,44 +357,6 @@ function PeriodButton({ label, active }: { label: string; active: boolean }) {
     >
       {label}
     </button>
-  )
-}
-
-// ===== VERTICAL BAR CHART =====
-function VerticalBarChart() {
-  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-  const values = [3.2, 2.8, 3.5, 2.5, 2.8, 3.8, 3.0, 2.2, 4.2, 2.5, 3.0, 5.8]
-  const maxValue = 6
-
-  return (
-    <div className="h-48">
-      <div className="flex items-end justify-between h-40 gap-2">
-        {values.map((value, index) => (
-          <div key={months[index]} className="flex-1 flex flex-col items-center">
-            <div
-              className="w-full bg-[#336FB6] rounded-t-sm"
-              style={{ height: `${(value / maxValue) * 100}%` }}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-between mt-2">
-        {months.map((month) => (
-          <span key={month} className="text-[10px] text-gray-400 flex-1 text-center">
-            {month}
-          </span>
-        ))}
-      </div>
-      {/* Y-axis labels */}
-      <div className="absolute left-0 top-0 h-40 flex flex-col justify-between text-xs text-gray-400">
-        <span>6M</span>
-        <span>5M</span>
-        <span>4M</span>
-        <span>3M</span>
-        <span>$0</span>
-        <span>$1k</span>
-      </div>
-    </div>
   )
 }
 

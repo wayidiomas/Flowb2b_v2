@@ -1029,7 +1029,32 @@ Retorna métricas gerais do dashboard.
 | p_empresa_id | integer | Sim | ID da empresa |
 | p_user_bling | boolean | Sim | Se usuário usa Bling |
 
-**Retorno:** `json` com KPIs principais.
+**Retorno:** `json` com KPIs principais:
+```json
+{
+  "compras_totais": 0,
+  "produtos_baixo_estoque": 1789,
+  "valor_estoque": 469074.99,
+  "produtos_curva_a": 446
+}
+```
+
+**Mapeamento no Dashboard:**
+| Componente Mock | Campo RPC | Observação |
+|-----------------|-----------|------------|
+| "Compras totais - Este mês: R$ 200.000,00" | `compras_totais` | Soma de pedidos com situacao=4 |
+| "Produtos com baixo estoque: R$ 43,00" | `produtos_baixo_estoque` | **QUANTIDADE** (não valor!) |
+| "Valor em Estoque: R$ 400.000,00" | `valor_estoque` | SUM(preco * estoque_atual) |
+| "Produtos em curva A: 75 produtos" | `produtos_curva_a` | COUNT da view_produtos_curva_a |
+
+**Uso no Next.js:**
+```typescript
+const { data } = await supabase.rpc('get_dashboard_metrics', {
+  p_empresa_id: empresaId,
+  p_user_bling: false
+})
+// data = { compras_totais, produtos_baixo_estoque, valor_estoque, produtos_curva_a }
+```
 
 ```bash
 curl -X POST "${SUPABASE_URL}/rest/v1/rpc/get_dashboard_metrics" \
@@ -1037,24 +1062,40 @@ curl -X POST "${SUPABASE_URL}/rest/v1/rpc/get_dashboard_metrics" \
   -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
-    "p_empresa_id": 1,
-    "p_user_bling": true
+    "p_empresa_id": 2,
+    "p_user_bling": false
   }'
 ```
 
 ---
 
 ### `get_pedidos_compra_por_periodo`
-Retorna pedidos de compra agrupados por período.
+Retorna pedidos de compra agrupados por período. **Usado no gráfico de barras vertical.**
 
 **Parâmetros:**
 | Nome | Tipo | Obrigatório | Descrição |
 |------|------|-------------|-----------|
 | p_empresa_id | integer | Sim | ID da empresa |
 | p_user_bling | boolean | Sim | Se usuário usa Bling |
-| p_intervalo | text | Sim | 'dia', 'semana', 'mes' |
+| p_intervalo | text | Sim | '7_dias', '30_dias', '12_meses' |
 
 **Retorno:** `TABLE(periodo, total_pedidos)`
+```json
+[
+  {"periodo": "2025 Dec", "total_pedidos": 64308.94},
+  {"periodo": "2025 Nov", "total_pedidos": 241763.29},
+  {"periodo": "2025 Oct", "total_pedidos": 181611.60}
+]
+```
+
+**Uso no Next.js:**
+```typescript
+const { data } = await supabase.rpc('get_pedidos_compra_por_periodo', {
+  p_empresa_id: empresaId,
+  p_user_bling: false,
+  p_intervalo: '12_meses' // ou '7_dias', '30_dias'
+})
+```
 
 ```bash
 curl -X POST "${SUPABASE_URL}/rest/v1/rpc/get_pedidos_compra_por_periodo" \
@@ -1062,16 +1103,16 @@ curl -X POST "${SUPABASE_URL}/rest/v1/rpc/get_pedidos_compra_por_periodo" \
   -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
-    "p_empresa_id": 1,
-    "p_user_bling": true,
-    "p_intervalo": "mes"
+    "p_empresa_id": 2,
+    "p_user_bling": false,
+    "p_intervalo": "12_meses"
   }'
 ```
 
 ---
 
 ### `get_principais_fornecedores`
-Retorna ranking de fornecedores por volume de compras.
+Retorna ranking de fornecedores por volume de compras. **Usado no gráfico de pizza.**
 
 **Parâmetros:**
 | Nome | Tipo | Obrigatório | Descrição |
@@ -1080,6 +1121,23 @@ Retorna ranking de fornecedores por volume de compras.
 | p_user_bling | boolean | Sim | Se usuário usa Bling |
 
 **Retorno:** `TABLE(fornecedor_nome, total_compras, percentual)`
+```json
+[
+  {"fornecedor_nome": "CDA MAX PRODUTOS ALIMENTICIOS LTDA", "total_compras": 55, "percentual": 18.7},
+  {"fornecedor_nome": "MANFRIM INDUSTRIAL E COMERCIAL LTDA", "total_compras": 21, "percentual": 7.1},
+  {"fornecedor_nome": "A.M.R SANTOS PRODUTOS VETERINARIOS LTDA", "total_compras": 17, "percentual": 5.8},
+  {"fornecedor_nome": "Outros", "total_compras": 201, "percentual": 68.4}
+]
+```
+
+**Uso no Next.js:**
+```typescript
+const { data } = await supabase.rpc('get_principais_fornecedores', {
+  p_empresa_id: empresaId,
+  p_user_bling: false
+})
+// Retorna top 3 + "Outros"
+```
 
 ```bash
 curl -X POST "${SUPABASE_URL}/rest/v1/rpc/get_principais_fornecedores" \
@@ -1087,8 +1145,8 @@ curl -X POST "${SUPABASE_URL}/rest/v1/rpc/get_principais_fornecedores" \
   -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
-    "p_empresa_id": 1,
-    "p_user_bling": true
+    "p_empresa_id": 2,
+    "p_user_bling": false
   }'
 ```
 
