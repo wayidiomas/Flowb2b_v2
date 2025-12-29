@@ -180,8 +180,8 @@ export default function NovoFornecedorPage() {
         console.warn(result.warning)
       }
 
-      // Redireciona para a pagina de edicao do novo fornecedor
-      router.push(`/cadastros/fornecedores/${result.id}/editar`)
+      // Redireciona para a lista de fornecedores
+      router.push('/cadastros/fornecedores')
     } catch (err) {
       console.error('Erro ao criar fornecedor:', err)
       alert(err instanceof Error ? err.message : 'Erro ao criar fornecedor')

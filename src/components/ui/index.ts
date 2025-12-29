@@ -24,3 +24,5 @@ export {
   ModalBody,
   ModalFooter,
 } from './Modal'
+
+export { Skeleton, TableSkeleton, CardSkeleton, ChartSkeleton } from './Skeleton'
