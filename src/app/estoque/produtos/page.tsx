@@ -1,9 +1,23 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  Area,
+  AreaChart,
+} from 'recharts'
 
 // Types
 interface Produto {
@@ -552,6 +566,101 @@ export default function ControleEstoquePage() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
   }
 
+  // Dados para grafico de entradas/saidas por mes
+  const chartDataTemporal = useMemo(() => {
+    if (!movimentacoes.length) return []
+
+    // Agrupar por mes
+    const grouped: Record<string, { entradas: number; saidas: number; mes: string }> = {}
+
+    movimentacoes.forEach((mov) => {
+      const date = new Date(mov.data)
+      const mesAno = `${date.getMonth() + 1}/${date.getFullYear()}`
+      const mesLabel = date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+
+      if (!grouped[mesAno]) {
+        grouped[mesAno] = { entradas: 0, saidas: 0, mes: mesLabel }
+      }
+
+      if (mov.tipo === 'Entrada') {
+        grouped[mesAno].entradas += Number(mov.quantidade)
+      } else {
+        grouped[mesAno].saidas += Number(mov.quantidade)
+      }
+    })
+
+    // Converter para array e ordenar por data
+    return Object.entries(grouped)
+      .sort((a, b) => {
+        const [mesA, anoA] = a[0].split('/').map(Number)
+        const [mesB, anoB] = b[0].split('/').map(Number)
+        return anoA !== anoB ? anoA - anoB : mesA - mesB
+      })
+      .map(([, data]) => data)
+      .slice(-12) // Ultimos 12 meses
+  }, [movimentacoes])
+
+  // Dados para grafico de margem
+  const chartDataMargem = useMemo(() => {
+    if (!selectedProduct || !movimentacoes.length) return []
+
+    const precoVenda = selectedProduct.preco || 0
+    const precoCompra = selectedProduct.valor_de_compra || 0
+    const precoCusto = selectedProduct.precocusto || 0
+
+    // Calcular margem bruta e margem liquida
+    const margemBruta = precoVenda > 0 && precoCompra > 0
+      ? ((precoVenda - precoCompra) / precoVenda) * 100
+      : 0
+
+    const margemLiquida = precoVenda > 0 && precoCusto > 0
+      ? ((precoVenda - precoCusto) / precoVenda) * 100
+      : 0
+
+    // Lucro por unidade vendida baseado nas saidas
+    const totalSaidas = movimentacoes
+      .filter(m => m.tipo === 'Saida')
+      .reduce((acc, m) => acc + Number(m.quantidade), 0)
+
+    const lucroBrutoTotal = totalSaidas * (precoVenda - precoCompra)
+    const lucroLiquidoTotal = totalSaidas * (precoVenda - precoCusto)
+
+    return [
+      { nome: 'Margem Bruta (%)', valor: margemBruta, fill: '#336FB6' },
+      { nome: 'Margem Liquida (%)', valor: margemLiquida, fill: '#22C55E' },
+    ]
+  }, [selectedProduct, movimentacoes])
+
+  // Calcular valores de resumo do produto
+  const resumoProduto = useMemo(() => {
+    if (!selectedProduct || !movimentacoes.length) return null
+
+    const precoVenda = selectedProduct.preco || 0
+    const precoCompra = selectedProduct.valor_de_compra || 0
+    const precoCusto = selectedProduct.precocusto || 0
+
+    const totalEntradas = movimentacoes
+      .filter(m => m.tipo === 'Entrada')
+      .reduce((acc, m) => acc + Number(m.quantidade), 0)
+
+    const totalSaidas = movimentacoes
+      .filter(m => m.tipo === 'Saida')
+      .reduce((acc, m) => acc + Number(m.quantidade), 0)
+
+    const faturamentoBruto = totalSaidas * precoVenda
+    const custoTotal = totalSaidas * (precoCusto || precoCompra)
+    const lucroTotal = faturamentoBruto - custoTotal
+
+    return {
+      totalEntradas,
+      totalSaidas,
+      faturamentoBruto,
+      custoTotal,
+      lucroTotal,
+      margemMedia: faturamentoBruto > 0 ? (lucroTotal / faturamentoBruto) * 100 : 0
+    }
+  }, [selectedProduct, movimentacoes])
+
   return (
     <DashboardLayout>
       <PageHeader
@@ -660,6 +769,114 @@ export default function ControleEstoquePage() {
                     <TrashIcon />
                   </button>
                 </div>
+
+                {/* Graficos */}
+                {movimentacoes.length > 0 && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    {/* Grafico de Entradas e Saidas */}
+                    <div className="bg-white border border-[#EFEFEF] rounded-xl p-4">
+                      <h4 className="text-sm font-medium text-[#344054] mb-4">Movimentacao Temporal</h4>
+                      {chartDataTemporal.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={220}>
+                          <BarChart data={chartDataTemporal} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#EFEFEF" />
+                            <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#666' }} />
+                            <YAxis tick={{ fontSize: 11, fill: '#666' }} />
+                            <Tooltip
+                              contentStyle={{ borderRadius: '8px', border: '1px solid #EFEFEF' }}
+                              formatter={(value: number) => [value.toLocaleString('pt-BR'), '']}
+                            />
+                            <Legend wrapperStyle={{ fontSize: '12px' }} />
+                            <Bar dataKey="entradas" name="Entradas" fill="#22C55E" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="saidas" name="Saidas" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-[220px] flex items-center justify-center text-gray-400 text-sm">
+                          Sem dados suficientes para o grafico
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Grafico de Margem e Resumo Financeiro */}
+                    <div className="bg-white border border-[#EFEFEF] rounded-xl p-4">
+                      <h4 className="text-sm font-medium text-[#344054] mb-4">Analise de Margem</h4>
+                      {resumoProduto && (
+                        <div className="space-y-4">
+                          {/* Cards de resumo */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-green-50 rounded-lg p-3">
+                              <p className="text-xs text-green-600 mb-1">Faturamento Bruto</p>
+                              <p className="text-lg font-semibold text-green-700">
+                                {formatCurrency(resumoProduto.faturamentoBruto)}
+                              </p>
+                            </div>
+                            <div className="bg-blue-50 rounded-lg p-3">
+                              <p className="text-xs text-blue-600 mb-1">Lucro Total</p>
+                              <p className={`text-lg font-semibold ${resumoProduto.lucroTotal >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                                {formatCurrency(resumoProduto.lucroTotal)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Barras de margem */}
+                          <div className="space-y-3">
+                            <div>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-gray-500">Margem Bruta</span>
+                                <span className="font-medium text-[#336FB6]">
+                                  {chartDataMargem[0]?.valor.toFixed(1) || 0}%
+                                </span>
+                              </div>
+                              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-[#336FB6] rounded-full transition-all"
+                                  style={{ width: `${Math.min(chartDataMargem[0]?.valor || 0, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-gray-500">Margem Liquida</span>
+                                <span className="font-medium text-[#22C55E]">
+                                  {chartDataMargem[1]?.valor.toFixed(1) || 0}%
+                                </span>
+                              </div>
+                              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-[#22C55E] rounded-full transition-all"
+                                  style={{ width: `${Math.min(chartDataMargem[1]?.valor || 0, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Info adicional */}
+                          <div className="pt-3 border-t border-[#EFEFEF] grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <p className="text-xs text-gray-400">Entradas</p>
+                              <p className="text-sm font-medium text-green-600">
+                                {resumoProduto.totalEntradas.toLocaleString('pt-BR')}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-400">Saidas</p>
+                              <p className="text-sm font-medium text-red-600">
+                                {resumoProduto.totalSaidas.toLocaleString('pt-BR')}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-400">Margem Media</p>
+                              <p className="text-sm font-medium text-[#336FB6]">
+                                {resumoProduto.margemMedia.toFixed(1)}%
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Movimentacoes Table */}
                 {loadingMovimentacoes ? (
