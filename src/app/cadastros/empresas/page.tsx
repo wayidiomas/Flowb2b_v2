@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -54,6 +56,30 @@ function ExternalLinkIcon() {
   )
 }
 
+function CheckIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  )
+}
+
+function BanIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+    </svg>
+  )
+}
+
 interface EmpresaListItem {
   id: number
   razao_social: string
@@ -65,68 +91,70 @@ interface EmpresaListItem {
 }
 
 export default function MinhasEmpresasPage() {
+  const router = useRouter()
   const { user, empresa } = useAuth()
   const [empresas, setEmpresas] = useState<EmpresaListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedEmpresas, setSelectedEmpresas] = useState<number[]>([])
   const [currentPage, setCurrentPage] = useState(1)
+  const [actionLoading, setActionLoading] = useState(false)
   const itemsPerPage = 10
 
-  useEffect(() => {
-    async function fetchEmpresas() {
-      if (!user?.id) {
-        setLoading(false)
-        return
-      }
-
-      try {
-        // O usuario tem empresa_id diretamente na tabela users
-        // Buscar a empresa vinculada ao usuario
-        const empresaId = empresa?.id || user?.empresa_id
-
-        if (empresaId) {
-          // Buscar a empresa do usuario
-          const { data, error } = await supabase
-            .from('empresas')
-            .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade')
-            .eq('id', empresaId)
-
-          if (error) {
-            console.error('Erro ao buscar empresa:', error)
-          } else if (data) {
-            setEmpresas(data)
-          }
-        } else {
-          // Fallback: buscar todas as empresas disponiveis
-          const { data, error } = await supabase
-            .from('empresas')
-            .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade')
-            .order('razao_social')
-
-          if (error) {
-            console.error('Erro ao buscar empresas:', error)
-          } else if (data) {
-            setEmpresas(data)
-          }
-        }
-      } catch (err) {
-        console.error('Erro:', err)
-      } finally {
-        setLoading(false)
-      }
+  const fetchEmpresas = async () => {
+    if (!user?.id) {
+      setLoading(false)
+      return
     }
 
+    try {
+      // O usuario tem empresa_id diretamente na tabela users
+      // Buscar a empresa vinculada ao usuario
+      const empresaId = empresa?.id || user?.empresa_id
+
+      if (empresaId) {
+        // Buscar a empresa do usuario
+        const { data, error } = await supabase
+          .from('empresas')
+          .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade')
+          .eq('id', empresaId)
+
+        if (error) {
+          console.error('Erro ao buscar empresa:', error)
+        } else if (data) {
+          setEmpresas(data)
+        }
+      } else {
+        // Fallback: buscar todas as empresas disponiveis
+        const { data, error } = await supabase
+          .from('empresas')
+          .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade')
+          .order('razao_social')
+
+        if (error) {
+          console.error('Erro ao buscar empresas:', error)
+        } else if (data) {
+          setEmpresas(data)
+        }
+      }
+    } catch (err) {
+      console.error('Erro:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
     fetchEmpresas()
   }, [user?.id, user?.empresa_id, empresa?.id])
 
   // Filtrar empresas por termo de busca
-  const filteredEmpresas = empresas.filter((empresa) => {
+  const filteredEmpresas = empresas.filter((emp) => {
     const searchLower = searchTerm.toLowerCase()
     return (
-      empresa.razao_social?.toLowerCase().includes(searchLower) ||
-      empresa.nome_fantasia?.toLowerCase().includes(searchLower) ||
-      empresa.endereco_resumido?.toLowerCase().includes(searchLower)
+      emp.razao_social?.toLowerCase().includes(searchLower) ||
+      emp.nome_fantasia?.toLowerCase().includes(searchLower) ||
+      emp.endereco_resumido?.toLowerCase().includes(searchLower)
     )
   })
 
@@ -148,6 +176,66 @@ export default function MinhasEmpresasPage() {
     setSelectedEmpresas((prev) =>
       prev.includes(id) ? prev.filter((eId) => eId !== id) : [...prev, id]
     )
+  }
+
+  // Acoes em massa
+  const handleAtivar = async () => {
+    if (selectedEmpresas.length === 0) return
+    setActionLoading(true)
+    try {
+      const { error } = await supabase
+        .from('empresas')
+        .update({ ativo: true })
+        .in('id', selectedEmpresas)
+
+      if (error) throw error
+      await fetchEmpresas()
+      setSelectedEmpresas([])
+    } catch (err) {
+      console.error('Erro ao ativar empresas:', err)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDesativar = async () => {
+    if (selectedEmpresas.length === 0) return
+    setActionLoading(true)
+    try {
+      const { error } = await supabase
+        .from('empresas')
+        .update({ ativo: false })
+        .in('id', selectedEmpresas)
+
+      if (error) throw error
+      await fetchEmpresas()
+      setSelectedEmpresas([])
+    } catch (err) {
+      console.error('Erro ao desativar empresas:', err)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleExcluir = async () => {
+    if (selectedEmpresas.length === 0) return
+    if (!confirm(`Deseja realmente excluir ${selectedEmpresas.length} empresa(s)?`)) return
+
+    setActionLoading(true)
+    try {
+      const { error } = await supabase
+        .from('empresas')
+        .delete()
+        .in('id', selectedEmpresas)
+
+      if (error) throw error
+      await fetchEmpresas()
+      setSelectedEmpresas([])
+    } catch (err) {
+      console.error('Erro ao excluir empresas:', err)
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   // Gerar paginas para navegacao
@@ -183,7 +271,7 @@ export default function MinhasEmpresasPage() {
             <div>
               <h2 className="text-base font-semibold text-gray-900">Empresas</h2>
               <p className="text-sm text-gray-500">
-                Gerencie suas empresas cadastradas no sistema
+                Aqui voce gerencia ua empresas e filiais para que possa gerenciar todas de forma otimizada
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -191,30 +279,68 @@ export default function MinhasEmpresasPage() {
                 <FilterIcon />
                 Filtros
               </button>
-              <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors">
+              <Link
+                href="/cadastros/empresas/nova"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
+              >
                 <PlusIcon />
                 Nova empresa
-              </button>
+              </Link>
             </div>
           </div>
         </div>
 
-        {/* Search */}
+        {/* Search and Action Buttons */}
         <div className="px-6 py-4 border-b border-gray-200">
-          <div className="relative max-w-md">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-              <SearchIcon />
+          <div className="flex items-center justify-between gap-4">
+            <div className="relative max-w-md flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                <SearchIcon />
+              </div>
+              <input
+                type="text"
+                placeholder="Pesquisar por nome, e-mail..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="block w-full pl-10 pr-4 py-2 text-sm text-gray-900 placeholder:text-gray-500 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
             </div>
-            <input
-              type="text"
-              placeholder="Pesquisar por nome, e-mail..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value)
-                setCurrentPage(1)
-              }}
-              className="block w-full pl-10 pr-4 py-2 text-sm text-gray-900 placeholder:text-gray-500 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            />
+
+            {/* Selection counter and action buttons */}
+            {selectedEmpresas.length > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600">
+                  {selectedEmpresas.length} item(ns) selecionado(s)
+                </span>
+                <button
+                  onClick={handleAtivar}
+                  disabled={actionLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-500 hover:bg-green-600 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <CheckIcon />
+                  Ativar
+                </button>
+                <button
+                  onClick={handleDesativar}
+                  disabled={actionLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <BanIcon />
+                  Desativar
+                </button>
+                <button
+                  onClick={handleExcluir}
+                  disabled={actionLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <TrashIcon />
+                  Excluir
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -274,58 +400,61 @@ export default function MinhasEmpresasPage() {
                   </td>
                 </tr>
               ) : (
-                paginatedEmpresas.map((empresa) => (
-                  <tr key={empresa.id} className="hover:bg-gray-50">
+                paginatedEmpresas.map((emp) => (
+                  <tr key={emp.id} className={`hover:bg-gray-50 ${selectedEmpresas.includes(emp.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-6 py-4">
                       <input
                         type="checkbox"
-                        checked={selectedEmpresas.includes(empresa.id)}
-                        onChange={() => handleSelectEmpresa(empresa.id)}
+                        checked={selectedEmpresas.includes(emp.id)}
+                        onChange={() => handleSelectEmpresa(emp.id)}
                         className="w-4 h-4 text-primary-600 bg-white border-gray-300 rounded focus:ring-primary-500"
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm font-medium text-gray-900">
-                        {empresa.razao_social || '-'}
+                        {emp.razao_social || '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm text-gray-600">
-                        {empresa.nome_fantasia || '-'}
+                        {emp.nome_fantasia || '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-gray-600">
-                        {empresa.endereco_resumido || '-'}
+                        {emp.endereco_resumido || '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        empresa.unidade === 'Filiais' || empresa.unidade === 'Filial'
+                        emp.unidade === 'Filiais' || emp.unidade === 'Filial'
                           ? 'bg-blue-100 text-blue-800'
                           : 'bg-purple-100 text-purple-800'
                       }`}>
-                        {empresa.unidade || 'Matriz'}
+                        {emp.unidade || 'Matriz'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm text-gray-600">
-                        {empresa.numero_colaboradores ?? '-'}
+                        {emp.numero_colaboradores ?? '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        empresa.ativo === false
+                        emp.ativo === false
                           ? 'bg-red-100 text-red-800'
                           : 'bg-green-100 text-green-800'
                       }`}>
-                        {empresa.ativo === false ? 'Inativo' : 'Ativo'}
+                        {emp.ativo === false ? 'Inativo' : 'Ativo'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button className="text-gray-400 hover:text-gray-600 transition-colors">
+                      <Link
+                        href={`/cadastros/empresas/${emp.id}/editar`}
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                      >
                         <ExternalLinkIcon />
-                      </button>
+                      </Link>
                     </td>
                   </tr>
                 ))
