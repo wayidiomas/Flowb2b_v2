@@ -4,8 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout'
-import { useAuth } from '@/contexts/AuthContext'
-import { supabase } from '@/lib/supabase'
 import type {
   FornecedorFormData,
   TipoPessoa,
@@ -43,7 +41,6 @@ type TabType = 'contato' | 'endereco'
 
 export default function NovoFornecedorPage() {
   const router = useRouter()
-  const { user, empresa } = useAuth()
 
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('contato')
@@ -101,7 +98,7 @@ export default function NovoFornecedorPage() {
     })
   }
 
-  // Save fornecedor
+  // Save fornecedor via API (integra com Bling)
   const handleSave = async () => {
     if (!formData.nome) {
       alert('O nome do fornecedor e obrigatorio')
@@ -110,43 +107,49 @@ export default function NovoFornecedorPage() {
 
     setSaving(true)
     try {
-      const empresaId = empresa?.id || user?.empresa_id
+      const response = await fetch('/api/fornecedores', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          nome: formData.nome,
+          nome_fantasia: formData.nome_fantasia,
+          codigo: formData.codigo,
+          tipo_pessoa: formData.tipo_pessoa,
+          cnpj: formData.tipo_pessoa === 'J' ? formData.cnpj : undefined,
+          cpf: formData.tipo_pessoa === 'F' ? formData.cpf : undefined,
+          rg: formData.rg,
+          inscricao_estadual: formData.inscricao_estadual,
+          ie_isento: formData.ie_isento,
+          contribuinte: formData.contribuinte,
+          codigo_regime_tributario: formData.codigo_regime_tributario,
+          orgao_emissor: formData.orgao_emissor,
+          relacao_venda: formData.relacao_venda,
+          cliente_desde: formData.cliente_desde,
+          telefone: formData.telefone,
+          celular: formData.celular,
+          email: formData.email,
+          endereco: formData.endereco,
+        }),
+      })
 
-      const insertData = {
-        empresa_id: empresaId,
-        nome: formData.nome,
-        nome_fantasia: formData.nome_fantasia || null,
-        codigo: formData.codigo || null,
-        tipo_pessoa: formData.tipo_pessoa,
-        cnpj: formData.tipo_pessoa === 'J' ? formData.cnpj : null,
-        cpf: formData.tipo_pessoa === 'F' ? formData.cpf : null,
-        rg: formData.rg || null,
-        inscricao_estadual: formData.inscricao_estadual || null,
-        ie_isento: formData.ie_isento || false,
-        contribuinte: formData.contribuinte || '1',
-        cd_regime_tributario: formData.codigo_regime_tributario || null,
-        orgao_emissor: formData.orgao_emissor || null,
-        relacao_venda_fornecedores: formData.relacao_venda || [],
-        cliente_desde: formData.cliente_desde || null,
-        telefone: formData.telefone || null,
-        celular: formData.celular || null,
-        email: formData.email || null,
-        endereco: JSON.stringify(formData.endereco)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao criar fornecedor')
       }
 
-      const { data, error } = await supabase
-        .from('fornecedores')
-        .insert(insertData)
-        .select('id')
-        .single()
-
-      if (error) throw error
+      // Mostra warning se houver (ex: Bling nao conectado)
+      if (result.warning) {
+        console.warn(result.warning)
+      }
 
       // Redireciona para a pagina de edicao do novo fornecedor
-      router.push(`/cadastros/fornecedores/${data.id}/editar`)
+      router.push(`/cadastros/fornecedores/${result.id}/editar`)
     } catch (err) {
       console.error('Erro ao criar fornecedor:', err)
-      alert('Erro ao criar fornecedor')
+      alert(err instanceof Error ? err.message : 'Erro ao criar fornecedor')
     } finally {
       setSaving(false)
     }

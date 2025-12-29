@@ -271,45 +271,53 @@ export default function EditarFornecedorPage() {
     })
   }
 
-  // Save fornecedor
+  // Save fornecedor via API (integra com Bling)
   const handleSave = async () => {
+    if (!formData.nome) {
+      alert('O nome do fornecedor e obrigatorio')
+      return
+    }
+
     setSaving(true)
     try {
-      const empresaId = empresa?.id || user?.empresa_id
+      const response = await fetch('/api/fornecedores', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: parseInt(fornecedorId),
+          nome: formData.nome,
+          nome_fantasia: formData.nome_fantasia,
+          codigo: formData.codigo,
+          tipo_pessoa: formData.tipo_pessoa,
+          cnpj: formData.tipo_pessoa === 'J' ? formData.cnpj : undefined,
+          cpf: formData.tipo_pessoa === 'F' ? formData.cpf : undefined,
+          rg: formData.rg,
+          inscricao_estadual: formData.inscricao_estadual,
+          ie_isento: formData.ie_isento,
+          contribuinte: formData.contribuinte,
+          codigo_regime_tributario: formData.codigo_regime_tributario,
+          orgao_emissor: formData.orgao_emissor,
+          relacao_venda: formData.relacao_venda,
+          cliente_desde: formData.cliente_desde,
+          telefone: formData.telefone,
+          celular: formData.celular,
+          email: formData.email,
+          endereco: formData.endereco,
+        }),
+      })
 
-      const updateData = {
-        nome: formData.nome,
-        nome_fantasia: formData.nome_fantasia,
-        codigo: formData.codigo,
-        tipo_pessoa: formData.tipo_pessoa,
-        cnpj: formData.tipo_pessoa === 'J' ? formData.cnpj : null,
-        cpf: formData.tipo_pessoa === 'F' ? formData.cpf : null,
-        rg: formData.rg,
-        inscricao_estadual: formData.inscricao_estadual,
-        ie_isento: formData.ie_isento,
-        contribuinte: formData.contribuinte,
-        cd_regime_tributario: formData.codigo_regime_tributario,
-        orgao_emissor: formData.orgao_emissor,
-        relacao_venda_fornecedores: formData.relacao_venda,
-        cliente_desde: formData.cliente_desde || null,
-        telefone: formData.telefone,
-        celular: formData.celular,
-        email: formData.email,
-        endereco: JSON.stringify(formData.endereco)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao salvar fornecedor')
       }
-
-      const { error } = await supabase
-        .from('fornecedores')
-        .update(updateData)
-        .eq('id', fornecedorId)
-        .eq('empresa_id', empresaId)
-
-      if (error) throw error
 
       router.push('/cadastros/fornecedores')
     } catch (err) {
       console.error('Erro ao salvar fornecedor:', err)
-      alert('Erro ao salvar fornecedor')
+      alert(err instanceof Error ? err.message : 'Erro ao salvar fornecedor')
     } finally {
       setSaving(false)
     }
