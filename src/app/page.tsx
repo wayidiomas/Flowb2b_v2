@@ -919,11 +919,13 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
     )
   })
 
+  const [showInfo, setShowInfo] = useState(false)
+
   return (
-    <div className="overflow-x-auto">
+    <div>
       {/* Filtro de pesquisa */}
-      <div className="mb-4">
-        <div className="relative">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="relative flex-1">
           <input
             type="text"
             placeholder="Pesquisar por nome, código ou EAN..."
@@ -950,7 +952,36 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
             </button>
           )}
         </div>
+        <button
+          onClick={() => setShowInfo(!showInfo)}
+          className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+          title="Informações sobre as colunas"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </button>
       </div>
+
+      {/* Painel de informações */}
+      {showInfo && (
+        <div className="mb-4 p-4 bg-primary-50 border border-primary-200 rounded-lg text-sm">
+          <div className="flex justify-between items-start mb-2">
+            <h4 className="font-semibold text-primary-800">Sobre as colunas</h4>
+            <button onClick={() => setShowInfo(false)} className="text-primary-600 hover:text-primary-800">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <ul className="space-y-1 text-primary-700">
+            <li><strong>Dias Estoque:</strong> Quantidade de dias que o estoque atual durará, baseado na média de vendas diárias.</li>
+            <li><strong>Rotatividade:</strong> Índice de giro do produto. Fórmula: √(vendido × comprado) / dias × 100. Quanto maior, mais o produto movimenta.</li>
+          </ul>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
           <tr className="border-b border-gray-200">
@@ -970,32 +1001,10 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
               Vendas/Dia
             </th>
             <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
-              <div className="flex items-center justify-center gap-1">
-                Dias Estoque
-                <div className="relative group/tooltip">
-                  <svg className="w-3.5 h-3.5 text-gray-400 hover:text-primary-600 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-primary-600 text-white text-xs rounded-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 whitespace-normal w-52 text-left font-normal normal-case z-[100] shadow-lg">
-                    <span>Quantidade de dias que o estoque atual durará, baseado na média de vendas diárias.</span>
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-primary-600"></div>
-                  </div>
-                </div>
-              </div>
+              Dias Estoque
             </th>
             <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
-              <div className="flex items-center justify-center gap-1">
-                Rotatividade
-                <div className="relative group/tooltip2">
-                  <svg className="w-3.5 h-3.5 text-gray-400 hover:text-primary-600 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-primary-600 text-white text-xs rounded-lg opacity-0 invisible group-hover/tooltip2:opacity-100 group-hover/tooltip2:visible transition-all duration-200 whitespace-normal w-60 text-left font-normal normal-case z-[100] shadow-lg">
-                    <span>Índice de giro do produto. Quanto maior, mais o produto movimenta (compra e vende). Fórmula: √(vendido × comprado) / dias × 100</span>
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-primary-600"></div>
-                  </div>
-                </div>
-              </div>
+              Rotatividade
             </th>
           </tr>
         </thead>
@@ -1103,6 +1112,7 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
