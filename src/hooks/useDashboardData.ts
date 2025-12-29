@@ -83,13 +83,11 @@ export function useDashboardData(): UseDashboardDataReturn {
           p_intervalo: intervalo,
         }),
 
-        // 5. Atividade recente (view agregada de várias entidades)
-        supabase
-          .from('view_atividade_recente')
-          .select('tipo, titulo, descricao, data_atividade, status')
-          .eq('empresa_id', empresaId)
-          .order('data_atividade', { ascending: false })
-          .limit(8),
+        // 5. Atividade recente (RPC que busca 2 de cada tipo)
+        supabase.rpc('get_atividade_recente', {
+          p_empresa_id: empresaId,
+          p_limit_per_type: 2,
+        }),
       ])
 
       console.log('[Dashboard] Responses:', {
@@ -121,9 +119,16 @@ export function useDashboardData(): UseDashboardDataReturn {
         setPedidosPeriodo(pedidos)
       }
 
-      // Processar atividade recente (já vem formatado da view)
+      // Processar atividade recente (já vem formatado da RPC)
       if (atividadeRes.data) {
-        const atividades: AtividadeRecente[] = atividadeRes.data.map((item) => ({
+        interface AtividadeRPC {
+          tipo: string
+          titulo: string
+          descricao: string
+          data_atividade: string
+          status: string
+        }
+        const atividades: AtividadeRecente[] = (atividadeRes.data as AtividadeRPC[]).map((item) => ({
           tipo: item.tipo as AtividadeRecente['tipo'],
           titulo: item.titulo,
           descricao: item.descricao,
