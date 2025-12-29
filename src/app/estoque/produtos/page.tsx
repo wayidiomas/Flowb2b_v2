@@ -17,18 +17,19 @@ interface Produto {
 }
 
 interface MovimentacaoEstoque {
-  id: number
+  movimentacao_id: number
   produto_id: number
-  empresa_id: number
+  produto_nome: string
+  produto_codigo: string
+  produto_gtin: string
   data: string
   tipo: 'Entrada' | 'Saida'
   quantidade: number
-  origem: string | null
+  preco_venda: number | null
+  valor_de_compra: number | null
+  preco_custo: number | null
   observacao: string | null
-  // Campos extras do produto para exibição
-  preco_venda?: number
-  preco_compra?: number
-  preco_custo?: number
+  origem: string | null
 }
 
 interface ResumoEstoque {
@@ -157,7 +158,37 @@ export default function ControleEstoquePage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Buscar produtos
+  // Buscar resumo geral ao carregar
+  const fetchResumo = useCallback(async () => {
+    if (!empresaId) return
+
+    try {
+      const { data, error } = await supabase.rpc('flowb2b_get_resumo_movimentacao', {
+        p_empresa_id: empresaId
+      })
+
+      if (error) {
+        console.error('Erro ao buscar resumo:', error)
+        return
+      }
+
+      if (data && data.length > 0) {
+        setResumo({
+          totalEntradas: Number(data[0].quantidade_entradas) || 0,
+          totalSaidas: Number(data[0].quantidade_saidas) || 0,
+          valorTotalProdutos: Number(data[0].valor_total_produtos) || 0,
+        })
+      }
+    } catch (err) {
+      console.error('Erro:', err)
+    }
+  }, [empresaId])
+
+  useEffect(() => {
+    fetchResumo()
+  }, [fetchResumo])
+
+  // Buscar produtos - usando query simples com ilike separados
   const searchProdutos = useCallback(async (term: string) => {
     if (!term || term.length < 2 || !empresaId) {
       setSearchResults([])
@@ -167,19 +198,47 @@ export default function ControleEstoquePage() {
 
     setLoading(true)
     try {
+      // Escapar caracteres especiais para evitar erro 400
+      const safeTerm = term.replace(/[%_]/g, '')
+
       const { data, error } = await supabase
         .from('produtos')
         .select('id, codigo, nome, gtin, preco, precocusto, estoque_atual')
         .eq('empresa_id', empresaId)
-        .or(`nome.ilike.%${term}%,gtin.ilike.%${term}%,codigo.ilike.%${term}%`)
+        .ilike('nome', `%${safeTerm}%`)
         .limit(10)
 
       if (error) {
         console.error('Erro ao buscar produtos:', error)
+        // Tentar busca por codigo/gtin se nome falhar
+        const { data: data2, error: error2 } = await supabase
+          .from('produtos')
+          .select('id, codigo, nome, gtin, preco, precocusto, estoque_atual')
+          .eq('empresa_id', empresaId)
+          .or(`codigo.ilike.%${safeTerm}%,gtin.ilike.%${safeTerm}%`)
+          .limit(10)
+
+        if (!error2 && data2) {
+          setSearchResults(data2)
+          setShowSearchResults(true)
+        }
         return
       }
 
-      setSearchResults(data || [])
+      // Se não encontrou por nome, buscar por codigo/gtin
+      if (data && data.length === 0) {
+        const { data: data2 } = await supabase
+          .from('produtos')
+          .select('id, codigo, nome, gtin, preco, precocusto, estoque_atual')
+          .eq('empresa_id', empresaId)
+          .or(`codigo.ilike.%${safeTerm}%,gtin.ilike.%${safeTerm}%`)
+          .limit(10)
+
+        setSearchResults(data2 || [])
+      } else {
+        setSearchResults(data || [])
+      }
+
       setShowSearchResults(true)
     } catch (err) {
       console.error('Erro:', err)
@@ -197,12 +256,13 @@ export default function ControleEstoquePage() {
     return () => clearTimeout(timer)
   }, [searchTerm, searchProdutos])
 
-  // Buscar movimentacoes do produto selecionado
+  // Buscar movimentacoes do produto selecionado usando RPC
   const fetchMovimentacoes = useCallback(async (produtoId: number) => {
     if (!empresaId) return
 
     setLoadingMovimentacoes(true)
     try {
+      // Usar a RPC search_produto_movimentacao para buscar movimentacoes do produto
       const { data, error } = await supabase
         .from('movimentacao_estoque')
         .select('*')
@@ -215,18 +275,25 @@ export default function ControleEstoquePage() {
         return
       }
 
-      setMovimentacoes(data || [])
+      // Converter para formato esperado
+      const movs: MovimentacaoEstoque[] = (data || []).map((m: any) => ({
+        movimentacao_id: m.id,
+        produto_id: m.produto_id,
+        produto_nome: selectedProduct?.nome || '',
+        produto_codigo: selectedProduct?.codigo || '',
+        produto_gtin: selectedProduct?.gtin || '',
+        data: m.data,
+        tipo: m.tipo,
+        quantidade: m.quantidade,
+        preco_venda: selectedProduct?.preco || null,
+        valor_de_compra: null,
+        preco_custo: selectedProduct?.precocusto || null,
+        observacao: m.observacao,
+        origem: m.origem,
+      }))
+
+      setMovimentacoes(movs)
       setCurrentPage(1)
-
-      // Calcular resumo
-      const entradas = data?.filter(m => m.tipo === 'Entrada').reduce((acc, m) => acc + Number(m.quantidade), 0) || 0
-      const saidas = data?.filter(m => m.tipo === 'Saida').reduce((acc, m) => acc + Number(m.quantidade), 0) || 0
-
-      setResumo({
-        totalEntradas: entradas,
-        totalSaidas: saidas,
-        valorTotalProdutos: (selectedProduct?.preco || 0) * (selectedProduct?.estoque_atual || 0),
-      })
     } catch (err) {
       console.error('Erro:', err)
     } finally {
@@ -241,6 +308,13 @@ export default function ControleEstoquePage() {
     setShowSearchResults(false)
     fetchMovimentacoes(produto.id)
   }
+
+  // Atualizar movimentacoes quando selectedProduct mudar
+  useEffect(() => {
+    if (selectedProduct) {
+      fetchMovimentacoes(selectedProduct.id)
+    }
+  }, [selectedProduct, fetchMovimentacoes])
 
   // Salvar novo lancamento
   const handleSaveLancamento = async () => {
@@ -280,8 +354,9 @@ export default function ControleEstoquePage() {
       // Atualizar estado local
       setSelectedProduct({ ...selectedProduct, estoque_atual: novoEstoque })
 
-      // Recarregar movimentacoes
+      // Recarregar movimentacoes e resumo
       fetchMovimentacoes(selectedProduct.id)
+      fetchResumo()
 
       // Fechar modal e limpar form
       setShowNovoLancamentoModal(false)
@@ -309,7 +384,7 @@ export default function ControleEstoquePage() {
       const { error } = await supabase
         .from('movimentacao_estoque')
         .delete()
-        .eq('id', movimentacao.id)
+        .eq('id', movimentacao.movimentacao_id)
         .eq('empresa_id', empresaId)
 
       if (error) {
@@ -331,6 +406,7 @@ export default function ControleEstoquePage() {
 
       setSelectedProduct({ ...selectedProduct, estoque_atual: novoEstoque })
       fetchMovimentacoes(selectedProduct.id)
+      fetchResumo()
     } catch (err) {
       console.error('Erro:', err)
     }
@@ -515,7 +591,7 @@ export default function ControleEstoquePage() {
                           ) : (
                             paginatedMovimentacoes.map((mov, index) => (
                               <tr
-                                key={mov.id}
+                                key={mov.movimentacao_id}
                                 className={`border-b border-[#EFEFEF] hover:bg-gray-50 ${
                                   index % 2 === 1 ? 'bg-[#F9F9F9]' : 'bg-white'
                                 }`}
@@ -527,16 +603,16 @@ export default function ControleEstoquePage() {
                                   {mov.tipo === 'Entrada' ? Number(mov.quantidade).toLocaleString('pt-BR') : '-'}
                                 </td>
                                 <td className="px-4 py-3 text-[13px] text-[#344054]">
-                                  {formatCurrency(selectedProduct.preco)}
+                                  {formatCurrency(mov.preco_venda)}
                                 </td>
                                 <td className="px-4 py-3 text-[13px] text-[#344054]">
                                   {mov.tipo === 'Saida' ? Number(mov.quantidade).toLocaleString('pt-BR') : '-'}
                                 </td>
                                 <td className="px-4 py-3 text-[13px] text-[#344054]">
-                                  {formatCurrency(mov.preco_compra || null)}
+                                  {formatCurrency(mov.valor_de_compra)}
                                 </td>
                                 <td className="px-4 py-3 text-[13px] text-[#344054]">
-                                  {formatCurrency(selectedProduct.precocusto)}
+                                  {formatCurrency(mov.preco_custo)}
                                 </td>
                                 <td className="px-4 py-3 text-[13px] text-[#344054] max-w-[200px] truncate">
                                   {mov.observacao || '-'}
