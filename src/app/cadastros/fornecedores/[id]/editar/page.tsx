@@ -216,16 +216,12 @@ export default function EditarFornecedorPage() {
           })
         }
 
-        // Buscar políticas de compra
+        // Buscar políticas de compra via RPC
         const { data: politicasData } = await supabase
-          .from('politica_compra')
-          .select('*')
-          .eq('fornecedor_id', fornecedorId)
-          .eq('empresa_id', empresaId)
-          .eq('isdeleted', false)
+          .rpc('flowb2b_fetch_politica_compra', { f_id: parseInt(fornecedorId) })
 
         if (politicasData) {
-          setPoliticas(politicasData)
+          setPoliticas(politicasData as PoliticaCompra[])
         }
 
         // Buscar produtos usando a view fornecedor_produtos_detalhados
