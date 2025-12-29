@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import { DashboardLayout, PageHeader } from '@/components/layout'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions } from '@/hooks/usePermissions'
 import { supabase } from '@/lib/supabase'
@@ -374,11 +374,11 @@ export default function ColaboradoresPage() {
 
   return (
     <DashboardLayout>
-      {/* Page Header */}
-      <div className="mb-6">
-        <h1 className="text-lg font-semibold text-gray-900">Colaboradores</h1>
-        <p className="text-sm text-gray-500">{filteredColaboradores.length} colaboradores</p>
-      </div>
+      {/* Page Header com seletor de empresa */}
+      <PageHeader
+        title="Colaboradores"
+        subtitle={`${filteredColaboradores.length} colaboradores`}
+      />
 
       {/* Card Container */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">

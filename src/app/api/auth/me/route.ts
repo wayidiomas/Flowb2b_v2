@@ -13,8 +13,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar dados completos do usuário
     const supabase = createServerSupabaseClient()
+
+    // Buscar dados completos do usuário
     const { data: user, error } = await supabase
       .from('users')
       .select('id, email, nome, empresa_id, role, ativo, created_at, updated_at')
@@ -28,18 +29,53 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Determinar empresa_id: primeiro do usuario, senao buscar de users_empresas
+    let empresaId = user.empresa_id
+
+    if (!empresaId) {
+      // Buscar primeira empresa vinculada em users_empresas
+      const { data: userEmpresa } = await supabase
+        .from('users_empresas')
+        .select('empresa_id, role')
+        .eq('user_id', user.id)
+        .eq('ativo', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single()
+
+      if (userEmpresa) {
+        empresaId = userEmpresa.empresa_id
+      }
+    }
+
     // Buscar dados da empresa
-    const { data: empresa } = await supabase
-      .from('empresas')
-      .select('id, razao_social, nome_fantasia, cnpj')
-      .eq('id', user.empresa_id)
-      .single()
+    let empresa = null
+    if (empresaId) {
+      const { data: empresaData } = await supabase
+        .from('empresas')
+        .select('id, razao_social, nome_fantasia, cnpj')
+        .eq('id', empresaId)
+        .single()
+      empresa = empresaData
+    }
+
+    // Buscar todas as empresas do usuario (para multi-tenant)
+    const { data: empresasVinculadas } = await supabase
+      .from('users_empresas')
+      .select('empresa_id, role, ativo, empresas:empresa_id(id, razao_social, nome_fantasia, cnpj)')
+      .eq('user_id', user.id)
+      .eq('ativo', true)
 
     return NextResponse.json({
       success: true,
       user: {
         ...user,
+        empresa_id: empresaId,
         empresa,
+        empresas: empresasVinculadas?.map(ue => ({
+          ...ue.empresas,
+          role: ue.role,
+        })) || [],
       },
     })
   } catch (error) {

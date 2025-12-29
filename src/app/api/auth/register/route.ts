@@ -88,6 +88,7 @@ export async function POST(request: NextRequest) {
         role: role || 'user',
         ativo: true,
         empresa: empresa_id || null,
+        empresa_id: empresa_id || null,
       })
       .select()
       .single()
