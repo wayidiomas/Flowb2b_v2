@@ -10,9 +10,11 @@ import type {
   PedidoPeriodo,
   AtividadeRecente,
   IntervaloGrafico,
+  IntervaloEstoque,
   TopProdutoVendido,
   ProdutoAltaRotatividade,
   VariacaoEstoque,
+  FornecedorMaisVendas,
 } from '@/types/dashboard'
 
 interface UseDashboardDataReturn {
@@ -25,6 +27,7 @@ interface UseDashboardDataReturn {
   topProdutosVendidos: TopProdutoVendido[]
   produtosAltaRotatividade: ProdutoAltaRotatividade[]
   variacaoEstoque: VariacaoEstoque[]
+  fornecedoresMaisVendas: FornecedorMaisVendas[]
 
   // Estado
   loading: boolean
@@ -34,6 +37,8 @@ interface UseDashboardDataReturn {
   refetch: () => Promise<void>
   setIntervalo: (intervalo: IntervaloGrafico) => void
   intervalo: IntervaloGrafico
+  setIntervaloEstoque: (intervalo: IntervaloEstoque) => void
+  intervaloEstoque: IntervaloEstoque
 }
 
 export function useDashboardData(): UseDashboardDataReturn {
@@ -48,9 +53,11 @@ export function useDashboardData(): UseDashboardDataReturn {
   const [topProdutosVendidos, setTopProdutosVendidos] = useState<TopProdutoVendido[]>([])
   const [produtosAltaRotatividade, setProdutosAltaRotatividade] = useState<ProdutoAltaRotatividade[]>([])
   const [variacaoEstoque, setVariacaoEstoque] = useState<VariacaoEstoque[]>([])
+  const [fornecedoresMaisVendas, setFornecedoresMaisVendas] = useState<FornecedorMaisVendas[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [intervalo, setIntervalo] = useState<IntervaloGrafico>('12_meses')
+  const [intervaloEstoque, setIntervaloEstoque] = useState<IntervaloEstoque>('4_meses')
 
   const fetchData = useCallback(async () => {
     console.log('[Dashboard] empresaId:', empresaId)
@@ -76,6 +83,7 @@ export function useDashboardData(): UseDashboardDataReturn {
         topVendidosRes,
         altaRotatividadeRes,
         variacaoEstoqueRes,
+        fornecedoresMaisVendasRes,
       ] = await Promise.all([
         // 1. Métricas principais
         supabase.rpc('get_dashboard_metrics', {
@@ -121,10 +129,17 @@ export function useDashboardData(): UseDashboardDataReturn {
           p_limit: 10,
         }),
 
-        // 8. Variação do valor em estoque
+        // 8. Variação do valor em estoque (usa intervalo próprio)
         supabase.rpc('get_variacao_valor_estoque', {
           p_empresa_id: empresaId,
+          p_intervalo: intervaloEstoque,
+        }),
+
+        // 9. Fornecedores que mais vendem
+        supabase.rpc('get_fornecedores_mais_vendas', {
+          p_empresa_id: empresaId,
           p_intervalo: intervalo,
+          p_limit: 5,
         }),
       ])
 
@@ -194,6 +209,11 @@ export function useDashboardData(): UseDashboardDataReturn {
         setVariacaoEstoque(variacaoEstoqueRes.data as VariacaoEstoque[])
       }
 
+      // Processar fornecedores que mais vendem
+      if (fornecedoresMaisVendasRes.data) {
+        setFornecedoresMaisVendas(fornecedoresMaisVendasRes.data as FornecedorMaisVendas[])
+      }
+
       // Verificar erros
       const errors = [metricsRes.error, fornecedoresRes.error, produtosRes.error, pedidosRes.error]
         .filter(Boolean)
@@ -209,7 +229,7 @@ export function useDashboardData(): UseDashboardDataReturn {
     } finally {
       setLoading(false)
     }
-  }, [empresaId, intervalo])
+  }, [empresaId, intervalo, intervaloEstoque])
 
   // Buscar dados quando empresaId ou intervalo mudar
   useEffect(() => {
@@ -225,11 +245,14 @@ export function useDashboardData(): UseDashboardDataReturn {
     topProdutosVendidos,
     produtosAltaRotatividade,
     variacaoEstoque,
+    fornecedoresMaisVendas,
     loading,
     error,
     refetch: fetchData,
     setIntervalo,
     intervalo,
+    setIntervaloEstoque,
+    intervaloEstoque,
   }
 }
 

@@ -70,12 +70,14 @@ export default function Home() {
     produtosCurvaA,
     pedidosPeriodo,
     atividadeRecente,
-    topProdutosVendidos,
     produtosAltaRotatividade,
     variacaoEstoque,
+    fornecedoresMaisVendas,
     loading,
     intervalo,
     setIntervalo,
+    intervaloEstoque,
+    setIntervaloEstoque,
   } = useDashboardData()
 
   const { data: produtosCurva, loading: loadingCurva } = useProdutosCurva(curvaSelecionada)
@@ -199,28 +201,40 @@ export default function Home() {
         )}
       </Card>
 
-      {/* Nova Row: Top Produtos Vendidos + Variação Estoque */}
+      {/* Nova Row: Fornecedores Mais Vendas + Variação Estoque */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Top Produtos Vendidos */}
+        {/* Fornecedores que Mais Vendem */}
         <Card padding="md">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-gray-900">Top Produtos Vendidos</h3>
+            <h3 className="text-base font-semibold text-gray-900">Fornecedores que Mais Vendem</h3>
             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
               {intervalo === '7_dias' ? 'Última semana' : intervalo === '30_dias' ? 'Último mês' : 'Último ano'}
             </span>
           </div>
-          {topProdutosVendidos.length > 0 ? (
-            <TopProdutosVendidosChart data={topProdutosVendidos} />
+          {fornecedoresMaisVendas.length > 0 ? (
+            <FornecedoresMaisVendasChart data={fornecedoresMaisVendas} />
           ) : (
-            <EmptyState message="Nenhum produto vendido no período" />
+            <EmptyState message="Nenhum fornecedor no período" />
           )}
         </Card>
 
         {/* Variação do Valor em Estoque */}
         <Card padding="md">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-gray-900">Variação do Valor em Estoque</h3>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">Variação do Valor em Estoque</h3>
+            </div>
             <div className="flex items-center gap-2">
+              <select
+                value={intervaloEstoque}
+                onChange={(e) => setIntervaloEstoque(e.target.value as typeof intervaloEstoque)}
+                className="text-xs bg-gray-100 border-0 rounded-full px-3 py-1.5 text-gray-600 focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="7_dias">Semana</option>
+                <option value="30_dias">Mês</option>
+                <option value="4_meses">4 Meses</option>
+                <option value="12_meses">Ano</option>
+              </select>
               {variacaoEstoque.length > 0 && (
                 <span className={`text-xs font-medium px-2 py-1 rounded-full ${
                   (variacaoEstoque[variacaoEstoque.length - 1]?.variacao_percentual || 0) >= 0
@@ -234,7 +248,7 @@ export default function Home() {
             </div>
           </div>
           {variacaoEstoque.length > 0 ? (
-            <VariacaoEstoqueChart data={variacaoEstoque} />
+            <VariacaoEstoqueChart data={variacaoEstoque} intervalo={intervaloEstoque} />
           ) : (
             <EmptyState message="Sem histórico de estoque" />
           )}
@@ -779,20 +793,27 @@ interface VariacaoEstoqueData {
   variacao_percentual: number | null
 }
 
-function VariacaoEstoqueChart({ data }: { data: VariacaoEstoqueData[] }) {
-  const chartData = data.map((d) => ({
-    data: new Date(d.data).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
-    valor: Number(d.valor_total),
-  }))
+function VariacaoEstoqueChart({ data, intervalo }: { data: VariacaoEstoqueData[]; intervalo: string }) {
+  const chartData = data.map((d) => {
+    const date = new Date(d.data)
+    // Para intervalos de mês/ano, mostrar mês e ano
+    const label = intervalo === '7_dias' || intervalo === '30_dias'
+      ? date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+      : date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+    return {
+      data: label.replace('.', ''),
+      valor: Number(d.valor_total),
+    }
+  })
 
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
           <defs>
-            <linearGradient id="colorValor" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#4CAF50" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#4CAF50" stopOpacity={0} />
+            <linearGradient id="colorValorEstoque" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#336FB6" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#336FB6" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -800,17 +821,64 @@ function VariacaoEstoqueChart({ data }: { data: VariacaoEstoqueData[] }) {
           <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} />
           <Tooltip
             formatter={(value) => [formatCurrency(Number(value)), 'Valor em Estoque']}
-            labelFormatter={(label) => `Data: ${label}`}
+            labelFormatter={(label) => `Período: ${label}`}
           />
           <Area
             type="monotone"
             dataKey="valor"
-            stroke="#4CAF50"
+            stroke="#336FB6"
             strokeWidth={2}
             fillOpacity={1}
-            fill="url(#colorValor)"
+            fill="url(#colorValorEstoque)"
           />
         </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ===== FORNECEDORES MAIS VENDAS CHART =====
+interface FornecedorMaisVendasData {
+  fornecedor_id: number
+  fornecedor_nome: string
+  total_vendido: number
+  valor_total: number
+  quantidade_produtos: number
+  percentual: number
+}
+
+function FornecedoresMaisVendasChart({ data }: { data: FornecedorMaisVendasData[] }) {
+  const chartData = data.slice(0, 5).map((f) => ({
+    name: (f.fornecedor_nome || 'Sem nome').length > 20
+      ? (f.fornecedor_nome || 'Sem nome').substring(0, 20) + '...'
+      : (f.fornecedor_nome || 'Sem nome'),
+    valor: Number(f.valor_total),
+    percentual: Number(f.percentual),
+  }))
+
+  return (
+    <div className="h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          layout="vertical"
+          data={chartData}
+          margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+          <XAxis type="number" tickFormatter={formatCompact} />
+          <YAxis type="category" dataKey="name" width={95} tick={{ fontSize: 11 }} />
+          <Tooltip
+            formatter={(value, name) => [
+              name === 'valor' ? formatCurrency(Number(value)) : `${value}%`,
+              name === 'valor' ? 'Valor Vendido' : 'Participação',
+            ]}
+          />
+          <Bar dataKey="valor" fill="#336FB6" radius={[0, 4, 4, 0]} name="valor">
+            {chartData.map((_, index) => (
+              <Cell key={`cell-${index}`} fill={BAR_COLORS[index % BAR_COLORS.length]} />
+            ))}
+          </Bar>
+        </BarChart>
       </ResponsiveContainer>
     </div>
   )

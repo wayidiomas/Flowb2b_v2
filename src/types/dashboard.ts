@@ -49,6 +49,17 @@ export interface AtividadeRecente {
 }
 
 export type IntervaloGrafico = '7_dias' | '30_dias' | '12_meses'
+export type IntervaloEstoque = '7_dias' | '30_dias' | '4_meses' | '12_meses'
+
+// Fornecedores que mais vendem
+export interface FornecedorMaisVendas {
+  fornecedor_id: number
+  fornecedor_nome: string
+  total_vendido: number
+  valor_total: number
+  quantidade_produtos: number
+  percentual: number
+}
 
 // Top produtos vendidos
 export interface TopProdutoVendido {
