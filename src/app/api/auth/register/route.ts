@@ -4,10 +4,16 @@ import { hashPassword } from '@/lib/auth'
 // import { sendEmailConfirmation } from '@/lib/email' // TODO: Reabilitar quando domínio verificado
 import type { RegisterCredentials, AuthResponse } from '@/types/auth'
 
+interface ColaboradorRegister extends RegisterCredentials {
+  empresa_id?: number
+  role?: string
+  isColaborador?: boolean
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const body: RegisterCredentials = await request.json()
-    const { nome, email, password, acceptedTerms } = body
+    const body: ColaboradorRegister = await request.json()
+    const { nome, email, password, acceptedTerms, empresa_id, role, isColaborador } = body
 
     // Validar campos obrigatórios
     if (!nome || !email || !password) {
@@ -17,8 +23,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar aceite dos termos
-    if (!acceptedTerms) {
+    // Validar aceite dos termos (nao obrigatorio para colaboradores)
+    if (!acceptedTerms && !isColaborador) {
       return NextResponse.json<AuthResponse>(
         { success: false, error: 'Você deve aceitar os termos de uso' },
         { status: 400 }
@@ -79,8 +85,9 @@ export async function POST(request: NextRequest) {
         nome,
         email: email.toLowerCase(),
         password_hash: passwordHash,
-        role: 'user',
+        role: role || 'user',
         ativo: true,
+        empresa: empresa_id || null,
       })
       .select()
       .single()
@@ -98,6 +105,15 @@ export async function POST(request: NextRequest) {
     // const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     // const confirmationUrl = `${baseUrl}/verify-email?token=${confirmationToken}`
     // await sendEmailConfirmation(newUser.email, newUser.nome, confirmationUrl)
+
+    // Retornar userId para colaboradores (usado para criar vinculo em users_empresas)
+    if (isColaborador) {
+      return NextResponse.json({
+        success: true,
+        message: 'Colaborador criado com sucesso!',
+        userId: newUser.id,
+      })
+    }
 
     return NextResponse.json<AuthResponse>({
       success: true,
