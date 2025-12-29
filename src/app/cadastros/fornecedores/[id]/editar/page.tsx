@@ -187,6 +187,109 @@ export default function EditarFornecedorPage() {
   const [produtosPage, setProdutosPage] = useState(1)
   const produtosPerPage = 8
 
+  // Modal de adicionar produto
+  const [showAddProdutoModal, setShowAddProdutoModal] = useState(false)
+  const [searchProduto, setSearchProduto] = useState('')
+  const [searchResults, setSearchResults] = useState<Array<{
+    id: number
+    id_produto_bling: number
+    codigo: string
+    nome: string
+    preco: number
+  }>>([])
+  const [searchingProdutos, setSearchingProdutos] = useState(false)
+  const [selectedProduto, setSelectedProduto] = useState<{
+    id: number
+    id_produto_bling: number
+    codigo: string
+    nome: string
+    preco: number
+  } | null>(null)
+  const [precoCompra, setPrecoCompra] = useState('')
+  const [addingProduto, setAddingProduto] = useState(false)
+
+  // Buscar produtos para adicionar
+  const handleSearchProdutos = async () => {
+    if (!searchProduto.trim() || searchProduto.length < 2) return
+
+    setSearchingProdutos(true)
+    try {
+      const empresaId = empresa?.id || user?.empresa_id
+
+      // Buscar produtos que tem id_produto_bling e não estão vinculados a este fornecedor
+      const { data, error } = await supabase
+        .from('produtos')
+        .select('id, id_produto_bling, codigo, nome, preco')
+        .eq('empresa_id', empresaId)
+        .not('id_produto_bling', 'is', null)
+        .or(`codigo.ilike.%${searchProduto}%,nome.ilike.%${searchProduto}%`)
+        .limit(20)
+
+      if (error) throw error
+
+      // Filtrar produtos já vinculados
+      const produtosJaVinculados = produtos.map(p => p.produto_id)
+      const produtosDisponiveis = (data || []).filter(
+        p => !produtosJaVinculados.includes(p.id)
+      )
+
+      setSearchResults(produtosDisponiveis)
+    } catch (err) {
+      console.error('Erro ao buscar produtos:', err)
+    } finally {
+      setSearchingProdutos(false)
+    }
+  }
+
+  // Adicionar produto ao fornecedor
+  const handleAddProduto = async () => {
+    if (!selectedProduto) return
+
+    setAddingProduto(true)
+    try {
+      const response = await fetch('/api/fornecedores/produtos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          produto_id: selectedProduto.id,
+          fornecedor_id: parseInt(fornecedorId),
+          preco_compra: precoCompra ? parseFloat(precoCompra) : undefined,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao adicionar produto')
+      }
+
+      // Recarregar lista de produtos
+      const empresaId = empresa?.id || user?.empresa_id
+      const { data: produtosData } = await supabase
+        .from('fornecedor_produtos_detalhados')
+        .select('*')
+        .eq('fornecedor_id', parseInt(fornecedorId))
+        .order('nome_produto')
+
+      if (produtosData) {
+        setProdutos(produtosData as ProdutoFornecedorDetalhado[])
+      }
+
+      // Fechar modal e limpar
+      setShowAddProdutoModal(false)
+      setSelectedProduto(null)
+      setSearchProduto('')
+      setSearchResults([])
+      setPrecoCompra('')
+
+    } catch (err) {
+      console.error('Erro ao adicionar produto:', err)
+      alert(err instanceof Error ? err.message : 'Erro ao adicionar produto')
+    } finally {
+      setAddingProduto(false)
+    }
+  }
+
   // Fetch fornecedor data
   useEffect(() => {
     const fetchFornecedor = async () => {
@@ -1053,7 +1156,10 @@ export default function EditarFornecedorPage() {
           {activeTab === 'produtos' && (
             <div>
               <div className="flex justify-end mb-4">
-                <button className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors">
+                <button
+                  onClick={() => setShowAddProdutoModal(true)}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
+                >
                   <PlusIcon />
                   Adicionar produto
                 </button>
@@ -1209,6 +1315,171 @@ export default function EditarFornecedorPage() {
           )}
         </div>
       </div>
+
+      {/* Modal de Adicionar Produto */}
+      {showAddProdutoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => {
+              setShowAddProdutoModal(false)
+              setSelectedProduto(null)
+              setSearchProduto('')
+              setSearchResults([])
+              setPrecoCompra('')
+            }}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">Adicionar Produto ao Fornecedor</h3>
+                <button
+                  onClick={() => {
+                    setShowAddProdutoModal(false)
+                    setSelectedProduto(null)
+                    setSearchProduto('')
+                    setSearchResults([])
+                    setPrecoCompra('')
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XIcon />
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                Busque um produto para vincular a este fornecedor no Bling
+              </p>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+              {/* Campo de busca */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Buscar produto
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={searchProduto}
+                    onChange={(e) => setSearchProduto(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearchProdutos()}
+                    placeholder="Digite o codigo ou nome do produto..."
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                  />
+                  <button
+                    onClick={handleSearchProdutos}
+                    disabled={searchingProdutos || searchProduto.length < 2}
+                    className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {searchingProdutos ? 'Buscando...' : 'Buscar'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Apenas produtos sincronizados com o Bling serao exibidos
+                </p>
+              </div>
+
+              {/* Resultados da busca */}
+              {searchResults.length > 0 && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selecione um produto ({searchResults.length} encontrados)
+                  </label>
+                  <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                    {searchResults.map((prod) => (
+                      <button
+                        key={prod.id}
+                        onClick={() => setSelectedProduto(prod)}
+                        className={`w-full px-4 py-3 text-left border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors ${
+                          selectedProduto?.id === prod.id ? 'bg-[#336FB6]/10' : ''
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{prod.nome}</p>
+                            <p className="text-xs text-gray-500">Codigo: {prod.codigo || '-'}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-gray-900">
+                              {prod.preco ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(prod.preco) : '-'}
+                            </p>
+                            {selectedProduto?.id === prod.id && (
+                              <span className="text-xs text-[#336FB6] font-medium">Selecionado</span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Produto selecionado - campos adicionais */}
+              {selectedProduto && (
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">Produto selecionado</h4>
+                  <div className="flex items-start gap-4">
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-900 font-medium">{selectedProduto.nome}</p>
+                      <p className="text-xs text-gray-500">Codigo: {selectedProduto.codigo || '-'}</p>
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Preco de compra (R$)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={precoCompra}
+                        onChange={(e) => setPrecoCompra(e.target.value)}
+                        placeholder="0,00"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Mensagem quando não há resultados */}
+              {searchProduto.length >= 2 && searchResults.length === 0 && !searchingProdutos && (
+                <div className="text-center py-8 text-gray-500">
+                  <p>Nenhum produto encontrado</p>
+                  <p className="text-sm mt-1">Verifique se o produto esta sincronizado com o Bling</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowAddProdutoModal(false)
+                  setSelectedProduto(null)
+                  setSearchProduto('')
+                  setSearchResults([])
+                  setPrecoCompra('')
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAddProduto}
+                disabled={!selectedProduto || addingProduto}
+                className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
+              >
+                {addingProduto ? 'Vinculando...' : 'Vincular Produto'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   )
 }
