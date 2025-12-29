@@ -122,11 +122,11 @@ export function useDashboardData(): UseDashboardDataReturn {
           p_limit: 10,
         }),
 
-        // 7. Produtos de alta rotatividade
+        // 7. Produtos de alta rotatividade (buscar mais para filtro/paginação)
         supabase.rpc('get_produtos_alta_rotatividade', {
           p_empresa_id: empresaId,
           p_dias: 90,
-          p_limit: 10,
+          p_limit: 100,
         }),
 
         // 8. Variação do valor em estoque (usa intervalo próprio)

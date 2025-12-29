@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePermissions, Permissoes } from '@/hooks/usePermissions'
 
 // Icone de seta para baixo
 function ChevronDownIcon({ className = 'w-3 h-3' }: { className?: string }) {
@@ -37,7 +38,8 @@ function SettingsIcon() {
 interface NavItem {
   label: string
   href: string
-  children?: { label: string; href: string }[]
+  permission?: keyof Permissoes
+  children?: { label: string; href: string; permission?: keyof Permissoes }[]
 }
 
 const navigation: NavItem[] = [
@@ -45,21 +47,22 @@ const navigation: NavItem[] = [
   {
     label: 'Cadastros',
     href: '/cadastros',
+    permission: 'cadastros',
     children: [
-      { label: 'Cadastro de funcionarios', href: '/cadastros/colaboradores' },
-      { label: 'Cadastro de fornecedores', href: '/cadastros/fornecedores' },
-      { label: 'Cadastro de produtos', href: '/cadastros/produtos' },
-      { label: 'Minhas empresas', href: '/cadastros/empresas' },
+      { label: 'Cadastro de funcionarios', href: '/cadastros/colaboradores', permission: 'cadastros' },
+      { label: 'Cadastro de fornecedores', href: '/cadastros/fornecedores', permission: 'cadastros' },
+      { label: 'Cadastro de produtos', href: '/cadastros/produtos', permission: 'cadastros' },
+      { label: 'Minhas empresas', href: '/cadastros/empresas', permission: 'cadastros' },
     ],
   },
   {
     label: 'Suprimentos',
     href: '/suprimentos',
     children: [
-      { label: 'Pedido de compras', href: '/compras/pedidos' },
-      { label: 'Controle de estoque', href: '/estoque/produtos' },
-      { label: 'Notas de entrada', href: '/fiscal/notas' },
-      { label: 'Relatorios', href: '/relatorios' },
+      { label: 'Pedido de compras', href: '/compras/pedidos', permission: 'pedidos' },
+      { label: 'Controle de estoque', href: '/estoque/produtos', permission: 'estoque' },
+      { label: 'Notas de entrada', href: '/fiscal/notas', permission: 'financeiro' },
+      { label: 'Relatorios', href: '/relatorios', permission: 'relatorios' },
     ],
   },
   { label: 'Suporte', href: '/suporte' },

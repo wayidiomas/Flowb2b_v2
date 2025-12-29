@@ -240,6 +240,7 @@ export default function NovoColaboradorPage() {
           empresa_id: empresaId,
           role: formData.cargo,
           ativo: formData.ativo,
+          permissoes: formData.permissoes,
         })
 
       if (linkError) {

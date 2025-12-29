@@ -120,11 +120,19 @@ export default function EditarColaboradorPage() {
         // Buscar vinculo com empresa
         let ativo = userData.ativo
         let role = userData.role
+        let permissoes = {
+          cadastros: true,
+          pedidos: true,
+          relatorios: true,
+          configuracoes: false,
+          financeiro: false,
+          estoque: true,
+        }
 
         if (empresaId) {
           const { data: ueData } = await supabase
             .from('users_empresas')
-            .select('role, ativo')
+            .select('role, ativo, permissoes')
             .eq('user_id', colaboradorId)
             .eq('empresa_id', empresaId)
             .single()
@@ -132,6 +140,9 @@ export default function EditarColaboradorPage() {
           if (ueData) {
             role = ueData.role
             ativo = ueData.ativo
+            if (ueData.permissoes) {
+              permissoes = { ...permissoes, ...ueData.permissoes }
+            }
           }
         }
 
@@ -144,14 +155,7 @@ export default function EditarColaboradorPage() {
           confirmarNovaSenha: '',
           ativo: ativo !== false,
           foto: '', // Campo nao existe ainda na tabela users
-          permissoes: {
-            cadastros: true,
-            pedidos: true,
-            relatorios: true,
-            configuracoes: role === 'admin',
-            financeiro: role === 'admin',
-            estoque: true,
-          },
+          permissoes,
         })
       } catch (err) {
         console.error('Erro ao buscar colaborador:', err)
@@ -287,6 +291,7 @@ export default function EditarColaboradorPage() {
         .update({
           role: formData.cargo,
           ativo: formData.ativo,
+          permissoes: formData.permissoes,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', colaboradorId)
@@ -302,6 +307,7 @@ export default function EditarColaboradorPage() {
               empresa_id: empresaId,
               role: formData.cargo,
               ativo: formData.ativo,
+              permissoes: formData.permissoes,
             })
         } else {
           console.error('Erro ao atualizar vinculo:', ueUpdateError)

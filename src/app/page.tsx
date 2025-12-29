@@ -908,6 +908,9 @@ interface ProdutoRotatividadeData {
 
 function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }) {
   const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [showInfo, setShowInfo] = useState(false)
+  const itemsPerPage = 10
 
   const filteredData = data.filter((produto) => {
     if (!searchTerm.trim()) return true
@@ -919,7 +922,17 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
     )
   })
 
-  const [showInfo, setShowInfo] = useState(false)
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage)
+  const paginatedData = filteredData.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
+
+  // Reset para página 1 quando filtrar
+  const handleSearch = (value: string) => {
+    setSearchTerm(value)
+    setCurrentPage(1)
+  }
 
   return (
     <div>
@@ -930,7 +943,7 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
             type="text"
             placeholder="Pesquisar por nome, código ou EAN..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
           <svg
@@ -943,7 +956,7 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
           </svg>
           {searchTerm && (
             <button
-              onClick={() => setSearchTerm('')}
+              onClick={() => handleSearch('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1009,13 +1022,13 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
           </tr>
         </thead>
         <tbody>
-          {filteredData.length === 0 ? (
+          {paginatedData.length === 0 ? (
             <tr>
               <td colSpan={7} className="py-8 text-center text-sm text-gray-500">
                 Nenhum produto encontrado para &quot;{searchTerm}&quot;
               </td>
             </tr>
-          ) : filteredData.slice(0, 10).map((produto) => (
+          ) : paginatedData.map((produto) => (
             <tr
               key={produto.produto_id}
               className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
@@ -1113,6 +1126,58 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
         </tbody>
       </table>
       </div>
+
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+          <span className="text-sm text-gray-500">
+            Mostrando {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredData.length)} de {filteredData.length} produtos
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+            >
+              Anterior
+            </button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum
+                if (totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i
+                } else {
+                  pageNum = currentPage - 2 + i
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`w-8 h-8 text-sm font-medium rounded-lg transition-colors ${
+                      currentPage === pageNum
+                        ? 'bg-primary-600 text-white'
+                        : 'hover:bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+            >
+              Próximo
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
