@@ -306,7 +306,7 @@ export default function EditarFornecedorPage() {
 
       if (error) throw error
 
-      router.push('/compras/fornecedores')
+      router.push('/cadastros/fornecedores')
     } catch (err) {
       console.error('Erro ao salvar fornecedor:', err)
       alert('Erro ao salvar fornecedor')
@@ -409,7 +409,7 @@ export default function EditarFornecedorPage() {
     <DashboardLayout>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-        <Link href="/compras/fornecedores" className="hover:text-[#336FB6]">
+        <Link href="/cadastros/fornecedores" className="hover:text-[#336FB6]">
           Fornecedores
         </Link>
         <span>&gt;</span>
@@ -429,7 +429,7 @@ export default function EditarFornecedorPage() {
             </div>
             <div className="flex items-center gap-3">
               <Link
-                href="/compras/fornecedores"
+                href="/cadastros/fornecedores"
                 className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-gray-500 hover:bg-gray-600 rounded-lg transition-colors"
               >
                 <XIcon />

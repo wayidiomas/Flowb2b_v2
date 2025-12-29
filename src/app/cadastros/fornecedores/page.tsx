@@ -354,7 +354,7 @@ export default function FornecedoresPage() {
               </div>
 
               <Link
-                href="/compras/fornecedores/novo"
+                href="/cadastros/fornecedores/novo"
                 className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg shadow-xs transition-colors"
               >
                 <PlusIcon />
@@ -460,7 +460,7 @@ export default function FornecedoresPage() {
                       <div>
                         <p>Nenhum fornecedor cadastrado.</p>
                         <Link
-                          href="/compras/fornecedores/novo"
+                          href="/cadastros/fornecedores/novo"
                           className="mt-2 inline-block text-sm text-[#336FB6] hover:underline"
                         >
                           Adicionar primeiro fornecedor
@@ -507,7 +507,7 @@ export default function FornecedoresPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <Link
-                        href={`/compras/fornecedores/${forn.id}/editar`}
+                        href={`/cadastros/fornecedores/${forn.id}/editar`}
                         className="text-gray-400 hover:text-gray-600 transition-colors inline-block"
                       >
                         <ExternalLinkIcon />

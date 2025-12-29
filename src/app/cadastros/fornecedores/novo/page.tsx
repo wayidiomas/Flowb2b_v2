@@ -143,7 +143,7 @@ export default function NovoFornecedorPage() {
       if (error) throw error
 
       // Redireciona para a pagina de edicao do novo fornecedor
-      router.push(`/compras/fornecedores/${data.id}/editar`)
+      router.push(`/cadastros/fornecedores/${data.id}/editar`)
     } catch (err) {
       console.error('Erro ao criar fornecedor:', err)
       alert('Erro ao criar fornecedor')
@@ -156,7 +156,7 @@ export default function NovoFornecedorPage() {
     <DashboardLayout>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-        <Link href="/compras/fornecedores" className="hover:text-[#336FB6]">
+        <Link href="/cadastros/fornecedores" className="hover:text-[#336FB6]">
           Fornecedores
         </Link>
         <span>&gt;</span>
@@ -176,7 +176,7 @@ export default function NovoFornecedorPage() {
             </div>
             <div className="flex items-center gap-3">
               <Link
-                href="/compras/fornecedores"
+                href="/cadastros/fornecedores"
                 className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-gray-500 hover:bg-gray-600 rounded-lg transition-colors"
               >
                 <XIcon />
