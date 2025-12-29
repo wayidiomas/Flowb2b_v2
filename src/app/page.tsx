@@ -795,7 +795,8 @@ interface VariacaoEstoqueData {
 
 function VariacaoEstoqueChart({ data, intervalo }: { data: VariacaoEstoqueData[]; intervalo: string }) {
   const chartData = data.map((d) => {
-    const date = new Date(d.data)
+    // Usar T12:00:00 para evitar problemas de timezone
+    const date = new Date(d.data + 'T12:00:00')
     // Para intervalos de mês/ano, mostrar mês e ano
     const label = intervalo === '7_dias' || intervalo === '30_dias'
       ? date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
