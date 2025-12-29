@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
@@ -80,6 +80,14 @@ function TrashIcon() {
   )
 }
 
+function XIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  )
+}
+
 interface EmpresaListItem {
   id: number
   razao_social: string
@@ -88,6 +96,7 @@ interface EmpresaListItem {
   numero_colaboradores: number | null
   ativo: boolean | null
   unidade: string | null
+  cnpj: string | null
 }
 
 export default function MinhasEmpresasPage() {
@@ -99,7 +108,25 @@ export default function MinhasEmpresasPage() {
   const [selectedEmpresas, setSelectedEmpresas] = useState<number[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [actionLoading, setActionLoading] = useState(false)
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+  const [cnpjFilter, setCnpjFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'ativo' | 'inativo'>('todos')
+  const filterDropdownRef = useRef<HTMLDivElement>(null)
   const itemsPerPage = 10
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+        setShowFilterDropdown(false)
+      }
+    }
+
+    if (showFilterDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showFilterDropdown])
 
   const fetchEmpresas = async () => {
     if (!user?.id) {
@@ -116,7 +143,7 @@ export default function MinhasEmpresasPage() {
         // Buscar a empresa do usuario
         const { data, error } = await supabase
           .from('empresas')
-          .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade')
+          .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade, cnpj')
           .eq('id', empresaId)
 
         if (error) {
@@ -128,7 +155,7 @@ export default function MinhasEmpresasPage() {
         // Fallback: buscar todas as empresas disponiveis
         const { data, error } = await supabase
           .from('empresas')
-          .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade')
+          .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade, cnpj')
           .order('razao_social')
 
         if (error) {
@@ -148,15 +175,38 @@ export default function MinhasEmpresasPage() {
     fetchEmpresas()
   }, [user?.id, user?.empresa_id, empresa?.id])
 
-  // Filtrar empresas por termo de busca
+  // Filtrar empresas por termo de busca, CNPJ e status
   const filteredEmpresas = empresas.filter((emp) => {
     const searchLower = searchTerm.toLowerCase()
-    return (
+    const matchesSearch =
       emp.razao_social?.toLowerCase().includes(searchLower) ||
       emp.nome_fantasia?.toLowerCase().includes(searchLower) ||
       emp.endereco_resumido?.toLowerCase().includes(searchLower)
-    )
+
+    // Filtro por CNPJ
+    const cnpjFilterClean = cnpjFilter.replace(/\D/g, '')
+    const empCnpjClean = emp.cnpj?.replace(/\D/g, '') || ''
+    const matchesCnpj = !cnpjFilterClean || empCnpjClean.includes(cnpjFilterClean)
+
+    // Filtro por status
+    const matchesStatus =
+      statusFilter === 'todos' ||
+      (statusFilter === 'ativo' && emp.ativo !== false) ||
+      (statusFilter === 'inativo' && emp.ativo === false)
+
+    return matchesSearch && matchesCnpj && matchesStatus
   })
+
+  // Verificar se ha filtros ativos
+  const hasActiveFilters = cnpjFilter !== '' || statusFilter !== 'todos'
+
+  // Limpar filtros
+  const clearFilters = () => {
+    setCnpjFilter('')
+    setStatusFilter('todos')
+    setShowFilterDropdown(false)
+    setCurrentPage(1)
+  }
 
   // Paginacao
   const totalPages = Math.ceil(filteredEmpresas.length / itemsPerPage)
@@ -275,10 +325,91 @@ export default function MinhasEmpresasPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-[#FFBE4A] hover:bg-[#E5AB42] rounded-lg transition-colors">
-                <FilterIcon />
-                Filtros
-              </button>
+              {/* Botao de Filtros com Dropdown */}
+              <div className="relative" ref={filterDropdownRef}>
+                <button
+                  onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-[#FFBE4A] hover:bg-[#E5AB42] rounded-lg transition-colors"
+                >
+                  <FilterIcon />
+                  Filtros
+                  {hasActiveFilters && (
+                    <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#336FB6] text-xs text-white">
+                      {(cnpjFilter ? 1 : 0) + (statusFilter !== 'todos' ? 1 : 0)}
+                    </span>
+                  )}
+                </button>
+
+                {/* Dropdown */}
+                {showFilterDropdown && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <div className="p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-semibold text-gray-900">Filtros</h3>
+                        <button
+                          onClick={() => setShowFilterDropdown(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <XIcon />
+                        </button>
+                      </div>
+
+                      {/* Filtro por CNPJ */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          CNPJ
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Digite o CNPJ..."
+                          value={cnpjFilter}
+                          onChange={(e) => {
+                            setCnpjFilter(e.target.value)
+                            setCurrentPage(1)
+                          }}
+                          className="block w-full px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
+
+                      {/* Filtro por Status */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Status
+                        </label>
+                        <select
+                          value={statusFilter}
+                          onChange={(e) => {
+                            setStatusFilter(e.target.value as 'todos' | 'ativo' | 'inativo')
+                            setCurrentPage(1)
+                          }}
+                          className="block w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        >
+                          <option value="todos">Todos</option>
+                          <option value="ativo">Ativo</option>
+                          <option value="inativo">Inativo</option>
+                        </select>
+                      </div>
+
+                      {/* Botoes de Acao */}
+                      <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
+                        <button
+                          onClick={clearFilters}
+                          className="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          Limpar
+                        </button>
+                        <button
+                          onClick={() => setShowFilterDropdown(false)}
+                          className="flex-1 px-3 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
+                        >
+                          Aplicar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <Link
                 href="/cadastros/empresas/nova"
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
@@ -396,7 +527,21 @@ export default function MinhasEmpresasPage() {
               ) : paginatedEmpresas.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
-                    {searchTerm ? 'Nenhuma empresa encontrada para a busca.' : 'Nenhuma empresa cadastrada.'}
+                    {searchTerm || hasActiveFilters ? (
+                      <div>
+                        <p>Nenhuma empresa encontrada para os filtros aplicados.</p>
+                        {hasActiveFilters && (
+                          <button
+                            onClick={clearFilters}
+                            className="mt-2 text-sm text-[#336FB6] hover:underline"
+                          >
+                            Limpar filtros
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      'Nenhuma empresa cadastrada.'
+                    )}
                   </td>
                 </tr>
               ) : (
