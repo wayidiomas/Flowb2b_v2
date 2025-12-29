@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import { DashboardLayout, PageHeader } from '@/components/layout'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 
@@ -307,11 +307,11 @@ export default function MinhasEmpresasPage() {
 
   return (
     <DashboardLayout>
-      {/* Page Header */}
-      <div className="mb-6">
-        <h1 className="text-lg font-semibold text-gray-900">Minhas Empresas</h1>
-        <p className="text-sm text-gray-500">{filteredEmpresas.length} empresas</p>
-      </div>
+      {/* Page Header com seletor de empresa */}
+      <PageHeader
+        title="Minhas Empresas"
+        subtitle={`${filteredEmpresas.length} empresas`}
+      />
 
       {/* Card Container */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
