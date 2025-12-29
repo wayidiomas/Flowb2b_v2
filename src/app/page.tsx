@@ -14,11 +14,14 @@ import {
   Cell,
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from 'recharts'
 import { PIE_COLORS, BAR_COLORS, type IntervaloGrafico } from '@/types/dashboard'
 
@@ -67,6 +70,9 @@ export default function Home() {
     produtosCurvaA,
     pedidosPeriodo,
     atividadeRecente,
+    topProdutosVendidos,
+    produtosAltaRotatividade,
+    variacaoEstoque,
     loading,
     intervalo,
     setIntervalo,
@@ -190,6 +196,63 @@ export default function Home() {
           <PurchasesBarChart data={pedidosPeriodo} intervalo={intervalo} />
         ) : (
           <EmptyState message="Nenhum pedido no periodo" />
+        )}
+      </Card>
+
+      {/* Nova Row: Top Produtos Vendidos + Variação Estoque */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Top Produtos Vendidos */}
+        <Card padding="md">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-900">Top Produtos Vendidos</h3>
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+              {intervalo === '7_dias' ? 'Última semana' : intervalo === '30_dias' ? 'Último mês' : 'Último ano'}
+            </span>
+          </div>
+          {topProdutosVendidos.length > 0 ? (
+            <TopProdutosVendidosChart data={topProdutosVendidos} />
+          ) : (
+            <EmptyState message="Nenhum produto vendido no período" />
+          )}
+        </Card>
+
+        {/* Variação do Valor em Estoque */}
+        <Card padding="md">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-gray-900">Variação do Valor em Estoque</h3>
+            <div className="flex items-center gap-2">
+              {variacaoEstoque.length > 0 && (
+                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                  (variacaoEstoque[variacaoEstoque.length - 1]?.variacao_percentual || 0) >= 0
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-red-100 text-red-700'
+                }`}>
+                  {(variacaoEstoque[variacaoEstoque.length - 1]?.variacao_percentual || 0) >= 0 ? '+' : ''}
+                  {variacaoEstoque[variacaoEstoque.length - 1]?.variacao_percentual?.toFixed(1) || 0}%
+                </span>
+              )}
+            </div>
+          </div>
+          {variacaoEstoque.length > 0 ? (
+            <VariacaoEstoqueChart data={variacaoEstoque} />
+          ) : (
+            <EmptyState message="Sem histórico de estoque" />
+          )}
+        </Card>
+      </div>
+
+      {/* Produtos de Alta Rotatividade */}
+      <Card className="mb-6" padding="md">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">Produtos de Alta Rotatividade</h3>
+            <p className="text-xs text-gray-500 mt-1">Produtos que você mais compra e vende rapidamente (últimos 90 dias)</p>
+          </div>
+        </div>
+        {produtosAltaRotatividade.length > 0 ? (
+          <ProdutosRotatividadeTable data={produtosAltaRotatividade} />
+        ) : (
+          <EmptyState message="Nenhum produto com alta rotatividade" />
         )}
       </Card>
 
@@ -664,6 +727,215 @@ interface ProdutoCurvaData {
   curva?: string
   quantidade_em_estoque?: number
   condicao_de_ruptura?: boolean
+}
+
+// ===== TOP PRODUTOS VENDIDOS CHART =====
+interface TopProdutoVendidoData {
+  produto_id: number
+  produto_nome: string
+  produto_codigo: string
+  quantidade_vendida: number
+  valor_total: number
+  numero_pedidos: number
+}
+
+function TopProdutosVendidosChart({ data }: { data: TopProdutoVendidoData[] }) {
+  const chartData = data.slice(0, 5).map((p) => ({
+    name: p.produto_nome.length > 25 ? p.produto_nome.substring(0, 25) + '...' : p.produto_nome,
+    quantidade: Number(p.quantidade_vendida),
+    valor: Number(p.valor_total),
+  }))
+
+  return (
+    <div className="h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          layout="vertical"
+          data={chartData}
+          margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+          <XAxis type="number" />
+          <YAxis type="category" dataKey="name" width={95} tick={{ fontSize: 11 }} />
+          <Tooltip
+            formatter={(value, name) => [
+              name === 'quantidade' ? `${value} un` : formatCurrency(Number(value)),
+              name === 'quantidade' ? 'Quantidade' : 'Valor',
+            ]}
+          />
+          <Bar dataKey="quantidade" fill="#336FB6" radius={[0, 4, 4, 0]} name="quantidade" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ===== VARIAÇÃO ESTOQUE CHART =====
+interface VariacaoEstoqueData {
+  data: string
+  valor_total: number
+  quantidade_total: number
+  variacao_valor: number | null
+  variacao_percentual: number | null
+}
+
+function VariacaoEstoqueChart({ data }: { data: VariacaoEstoqueData[] }) {
+  const chartData = data.map((d) => ({
+    data: new Date(d.data).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
+    valor: Number(d.valor_total),
+  }))
+
+  return (
+    <div className="h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+          <defs>
+            <linearGradient id="colorValor" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#4CAF50" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#4CAF50" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="data" tick={{ fontSize: 10 }} />
+          <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} />
+          <Tooltip
+            formatter={(value) => [formatCurrency(Number(value)), 'Valor em Estoque']}
+            labelFormatter={(label) => `Data: ${label}`}
+          />
+          <Area
+            type="monotone"
+            dataKey="valor"
+            stroke="#4CAF50"
+            strokeWidth={2}
+            fillOpacity={1}
+            fill="url(#colorValor)"
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ===== PRODUTOS ROTATIVIDADE TABLE =====
+interface ProdutoRotatividadeData {
+  produto_id: number
+  produto_nome: string
+  produto_codigo: string
+  quantidade_vendida: number
+  quantidade_comprada: number
+  estoque_atual: number
+  vendas_por_dia: number
+  compras_por_dia: number
+  indice_rotatividade: number
+  dias_estoque: number | null
+}
+
+function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-gray-200">
+            <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Produto
+            </th>
+            <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Vendido
+            </th>
+            <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Comprado
+            </th>
+            <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Estoque
+            </th>
+            <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Vendas/Dia
+            </th>
+            <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Dias Estoque
+            </th>
+            <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Rotatividade
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.slice(0, 10).map((produto) => (
+            <tr
+              key={produto.produto_id}
+              className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+            >
+              <td className="py-3 px-4">
+                <span className="text-sm text-gray-900 font-medium" title={produto.produto_nome}>
+                  {produto.produto_nome.length > 35
+                    ? produto.produto_nome.substring(0, 35) + '...'
+                    : produto.produto_nome}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-right">
+                <span className="text-sm text-gray-700">
+                  {Number(produto.quantidade_vendida).toLocaleString('pt-BR')}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-right">
+                <span className="text-sm text-gray-700">
+                  {Number(produto.quantidade_comprada).toLocaleString('pt-BR')}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-right">
+                <span
+                  className={`text-sm font-medium ${
+                    produto.estoque_atual <= 0
+                      ? 'text-red-600'
+                      : produto.estoque_atual < 10
+                        ? 'text-yellow-600'
+                        : 'text-gray-700'
+                  }`}
+                >
+                  {produto.estoque_atual.toLocaleString('pt-BR')}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-right">
+                <span className="text-sm text-gray-700">
+                  {Number(produto.vendas_por_dia).toFixed(1)}
+                </span>
+              </td>
+              <td className="py-3 px-4 text-center">
+                {produto.dias_estoque !== null ? (
+                  <span
+                    className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      produto.dias_estoque <= 7
+                        ? 'bg-red-100 text-red-700'
+                        : produto.dias_estoque <= 30
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-green-100 text-green-700'
+                    }`}
+                  >
+                    {produto.dias_estoque.toFixed(0)} dias
+                  </span>
+                ) : (
+                  <span className="text-sm text-gray-400">-</span>
+                )}
+              </td>
+              <td className="py-3 px-4 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary-600 rounded-full"
+                      style={{ width: `${Math.min(Number(produto.indice_rotatividade) / 3, 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-gray-600 font-medium">
+                    {Number(produto.indice_rotatividade).toFixed(0)}
+                  </span>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 function ProdutosCurvaTable({ data }: { data: ProdutoCurvaData[] }) {
