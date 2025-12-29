@@ -795,14 +795,20 @@ interface VariacaoEstoqueData {
 
 function VariacaoEstoqueChart({ data, intervalo }: { data: VariacaoEstoqueData[]; intervalo: string }) {
   const chartData = data.map((d) => {
-    // Usar T12:00:00 para evitar problemas de timezone
-    const date = new Date(d.data + 'T12:00:00')
+    // Garantir que temos uma string de data válida
+    const dateStr = typeof d.data === 'string' ? d.data : new Date(d.data).toISOString().split('T')[0]
+    // Extrair ano e mês diretamente da string para evitar problemas de timezone
+    const [year, month] = dateStr.split('-').map(Number)
+    const monthNames = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+    const dayPart = dateStr.split('-')[2]
+
     // Para intervalos de mês/ano, mostrar mês e ano
     const label = intervalo === '7_dias' || intervalo === '30_dias'
-      ? date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-      : date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+      ? `${dayPart} ${monthNames[month - 1]}`
+      : `${monthNames[month - 1]} ${String(year).slice(-2)}`
+
     return {
-      data: label.replace('.', ''),
+      data: label,
       valor: Number(d.valor_total),
     }
   })
