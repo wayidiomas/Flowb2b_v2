@@ -16,6 +16,14 @@ function SearchIcon() {
   )
 }
 
+function PlusIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+  )
+}
+
 function CopyIcon() {
   return (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -75,6 +83,28 @@ interface FornecedorOption {
   nome_fantasia?: string
 }
 
+interface PoliticaFormData {
+  forma_pagamento_dias: number[]
+  prazo_entrega: number
+  valor_minimo: number
+  peso: number
+  desconto: number
+  bonificacao: number
+  observacao: string
+  estoque_eficiente: boolean
+}
+
+const defaultPoliticaForm: PoliticaFormData = {
+  forma_pagamento_dias: [],
+  prazo_entrega: 0,
+  valor_minimo: 0,
+  peso: 0,
+  desconto: 0,
+  bonificacao: 0,
+  observacao: '',
+  estoque_eficiente: true,
+}
+
 export default function PoliticaCompraPage() {
   const { user, empresa } = useAuth()
 
@@ -90,12 +120,22 @@ export default function PoliticaCompraPage() {
   const [page, setPage] = useState(1)
   const itemsPerPage = 10
 
+  // Modal de criar nova politica
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState<PoliticaFormData>(defaultPoliticaForm)
+  const [createFornecedorId, setCreateFornecedorId] = useState<number | null>(null)
+  const [createSearchTerm, setCreateSearchTerm] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [novoDiaPagamentoCreate, setNovoDiaPagamentoCreate] = useState('')
+
   // Modal de duplicar
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
   const [politicaToDuplicate, setPoliticaToDuplicate] = useState<PoliticaWithFornecedor | null>(null)
+  const [duplicateForm, setDuplicateForm] = useState<PoliticaFormData>(defaultPoliticaForm)
   const [selectedFornecedores, setSelectedFornecedores] = useState<number[]>([])
   const [duplicating, setDuplicating] = useState(false)
   const [duplicateSearchTerm, setDuplicateSearchTerm] = useState('')
+  const [novoDiaPagamentoDuplicate, setNovoDiaPagamentoDuplicate] = useState('')
 
   // Fetch data
   useEffect(() => {
@@ -190,11 +230,84 @@ export default function PoliticaCompraPage() {
     return pages
   }
 
+  // Abrir modal de criar
+  const handleOpenCreate = () => {
+    setCreateForm(defaultPoliticaForm)
+    setCreateFornecedorId(null)
+    setCreateSearchTerm('')
+    setNovoDiaPagamentoCreate('')
+    setShowCreateModal(true)
+  }
+
+  // Criar nova politica
+  const handleCreate = async () => {
+    if (!createFornecedorId) {
+      alert('Selecione um fornecedor')
+      return
+    }
+
+    setCreating(true)
+    try {
+      const empresaId = empresa?.id || user?.empresa_id
+
+      const { data, error } = await supabase
+        .from('politica_compra')
+        .insert({
+          fornecedor_id: createFornecedorId,
+          empresa_id: empresaId,
+          forma_pagamento_dias: createForm.forma_pagamento_dias,
+          prazo_entrega: createForm.prazo_entrega,
+          valor_minimo: createForm.valor_minimo,
+          peso: createForm.peso,
+          desconto: createForm.desconto,
+          bonificacao: createForm.bonificacao,
+          observacao: createForm.observacao,
+          estoque_eficiente: createForm.estoque_eficiente,
+        })
+        .select(`
+          *,
+          fornecedores!inner(id, nome, nome_fantasia)
+        `)
+        .single()
+
+      if (error) throw error
+
+      if (data) {
+        const mappedNova = {
+          ...data,
+          fornecedor_nome: data.fornecedores?.nome || '-',
+          fornecedor_nome_fantasia: data.fornecedores?.nome_fantasia,
+        }
+        setPoliticas(prev => [mappedNova, ...prev])
+      }
+
+      setShowCreateModal(false)
+      alert('Politica criada com sucesso!')
+
+    } catch (err) {
+      console.error('Erro ao criar politica:', err)
+      alert('Erro ao criar politica. Tente novamente.')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   // Abrir modal de duplicar
   const handleOpenDuplicate = (politica: PoliticaWithFornecedor) => {
     setPoliticaToDuplicate(politica)
+    setDuplicateForm({
+      forma_pagamento_dias: [...(politica.forma_pagamento_dias || [])],
+      prazo_entrega: politica.prazo_entrega || 0,
+      valor_minimo: politica.valor_minimo || 0,
+      peso: politica.peso || 0,
+      desconto: politica.desconto || 0,
+      bonificacao: politica.bonificacao || 0,
+      observacao: politica.observacao || '',
+      estoque_eficiente: politica.estoque_eficiente ?? true,
+    })
     setSelectedFornecedores([])
     setDuplicateSearchTerm('')
+    setNovoDiaPagamentoDuplicate('')
     setShowDuplicateModal(true)
   }
 
@@ -226,6 +339,18 @@ export default function PoliticaCompraPage() {
     setSelectedFornecedores([])
   }
 
+  // Filtrar fornecedores para criar (busca)
+  const filteredFornecedoresForCreate = useMemo(() => {
+    if (!createSearchTerm) return fornecedores
+
+    return fornecedores.filter(f => {
+      const search = createSearchTerm.toLowerCase()
+      const matchNome = f.nome?.toLowerCase().includes(search)
+      const matchFantasia = f.nome_fantasia?.toLowerCase().includes(search)
+      return matchNome || matchFantasia
+    })
+  }, [fornecedores, createSearchTerm])
+
   // Filtrar fornecedores para duplicacao (excluir o fornecedor atual)
   const filteredFornecedoresForDuplicate = useMemo(() => {
     if (!politicaToDuplicate) return []
@@ -246,6 +371,46 @@ export default function PoliticaCompraPage() {
     })
   }, [fornecedores, politicaToDuplicate, duplicateSearchTerm])
 
+  // Adicionar dia de pagamento
+  const handleAddDiaPagamento = (form: 'create' | 'duplicate') => {
+    const diaStr = form === 'create' ? novoDiaPagamentoCreate : novoDiaPagamentoDuplicate
+    const dia = parseInt(diaStr)
+    if (isNaN(dia) || dia <= 0) return
+
+    if (form === 'create') {
+      if (!createForm.forma_pagamento_dias.includes(dia)) {
+        setCreateForm(prev => ({
+          ...prev,
+          forma_pagamento_dias: [...prev.forma_pagamento_dias, dia].sort((a, b) => a - b)
+        }))
+      }
+      setNovoDiaPagamentoCreate('')
+    } else {
+      if (!duplicateForm.forma_pagamento_dias.includes(dia)) {
+        setDuplicateForm(prev => ({
+          ...prev,
+          forma_pagamento_dias: [...prev.forma_pagamento_dias, dia].sort((a, b) => a - b)
+        }))
+      }
+      setNovoDiaPagamentoDuplicate('')
+    }
+  }
+
+  // Remover dia de pagamento
+  const handleRemoveDiaPagamento = (dia: number, form: 'create' | 'duplicate') => {
+    if (form === 'create') {
+      setCreateForm(prev => ({
+        ...prev,
+        forma_pagamento_dias: prev.forma_pagamento_dias.filter(d => d !== dia)
+      }))
+    } else {
+      setDuplicateForm(prev => ({
+        ...prev,
+        forma_pagamento_dias: prev.forma_pagamento_dias.filter(d => d !== dia)
+      }))
+    }
+  }
+
   // Duplicar politica
   const handleDuplicate = async () => {
     if (!politicaToDuplicate || selectedFornecedores.length === 0) return
@@ -254,18 +419,18 @@ export default function PoliticaCompraPage() {
     try {
       const empresaId = empresa?.id || user?.empresa_id
 
-      // Criar uma politica para cada fornecedor selecionado
+      // Criar uma politica para cada fornecedor selecionado usando os valores editados
       const novasPoliticas = selectedFornecedores.map(fornecedorId => ({
         fornecedor_id: fornecedorId,
         empresa_id: empresaId,
-        forma_pagamento_dias: politicaToDuplicate.forma_pagamento_dias,
-        prazo_entrega: politicaToDuplicate.prazo_entrega,
-        valor_minimo: politicaToDuplicate.valor_minimo,
-        peso: politicaToDuplicate.peso,
-        desconto: politicaToDuplicate.desconto,
-        bonificacao: politicaToDuplicate.bonificacao,
-        observacao: politicaToDuplicate.observacao,
-        estoque_eficiente: politicaToDuplicate.estoque_eficiente,
+        forma_pagamento_dias: duplicateForm.forma_pagamento_dias,
+        prazo_entrega: duplicateForm.prazo_entrega,
+        valor_minimo: duplicateForm.valor_minimo,
+        peso: duplicateForm.peso,
+        desconto: duplicateForm.desconto,
+        bonificacao: duplicateForm.bonificacao,
+        observacao: duplicateForm.observacao,
+        estoque_eficiente: duplicateForm.estoque_eficiente,
       }))
 
       const { data, error } = await supabase
@@ -312,6 +477,140 @@ export default function PoliticaCompraPage() {
     }).format(Number(value))
   }
 
+  // Componente de formulario de politica (reutilizado em criar e duplicar)
+  const PoliticaFormFields = ({
+    form,
+    setForm,
+    novoDia,
+    setNovoDia,
+    formType
+  }: {
+    form: PoliticaFormData
+    setForm: React.Dispatch<React.SetStateAction<PoliticaFormData>>
+    novoDia: string
+    setNovoDia: React.Dispatch<React.SetStateAction<string>>
+    formType: 'create' | 'duplicate'
+  }) => (
+    <div className="space-y-4">
+      {/* Forma de pagamento */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Formas de Pagamento (dias)</label>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex flex-wrap items-center gap-2 min-h-[42px] px-3 py-2 border border-gray-300 rounded-lg bg-white">
+            {form.forma_pagamento_dias.length === 0 ? (
+              <span className="text-sm text-gray-400">Adicione os dias...</span>
+            ) : (
+              form.forma_pagamento_dias.map(dia => (
+                <span
+                  key={dia}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#336FB6] text-white text-sm rounded-full"
+                >
+                  {dia}d
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveDiaPagamento(dia, formType)}
+                    className="ml-0.5 hover:bg-white/20 rounded-full p-0.5"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              value={novoDia}
+              onChange={(e) => setNovoDia(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddDiaPagamento(formType))}
+              placeholder="Dias"
+              min="1"
+              className="w-20 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+            />
+            <button
+              type="button"
+              onClick={() => handleAddDiaPagamento(formType)}
+              className="p-2 bg-[#336FB6] text-white rounded-lg hover:bg-[#2660A5] transition-colors"
+            >
+              <PlusIcon />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        {/* Prazo de entrega */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de entrega (dias)</label>
+          <input
+            type="number"
+            value={form.prazo_entrega || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, prazo_entrega: parseInt(e.target.value) || 0 }))}
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+
+        {/* Valor minimo */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Valor minimo do pedido (R$)</label>
+          <input
+            type="number"
+            value={form.valor_minimo || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, valor_minimo: parseFloat(e.target.value) || 0 }))}
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+
+        {/* Peso */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Peso (kg)</label>
+          <input
+            type="number"
+            value={form.peso || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, peso: parseFloat(e.target.value) || 0 }))}
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+
+        {/* Desconto */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Desconto (%)</label>
+          <input
+            type="number"
+            value={form.desconto || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0 }))}
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+
+        {/* Bonificacao */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Bonificacao (%)</label>
+          <input
+            type="number"
+            value={form.bonificacao || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, bonificacao: parseFloat(e.target.value) || 0 }))}
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+
+        {/* Observacao */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Observacao</label>
+          <input
+            type="text"
+            value={form.observacao || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, observacao: e.target.value }))}
+            placeholder="Ex: Produtos da linha Pet"
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+      </div>
+    </div>
+  )
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -347,10 +646,17 @@ export default function PoliticaCompraPage() {
                 Gerencie as politicas de compra de todos os fornecedores em um so lugar
               </p>
             </div>
-            <div className="flex items-center gap-3 text-sm text-gray-500">
-              <span className="px-3 py-1 bg-[#336FB6]/10 text-[#336FB6] rounded-full font-medium">
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 bg-[#336FB6]/10 text-[#336FB6] rounded-full font-medium text-sm">
                 {filteredPoliticas.length} politica{filteredPoliticas.length !== 1 ? 's' : ''}
               </span>
+              <button
+                onClick={handleOpenCreate}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
+              >
+                <PlusIcon />
+                Nova Politica
+              </button>
             </div>
           </div>
         </div>
@@ -536,6 +842,118 @@ export default function PoliticaCompraPage() {
         )}
       </div>
 
+      {/* Modal de Criar Nova Politica */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowCreateModal(false)}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">Nova Politica de Compra</h3>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XIcon />
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                Crie uma nova politica de compra selecionando o fornecedor
+              </p>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+              {/* Selecao de fornecedor */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Selecione o Fornecedor</label>
+                <div className="relative mb-2">
+                  <input
+                    type="text"
+                    value={createSearchTerm}
+                    onChange={(e) => setCreateSearchTerm(e.target.value)}
+                    placeholder="Buscar fornecedor..."
+                    className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                  />
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                    <SearchIcon />
+                  </div>
+                </div>
+                <div className="border border-gray-200 rounded-lg max-h-[150px] overflow-y-auto">
+                  {filteredFornecedoresForCreate.length === 0 ? (
+                    <div className="px-4 py-4 text-center text-gray-500 text-sm">
+                      Nenhum fornecedor encontrado
+                    </div>
+                  ) : (
+                    filteredFornecedoresForCreate.map((f) => {
+                      const isSelected = createFornecedorId === f.id
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => setCreateFornecedorId(f.id)}
+                          className={`w-full px-4 py-2 text-left border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors flex items-center gap-3 ${
+                            isSelected ? 'bg-[#336FB6]/5' : ''
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                            isSelected
+                              ? 'bg-[#336FB6] border-[#336FB6]'
+                              : 'border-gray-300'
+                          }`}>
+                            {isSelected && <div className="w-2 h-2 bg-white rounded-full" />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">
+                              {f.nome_fantasia || f.nome}
+                            </p>
+                            {f.nome_fantasia && (
+                              <p className="text-xs text-gray-500">{f.nome}</p>
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Campos do formulario */}
+              <PoliticaFormFields
+                form={createForm}
+                setForm={setCreateForm}
+                novoDia={novoDiaPagamentoCreate}
+                setNovoDia={setNovoDiaPagamentoCreate}
+                formType="create"
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={!createFornecedorId || creating}
+                className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
+              >
+                {creating ? 'Criando...' : 'Criar Politica'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Duplicar */}
       {showDuplicateModal && politicaToDuplicate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -550,7 +968,7 @@ export default function PoliticaCompraPage() {
           />
 
           {/* Modal */}
-          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-hidden">
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
@@ -567,103 +985,102 @@ export default function PoliticaCompraPage() {
                 </button>
               </div>
               <p className="text-sm text-gray-500 mt-1">
-                Selecione os fornecedores que receberao esta politica
+                Edite os valores se necessario e selecione os fornecedores
               </p>
             </div>
 
-            {/* Resumo da politica */}
-            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-              <p className="text-xs text-gray-500 mb-2">Politica a ser duplicada:</p>
-              <div className="flex flex-wrap gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">Fornecedor original:</span>{' '}
-                  <span className="font-medium">{politicaToDuplicate.fornecedor_nome_fantasia || politicaToDuplicate.fornecedor_nome}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Pagamento:</span>{' '}
-                  <span className="font-medium">{politicaToDuplicate.forma_pagamento_dias?.join('/') || '-'} dias</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Entrega:</span>{' '}
-                  <span className="font-medium">{politicaToDuplicate.prazo_entrega || '-'} dias</span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Valor min:</span>{' '}
-                  <span className="font-medium">{formatCurrency(politicaToDuplicate.valor_minimo)}</span>
-                </div>
-              </div>
-            </div>
-
             {/* Content */}
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-280px)]">
-              {/* Busca e acoes */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={duplicateSearchTerm}
-                    onChange={(e) => setDuplicateSearchTerm(e.target.value)}
-                    placeholder="Buscar fornecedor..."
-                    className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-                  />
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                    <SearchIcon />
-                  </div>
-                </div>
-                <button
-                  onClick={selectAllVisible}
-                  className="px-3 py-2 text-xs font-medium text-[#336FB6] hover:bg-[#336FB6]/10 rounded-lg transition-colors"
-                >
-                  Selecionar todos
-                </button>
-                {selectedFornecedores.length > 0 && (
-                  <button
-                    onClick={clearSelection}
-                    className="px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    Limpar ({selectedFornecedores.length})
-                  </button>
-                )}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+              {/* Info do fornecedor original */}
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-500">Copiando politica de:</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {politicaToDuplicate.fornecedor_nome_fantasia || politicaToDuplicate.fornecedor_nome}
+                </p>
               </div>
 
-              {/* Lista de fornecedores */}
-              <div className="border border-gray-200 rounded-lg max-h-[300px] overflow-y-auto">
-                {filteredFornecedoresForDuplicate.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-gray-500">
-                    {duplicateSearchTerm
-                      ? 'Nenhum fornecedor encontrado com essa busca.'
-                      : 'Nenhum fornecedor disponivel para duplicacao.'}
+              {/* Campos editaveis */}
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Dados da Politica (editaveis)</h4>
+                <PoliticaFormFields
+                  form={duplicateForm}
+                  setForm={setDuplicateForm}
+                  novoDia={novoDiaPagamentoDuplicate}
+                  setNovoDia={setNovoDiaPagamentoDuplicate}
+                  formType="duplicate"
+                />
+              </div>
+
+              {/* Selecao de fornecedores */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Selecione os Fornecedores</h4>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={duplicateSearchTerm}
+                      onChange={(e) => setDuplicateSearchTerm(e.target.value)}
+                      placeholder="Buscar fornecedor..."
+                      className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                      <SearchIcon />
+                    </div>
                   </div>
-                ) : (
-                  filteredFornecedoresForDuplicate.map((f) => {
-                    const isSelected = selectedFornecedores.includes(f.id)
-                    return (
-                      <button
-                        key={f.id}
-                        onClick={() => toggleFornecedorSelection(f.id)}
-                        className={`w-full px-4 py-3 text-left border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors flex items-center gap-3 ${
-                          isSelected ? 'bg-[#336FB6]/5' : ''
-                        }`}
-                      >
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                          isSelected
-                            ? 'bg-[#336FB6] border-[#336FB6]'
-                            : 'border-gray-300'
-                        }`}>
-                          {isSelected && <CheckIcon />}
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900">
-                            {f.nome_fantasia || f.nome}
-                          </p>
-                          {f.nome_fantasia && (
-                            <p className="text-xs text-gray-500">{f.nome}</p>
-                          )}
-                        </div>
-                      </button>
-                    )
-                  })
-                )}
+                  <button
+                    onClick={selectAllVisible}
+                    className="px-3 py-2 text-xs font-medium text-[#336FB6] hover:bg-[#336FB6]/10 rounded-lg transition-colors"
+                  >
+                    Selecionar todos
+                  </button>
+                  {selectedFornecedores.length > 0 && (
+                    <button
+                      onClick={clearSelection}
+                      className="px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      Limpar ({selectedFornecedores.length})
+                    </button>
+                  )}
+                </div>
+
+                <div className="border border-gray-200 rounded-lg max-h-[200px] overflow-y-auto">
+                  {filteredFornecedoresForDuplicate.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-gray-500">
+                      {duplicateSearchTerm
+                        ? 'Nenhum fornecedor encontrado com essa busca.'
+                        : 'Nenhum fornecedor disponivel para duplicacao.'}
+                    </div>
+                  ) : (
+                    filteredFornecedoresForDuplicate.map((f) => {
+                      const isSelected = selectedFornecedores.includes(f.id)
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => toggleFornecedorSelection(f.id)}
+                          className={`w-full px-4 py-2 text-left border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors flex items-center gap-3 ${
+                            isSelected ? 'bg-[#336FB6]/5' : ''
+                          }`}
+                        >
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                            isSelected
+                              ? 'bg-[#336FB6] border-[#336FB6]'
+                              : 'border-gray-300'
+                          }`}>
+                            {isSelected && <CheckIcon />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">
+                              {f.nome_fantasia || f.nome}
+                            </p>
+                            {f.nome_fantasia && (
+                              <p className="text-xs text-gray-500">{f.nome}</p>
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
               </div>
             </div>
 
