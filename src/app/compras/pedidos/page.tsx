@@ -356,7 +356,7 @@ export default function PedidoCompraPage() {
   // Confirmar fornecedor e ir para pagina de novo pedido
   const handleConfirmFornecedor = () => {
     if (selectedFornecedor) {
-      router.push(`/suprimentos/pedido-compra/novo?fornecedor_id=${selectedFornecedor.id}`)
+      router.push(`/compras/pedidos/novo?fornecedor_id=${selectedFornecedor.id}`)
     }
   }
 
@@ -676,7 +676,7 @@ export default function PedidoCompraPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <Link
-                              href={`/suprimentos/pedido-compra/${pedido.pedido_id}/editar`}
+                              href={`/compras/pedidos/${pedido.pedido_id}/editar`}
                               className="text-gray-400 hover:text-gray-600 transition-colors inline-block"
                             >
                               <ExternalLinkIcon />

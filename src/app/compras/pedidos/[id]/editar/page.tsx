@@ -394,7 +394,7 @@ export default function EditarPedidoCompraPage() {
 
       if (error) throw error
 
-      router.push('/suprimentos/pedido-compra')
+      router.push('/compras/pedidos')
     } catch (err) {
       console.error('Erro ao salvar pedido:', err)
       alert('Erro ao salvar pedido. Tente novamente.')
@@ -418,7 +418,7 @@ export default function EditarPedidoCompraPage() {
       <DashboardLayout>
         <div className="bg-white rounded-[20px] p-8 text-center">
           <p className="text-gray-600 mb-4">Pedido nao encontrado.</p>
-          <Link href="/suprimentos/pedido-compra" className="text-[#336FB6] hover:underline">
+          <Link href="/compras/pedidos" className="text-[#336FB6] hover:underline">
             Voltar para lista
           </Link>
         </div>
@@ -434,7 +434,7 @@ export default function EditarPedidoCompraPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <Link
-            href="/suprimentos/pedido-compra"
+            href="/compras/pedidos"
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ArrowLeftIcon />
@@ -943,7 +943,7 @@ export default function EditarPedidoCompraPage() {
                 {saving ? 'Salvando...' : 'Salvar Alteracoes'}
               </button>
               <Link
-                href="/suprimentos/pedido-compra"
+                href="/compras/pedidos"
                 className="block w-full px-4 py-3 text-sm font-medium text-center text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancelar
