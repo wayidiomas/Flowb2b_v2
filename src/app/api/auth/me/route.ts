@@ -89,15 +89,44 @@ export async function GET(request: NextRequest) {
 
     const trialDays = parseInt(trialConfig?.value || '15')
 
-    // Buscar assinatura ativa
-    const { data: assinatura } = await supabase
+    // Buscar assinatura ativa do proprio usuario
+    const { data: assinaturaPropria } = await supabase
       .from('assinaturas')
       .select('id, status, data_inicio, data_fim')
       .eq('user_id', user.id)
       .eq('status', 'ativo')
       .single()
 
-    const hasActiveSubscription = !!assinatura
+    let hasActiveSubscription = !!assinaturaPropria
+
+    // Se usuario nao tem assinatura propria, verificar se o admin da empresa tem
+    // Colaboradores herdam o status de pagamento do dono (admin) da empresa
+    if (!hasActiveSubscription && empresaId) {
+      // Buscar o admin da empresa (dono)
+      const { data: admins } = await supabase
+        .from('users_empresas')
+        .select('user_id')
+        .eq('empresa_id', empresaId)
+        .eq('role', 'admin')
+        .eq('ativo', true)
+
+      if (admins && admins.length > 0) {
+        // Verificar se algum admin tem assinatura ativa
+        const adminIds = admins.map(a => a.user_id)
+
+        const { data: assinaturaAdmin } = await supabase
+          .from('assinaturas')
+          .select('id')
+          .in('user_id', adminIds)
+          .eq('status', 'ativo')
+          .limit(1)
+          .single()
+
+        if (assinaturaAdmin) {
+          hasActiveSubscription = true
+        }
+      }
+    }
 
     // Calcular status do trial apenas se tiver empresa vinculada
     if (primeiraEmpresa?.created_at) {
