@@ -580,30 +580,31 @@ function GerarAutomaticoContent() {
 
       {/* Modal de selecao de fornecedor */}
       {showFornecedorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           {/* Overlay */}
           <div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
             onClick={() => router.push('/compras/pedidos')}
           />
 
           {/* Modal */}
-          <div className="relative bg-white rounded-[20px] shadow-xl w-full max-w-[600px] mx-4 overflow-hidden">
-            {/* Header */}
-            <div className="px-8 pt-8 pb-4">
-              <h2 className="text-[22px] font-semibold text-[#344054] leading-[1.3] tracking-[0.22px]">
+          <div className="relative bg-white rounded-[24px] shadow-[0px_25px_50px_-12px_rgba(0,0,0,0.25)] w-full max-w-[520px]">
+            {/* Content */}
+            <div className="p-8">
+              {/* Titulo */}
+              <h2 className="text-[24px] font-semibold text-[#1a1a2e] leading-[1.2]">
                 Gerar Pedido Automatico
               </h2>
-              <p className="mt-3 text-[14px] text-[#667085] leading-[1.5]">
+
+              {/* Subtitulo */}
+              <p className="mt-4 text-[15px] text-[#64748b] leading-[1.6]">
                 Selecione o fornecedor para gerar o pedido automaticamente com base nas vendas e estoque.
               </p>
-            </div>
 
-            {/* Search */}
-            <div className="px-8 pb-4">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <svg className="w-[18px] h-[18px] text-[#898989]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              {/* Campo de busca */}
+              <div className="mt-6 relative">
+                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+                  <svg className="w-5 h-5 text-[#94a3b8]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                   </svg>
                 </div>
@@ -612,62 +613,62 @@ function GerarAutomaticoContent() {
                   placeholder="Buscar fornecedor..."
                   value={fornecedorSearch}
                   onChange={(e) => setFornecedorSearch(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 text-[13px] text-[#344054] placeholder-[#C9C9C9] bg-white border border-[#D0D5DD] rounded-[14px] shadow-[0px_1px_2px_0px_rgba(16,24,40,0.05)] focus:outline-none focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                  className="w-full pl-12 pr-5 py-3.5 text-[15px] text-[#1e293b] placeholder-[#cbd5e1] bg-white border border-[#e2e8f0] rounded-full focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-all"
                 />
               </div>
-            </div>
 
-            {/* Lista de fornecedores */}
-            <div className="mx-8 border border-[#E4E4E4] rounded-[12px] overflow-hidden">
-              <div className="max-h-[320px] overflow-y-auto">
-                {loadingFornecedores ? (
-                  <div className="flex items-center justify-center py-12">
-                    <SpinnerIcon />
-                    <span className="ml-2 text-[13px] text-[#667085]">Carregando fornecedores...</span>
-                  </div>
-                ) : filteredFornecedores.length === 0 ? (
-                  <div className="py-12 text-center text-[13px] text-[#667085]">
-                    Nenhum fornecedor encontrado
-                  </div>
-                ) : (
-                  <div>
-                    {filteredFornecedores.map((f) => (
-                      <button
-                        key={f.id}
-                        onClick={() => setSelectedFornecedor(f)}
-                        className={`w-full px-5 py-4 text-left border-b border-[#EFEFEF] last:border-b-0 transition-colors ${
-                          selectedFornecedor?.id === f.id
-                            ? 'bg-[#EEF4FB]'
-                            : 'hover:bg-[#F9F9F9]'
-                        }`}
-                      >
-                        <p className="text-[14px] font-medium text-[#344054] leading-[1.3] tracking-[0.14px] uppercase">
-                          {f.nome}
-                        </p>
-                        {f.cnpj && (
-                          <p className="mt-1 text-[13px] text-[#667085] leading-[1.3] tracking-[0.13px]">
-                            {f.cnpj}
+              {/* Lista de fornecedores */}
+              <div className="mt-4 border border-[#e2e8f0] rounded-[16px] overflow-hidden">
+                <div className="max-h-[280px] overflow-y-auto">
+                  {loadingFornecedores ? (
+                    <div className="flex items-center justify-center py-12">
+                      <SpinnerIcon />
+                      <span className="ml-3 text-[14px] text-[#64748b]">Carregando fornecedores...</span>
+                    </div>
+                  ) : filteredFornecedores.length === 0 ? (
+                    <div className="py-12 text-center text-[14px] text-[#64748b]">
+                      Nenhum fornecedor encontrado
+                    </div>
+                  ) : (
+                    <div>
+                      {filteredFornecedores.map((f) => (
+                        <button
+                          key={f.id}
+                          onClick={() => setSelectedFornecedor(f)}
+                          className={`w-full px-5 py-4 text-left border-b border-[#f1f5f9] last:border-b-0 transition-all ${
+                            selectedFornecedor?.id === f.id
+                              ? 'bg-[#f0f7ff]'
+                              : 'hover:bg-[#f8fafc]'
+                          }`}
+                        >
+                          <p className="text-[15px] font-semibold text-[#1e293b] leading-[1.4] uppercase">
+                            {f.nome}
                           </p>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                          {f.cnpj && (
+                            <p className="mt-0.5 text-[14px] text-[#64748b] leading-[1.4]">
+                              {f.cnpj}
+                            </p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Footer com botoes */}
-            <div className="px-8 py-6 flex items-center justify-center gap-4">
+            <div className="px-8 pb-8 pt-2 flex items-center justify-center gap-3">
               <button
                 onClick={() => router.push('/compras/pedidos')}
-                className="px-8 py-2.5 text-[13px] font-medium text-[#52525B] bg-white border border-[#D0D5DD] rounded-[30px] hover:bg-gray-50 transition-colors shadow-[0px_1px_2px_0px_rgba(16,24,40,0.05)]"
+                className="px-7 py-2.5 text-[14px] font-medium text-[#475569] bg-white border border-[#e2e8f0] rounded-full hover:bg-[#f8fafc] hover:border-[#cbd5e1] transition-all"
               >
                 Cancelar
               </button>
               <button
                 onClick={() => selectedFornecedor && handleSelectFornecedor(selectedFornecedor)}
                 disabled={!selectedFornecedor}
-                className="px-8 py-2.5 text-[13px] font-medium text-white bg-[#8BA9D1] rounded-[30px] hover:bg-[#7A9AC5] transition-colors shadow-[0px_1px_2px_0px_rgba(16,24,40,0.05)] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-7 py-2.5 text-[14px] font-medium text-white bg-[#94a8c7] rounded-full hover:bg-[#8299ba] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Continuar
               </button>
