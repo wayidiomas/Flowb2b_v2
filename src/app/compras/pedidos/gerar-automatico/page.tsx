@@ -1,0 +1,571 @@
+'use client'
+
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { DashboardLayout, PageHeader } from '@/components/layout'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
+
+// Icons
+function ArrowLeftIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+    </svg>
+  )
+}
+
+function SpinnerIcon() {
+  return (
+    <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+    </svg>
+  )
+}
+
+function AutoFixIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M7.5 5.6L10 7 8.6 4.5 10 2 7.5 3.4 5 2l1.4 2.5L5 7zm12 9.8L17 14l1.4 2.5L17 19l2.5-1.4L22 19l-1.4-2.5L22 14zM22 2l-2.5 1.4L17 2l1.4 2.5L17 7l2.5-1.4L22 7l-1.4-2.5zm-7.63 5.29a.996.996 0 0 0-1.41 0L1.29 18.96a.996.996 0 0 0 0 1.41l2.34 2.34c.39.39 1.02.39 1.41 0L16.7 11.05a.996.996 0 0 0 0-1.41l-2.33-2.35zm-1.03 5.49-2.12-2.12 2.44-2.44 2.12 2.12-2.44 2.44z" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  )
+}
+
+interface SugestaoItem {
+  produto_id: number
+  codigo: string
+  nome: string
+  estoque_atual: number
+  media_vendas_dia: number
+  sugestao_quantidade: number
+  quantidade_ajustada: number
+  valor_unitario: number
+  valor_total: number
+  itens_por_caixa: number
+  caixas: number
+}
+
+interface Fornecedor {
+  id: number
+  nome: string
+  cnpj: string | null
+}
+
+interface PoliticaCompra {
+  id: number
+  valor_minimo: number | null
+  desconto: number | null
+  prazo_entrega: number | null
+  prazo_estoque: number | null
+}
+
+function GerarAutomaticoContent() {
+  const { user, empresa } = useAuth()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const fornecedorIdParam = searchParams.get('fornecedor_id')
+
+  const [fornecedor, setFornecedor] = useState<Fornecedor | null>(null)
+  const [politica, setPolitica] = useState<PoliticaCompra | null>(null)
+  const [sugestoes, setSugestoes] = useState<SugestaoItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [calculando, setCalculando] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Carregar dados do fornecedor e politica
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!fornecedorIdParam || !user?.id) {
+        router.push('/compras/pedidos')
+        return
+      }
+
+      try {
+        const empresaId = empresa?.id || user?.empresa_id
+        if (!empresaId) return
+
+        // Buscar fornecedor
+        const { data: fornecedorData, error: fornecedorError } = await supabase
+          .from('fornecedores')
+          .select('id, nome, cnpj')
+          .eq('id', parseInt(fornecedorIdParam))
+          .eq('empresa_id', empresaId)
+          .single()
+
+        if (fornecedorError || !fornecedorData) {
+          setError('Fornecedor nao encontrado')
+          setLoading(false)
+          return
+        }
+
+        setFornecedor(fornecedorData)
+
+        // Buscar politica de compra
+        const { data: politicaData } = await supabase
+          .from('politica_compra')
+          .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque')
+          .eq('fornecedor_id', parseInt(fornecedorIdParam))
+          .eq('empresa_id', empresaId)
+          .eq('status', true)
+          .single()
+
+        setPolitica(politicaData || null)
+        setLoading(false)
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err)
+        setError('Erro ao carregar dados do fornecedor')
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [fornecedorIdParam, user?.id, user?.empresa_id, empresa?.id, router])
+
+  // Calcular sugestoes
+  const calcularSugestoes = async () => {
+    if (!fornecedor) return
+
+    setCalculando(true)
+    setError(null)
+
+    try {
+      const empresaId = empresa?.id || user?.empresa_id
+
+      // Buscar produtos do fornecedor com dados de estoque e vendas
+      const { data: produtos, error: produtosError } = await supabase
+        .from('fornecedores_produtos')
+        .select(`
+          produto_id,
+          valor_de_compra,
+          produtos:produto_id (
+            id,
+            codigo,
+            nome,
+            estoque_atual,
+            itens_por_caixa
+          )
+        `)
+        .eq('fornecedor_id', fornecedor.id)
+        .eq('empresa_id', empresaId)
+
+      if (produtosError) throw produtosError
+
+      if (!produtos || produtos.length === 0) {
+        setError('Nenhum produto encontrado para este fornecedor')
+        setCalculando(false)
+        return
+      }
+
+      // Para cada produto, calcular sugestao baseada em vendas recentes
+      const sugestoesCalculadas: SugestaoItem[] = []
+      const prazoEstoque = politica?.prazo_estoque || 30 // dias de estoque desejado
+
+      for (const item of produtos) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const produtoData = item.produtos as any
+        if (!produtoData) continue
+
+        const produto = {
+          id: produtoData.id as number,
+          codigo: produtoData.codigo as string || '-',
+          nome: produtoData.nome as string || '-',
+          estoque_atual: (produtoData.estoque_atual as number) || 0,
+          itens_por_caixa: (produtoData.itens_por_caixa as number) || 1
+        }
+
+        // Buscar vendas dos ultimos 90 dias para calcular media
+        const dataInicio = new Date()
+        dataInicio.setDate(dataInicio.getDate() - 90)
+
+        const { data: vendas } = await supabase
+          .from('itens_pedido_venda')
+          .select('quantidade, pedidos_venda!inner(data, empresa_id)')
+          .eq('produto_id', produto.id)
+          .gte('pedidos_venda.data', dataInicio.toISOString().split('T')[0])
+          .eq('pedidos_venda.empresa_id', empresaId)
+
+        // Calcular media diaria de vendas
+        const totalVendido = vendas?.reduce((acc, v) => acc + (v.quantidade || 0), 0) || 0
+        const mediaVendasDia = totalVendido / 90
+
+        // Calcular sugestao: (media * prazo) - estoque_atual
+        const necessidade = (mediaVendasDia * prazoEstoque) - (produto.estoque_atual || 0)
+
+        // So sugerir se necessidade positiva e produto teve vendas
+        if (necessidade > 0 && totalVendido > 0) {
+          const itensPorCaixa = produto.itens_por_caixa || 1
+          // Arredondar para cima por embalagem
+          const caixas = Math.ceil(necessidade / itensPorCaixa)
+          const quantidadeSugerida = caixas * itensPorCaixa
+          const valorUnitario = item.valor_de_compra || 0
+
+          sugestoesCalculadas.push({
+            produto_id: produto.id,
+            codigo: produto.codigo || '-',
+            nome: produto.nome || '-',
+            estoque_atual: produto.estoque_atual || 0,
+            media_vendas_dia: parseFloat(mediaVendasDia.toFixed(2)),
+            sugestao_quantidade: quantidadeSugerida,
+            quantidade_ajustada: quantidadeSugerida,
+            valor_unitario: valorUnitario,
+            valor_total: quantidadeSugerida * valorUnitario,
+            itens_por_caixa: itensPorCaixa,
+            caixas: caixas
+          })
+        }
+      }
+
+      // Ordenar por valor total decrescente
+      sugestoesCalculadas.sort((a, b) => b.valor_total - a.valor_total)
+      setSugestoes(sugestoesCalculadas)
+    } catch (err) {
+      console.error('Erro ao calcular sugestoes:', err)
+      setError('Erro ao calcular sugestoes de compra')
+    } finally {
+      setCalculando(false)
+    }
+  }
+
+  // Atualizar quantidade de um item
+  const handleQuantidadeChange = (index: number, novaQuantidade: number) => {
+    setSugestoes(prev => prev.map((item, i) => {
+      if (i === index) {
+        const caixas = Math.ceil(novaQuantidade / item.itens_por_caixa)
+        const quantidadeAjustada = caixas * item.itens_por_caixa
+        return {
+          ...item,
+          quantidade_ajustada: quantidadeAjustada,
+          caixas: caixas,
+          valor_total: quantidadeAjustada * item.valor_unitario
+        }
+      }
+      return item
+    }))
+  }
+
+  // Remover item da lista
+  const handleRemoverItem = (index: number) => {
+    setSugestoes(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Criar pedido com as sugestoes
+  const handleCriarPedido = async () => {
+    if (sugestoes.length === 0 || !fornecedor) return
+
+    setSaving(true)
+    try {
+      const empresaId = empresa?.id || user?.empresa_id
+      const dataAtual = new Date().toISOString().split('T')[0]
+
+      // Criar pedido de compra
+      const { data: pedido, error: pedidoError } = await supabase
+        .from('pedidos_compra')
+        .insert({
+          empresa_id: empresaId,
+          fornecedor_id: fornecedor.id,
+          data: dataAtual,
+          situacao: 5, // Rascunho
+          total_produtos: sugestoes.reduce((acc, item) => acc + item.valor_total, 0),
+          total: sugestoes.reduce((acc, item) => acc + item.valor_total, 0),
+          desconto: politica?.desconto || 0,
+          observacoes_internas: 'Pedido gerado automaticamente'
+        })
+        .select('id')
+        .single()
+
+      if (pedidoError) throw pedidoError
+
+      // Criar itens do pedido
+      const itensParaInserir = sugestoes.map(item => ({
+        pedido_compra_id: pedido.id,
+        produto_id: item.produto_id,
+        codigo: item.codigo,
+        descricao: item.nome,
+        quantidade: item.quantidade_ajustada,
+        valor: item.valor_unitario,
+        unidade: 'UN'
+      }))
+
+      const { error: itensError } = await supabase
+        .from('itens_pedido_compra')
+        .insert(itensParaInserir)
+
+      if (itensError) throw itensError
+
+      // Redirecionar para edicao do pedido
+      router.push(`/compras/pedidos/${pedido.id}/editar`)
+    } catch (err) {
+      console.error('Erro ao criar pedido:', err)
+      setError('Erro ao criar pedido de compra')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Formatar moeda
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value)
+  }
+
+  // Calcular totais
+  const totalItens = sugestoes.reduce((acc, item) => acc + item.quantidade_ajustada, 0)
+  const valorTotal = sugestoes.reduce((acc, item) => acc + item.valor_total, 0)
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <SpinnerIcon />
+          <span className="ml-2 text-gray-500">Carregando...</span>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  return (
+    <DashboardLayout>
+      <PageHeader
+        title="Gerar Pedido Automatico"
+        subtitle={fornecedor?.nome || ''}
+      />
+
+      {/* Navegacao */}
+      <div className="mb-6">
+        <Link
+          href="/compras/pedidos"
+          className="inline-flex items-center gap-2 text-sm text-[#336FB6] hover:text-[#2660A5]"
+        >
+          <ArrowLeftIcon />
+          Voltar para pedidos
+        </Link>
+      </div>
+
+      {/* Card principal */}
+      <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
+        {/* Header */}
+        <div className="bg-[#FBFBFB] border-b border-[#EDEDED] px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#4684CD]/10 flex items-center justify-center text-[#4684CD]">
+                <AutoFixIcon />
+              </div>
+              <div>
+                <h2 className="text-base font-medium text-[#344054]">
+                  {fornecedor?.nome}
+                </h2>
+                {fornecedor?.cnpj && (
+                  <p className="text-sm text-gray-500">{fornecedor.cnpj}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Botao calcular */}
+            {sugestoes.length === 0 && (
+              <button
+                onClick={calcularSugestoes}
+                disabled={calculando}
+                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#4684CD] hover:bg-[#3A75B8] rounded-lg transition-colors disabled:opacity-50"
+              >
+                {calculando ? (
+                  <>
+                    <SpinnerIcon />
+                    Calculando...
+                  </>
+                ) : (
+                  <>
+                    <AutoFixIcon />
+                    Calcular Sugestoes
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Info da politica */}
+          {politica && (
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-700">
+                <strong>Politica de compra:</strong>{' '}
+                {politica.valor_minimo && `Valor minimo: ${formatCurrency(politica.valor_minimo)}`}
+                {politica.desconto && ` | Desconto: ${politica.desconto}%`}
+                {politica.prazo_estoque && ` | Prazo estoque: ${politica.prazo_estoque} dias`}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Erro */}
+        {error && (
+          <div className="px-6 py-4 bg-red-50 border-b border-red-100">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+
+        {/* Estado inicial - sem sugestoes */}
+        {!calculando && sugestoes.length === 0 && !error && (
+          <div className="px-6 py-12 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+              <AutoFixIcon />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Gerar sugestoes de compra
+            </h3>
+            <p className="text-sm text-gray-500 max-w-md mx-auto mb-6">
+              Clique em &quot;Calcular Sugestoes&quot; para analisar as vendas e estoque
+              e receber sugestoes de quantidades a comprar.
+            </p>
+          </div>
+        )}
+
+        {/* Calculando */}
+        {calculando && (
+          <div className="px-6 py-12 text-center">
+            <SpinnerIcon />
+            <p className="mt-4 text-sm text-gray-500">
+              Analisando vendas e calculando sugestoes...
+            </p>
+          </div>
+        )}
+
+        {/* Tabela de sugestoes */}
+        {sugestoes.length > 0 && (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-[#EFEFEF] bg-[#F9F9F9]">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-[#344054]">Codigo</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-[#344054]">Produto</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-[#344054]">Estoque</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-[#344054]">Media/dia</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-[#344054]">Sugestao</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-[#344054]">Qtd</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-[#344054]">Valor Unit.</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-[#344054]">Total</th>
+                    <th className="px-4 py-3 w-12"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sugestoes.map((item, index) => (
+                    <tr key={item.produto_id} className="border-b border-[#EFEFEF] hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-[#344054]">{item.codigo}</td>
+                      <td className="px-4 py-3 text-sm text-[#344054] max-w-[200px] truncate" title={item.nome}>
+                        {item.nome}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-center text-[#667085]">{item.estoque_atual}</td>
+                      <td className="px-4 py-3 text-sm text-center text-[#667085]">{item.media_vendas_dia}</td>
+                      <td className="px-4 py-3 text-sm text-center text-[#4684CD] font-medium">
+                        {item.sugestao_quantidade}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="number"
+                          min="0"
+                          step={item.itens_por_caixa}
+                          value={item.quantidade_ajustada}
+                          onChange={(e) => handleQuantidadeChange(index, parseInt(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right text-[#667085]">
+                        {formatCurrency(item.valor_unitario)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-medium text-[#344054]">
+                        {formatCurrency(item.valor_total)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => handleRemoverItem(index)}
+                          className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                          title="Remover"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer com totais */}
+            <div className="px-6 py-4 bg-[#FBFBFB] border-t border-[#EDEDED] flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div>
+                  <p className="text-xs text-gray-500">Itens</p>
+                  <p className="text-lg font-semibold text-[#344054]">{sugestoes.length}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Quantidade total</p>
+                  <p className="text-lg font-semibold text-[#344054]">{totalItens}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Valor total</p>
+                  <p className="text-lg font-semibold text-[#336FB6]">{formatCurrency(valorTotal)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={calcularSugestoes}
+                  disabled={calculando}
+                  className="px-4 py-2.5 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Recalcular
+                </button>
+                <button
+                  onClick={handleCriarPedido}
+                  disabled={saving || sugestoes.length === 0}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#009E3F] hover:bg-[#008735] rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {saving ? (
+                    <>
+                      <SpinnerIcon />
+                      Criando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckIcon />
+                      Criar Pedido
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </DashboardLayout>
+  )
+}
+
+export default function GerarAutomaticoPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <SpinnerIcon />
+          <span className="ml-2 text-gray-500">Carregando...</span>
+        </div>
+      </DashboardLayout>
+    }>
+      <GerarAutomaticoContent />
+    </Suspense>
+  )
+}

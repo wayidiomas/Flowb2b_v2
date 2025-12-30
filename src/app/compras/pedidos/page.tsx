@@ -98,6 +98,7 @@ export default function PedidoCompraPage() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showFornecedorModal, setShowFornecedorModal] = useState(false)
+  const [modalAction, setModalAction] = useState<'novo' | 'gerar-auto'>('novo')
 
   // Filtros
   const [fornecedorFilter, setFornecedorFilter] = useState('')
@@ -388,15 +389,28 @@ export default function PedidoCompraPage() {
 
   // Abrir modal de fornecedor para novo pedido
   const handleNovoPedido = () => {
+    setModalAction('novo')
     setShowFornecedorModal(true)
     setFornecedorSearch('')
     setSelectedFornecedor(null)
   }
 
-  // Confirmar fornecedor e ir para pagina de novo pedido
+  // Abrir modal de fornecedor para gerar pedido automaticamente
+  const handleGerarAutomatico = () => {
+    setModalAction('gerar-auto')
+    setShowFornecedorModal(true)
+    setFornecedorSearch('')
+    setSelectedFornecedor(null)
+  }
+
+  // Confirmar fornecedor e ir para pagina correspondente
   const handleConfirmFornecedor = () => {
     if (selectedFornecedor) {
-      router.push(`/compras/pedidos/novo?fornecedor_id=${selectedFornecedor.id}`)
+      if (modalAction === 'novo') {
+        router.push(`/compras/pedidos/novo?fornecedor_id=${selectedFornecedor.id}`)
+      } else {
+        router.push(`/compras/pedidos/gerar-automatico?fornecedor_id=${selectedFornecedor.id}`)
+      }
     }
   }
 
@@ -779,6 +793,7 @@ export default function PedidoCompraPage() {
         <SidebarAcoes
           resumo={resumo}
           onNovoPedido={handleNovoPedido}
+          onGerarAutomatico={handleGerarAutomatico}
           isCollapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
@@ -787,11 +802,15 @@ export default function PedidoCompraPage() {
       {/* Modal Selecionar Fornecedor */}
       <Modal isOpen={showFornecedorModal} onClose={() => setShowFornecedorModal(false)}>
         <ModalHeader>
-          <ModalTitle>Selecionar Fornecedor</ModalTitle>
+          <ModalTitle>
+            {modalAction === 'novo' ? 'Selecionar Fornecedor' : 'Gerar Pedido Automatico'}
+          </ModalTitle>
         </ModalHeader>
         <ModalBody>
           <p className="text-sm text-gray-600 mb-4">
-            Selecione o fornecedor para criar o pedido de compra.
+            {modalAction === 'novo'
+              ? 'Selecione o fornecedor para criar o pedido de compra.'
+              : 'Selecione o fornecedor para gerar o pedido automaticamente com base nas vendas e estoque.'}
           </p>
 
           {/* Busca */}
