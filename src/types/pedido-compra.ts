@@ -24,6 +24,8 @@ export interface PedidoCompraListItem {
   numero_pedido: string
   data_pedido: string
   fornecedor_nome: string
+  fornecedor_id?: number
+  fornecedor_telefone?: string
   observacoes_internas?: string
   valor_total: number
   status: string

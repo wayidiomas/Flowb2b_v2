@@ -61,6 +61,12 @@ interface Fornecedor {
   cnpj: string | null
 }
 
+interface FornecedorOption {
+  id: number
+  nome: string
+  cnpj?: string
+}
+
 interface PoliticaCompra {
   id: number
   valor_minimo: number | null
@@ -83,11 +89,50 @@ function GerarAutomaticoContent() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Estados para modal de fornecedor
+  const [showFornecedorModal, setShowFornecedorModal] = useState(false)
+  const [fornecedores, setFornecedores] = useState<FornecedorOption[]>([])
+  const [loadingFornecedores, setLoadingFornecedores] = useState(false)
+  const [fornecedorSearch, setFornecedorSearch] = useState('')
+  const [selectedFornecedor, setSelectedFornecedor] = useState<FornecedorOption | null>(null)
+
+  // Buscar fornecedores para o modal
+  const fetchFornecedores = async () => {
+    if (!user?.id) return
+    setLoadingFornecedores(true)
+    try {
+      const empresaId = empresa?.id || user?.empresa_id
+      if (!empresaId) return
+
+      const { data, error } = await supabase
+        .from('fornecedores')
+        .select('id, nome, cnpj')
+        .eq('empresa_id', empresaId)
+        .order('nome', { ascending: true })
+        .limit(100)
+
+      if (error) throw error
+      setFornecedores(data || [])
+    } catch (err) {
+      console.error('Erro ao buscar fornecedores:', err)
+    } finally {
+      setLoadingFornecedores(false)
+    }
+  }
+
   // Carregar dados do fornecedor e politica
   useEffect(() => {
     const fetchData = async () => {
-      if (!fornecedorIdParam || !user?.id) {
-        router.push('/compras/pedidos')
+      // Se nao tiver fornecedor_id, mostrar modal de selecao
+      if (!fornecedorIdParam) {
+        setLoading(false)
+        setShowFornecedorModal(true)
+        fetchFornecedores()
+        return
+      }
+
+      if (!user?.id) {
+        setLoading(false)
         return
       }
 
@@ -130,9 +175,35 @@ function GerarAutomaticoContent() {
     }
 
     fetchData()
-  }, [fornecedorIdParam, user?.id, user?.empresa_id, empresa?.id, router])
+  }, [fornecedorIdParam, user?.id, user?.empresa_id, empresa?.id])
 
-  // Calcular sugestoes
+  // Selecionar fornecedor do modal
+  const handleSelectFornecedor = async (selected: FornecedorOption) => {
+    setFornecedor({ id: selected.id, nome: selected.nome, cnpj: selected.cnpj || null })
+    setShowFornecedorModal(false)
+
+    // Buscar politica do fornecedor selecionado
+    const empresaId = empresa?.id || user?.empresa_id
+    if (empresaId) {
+      const { data: politicaData } = await supabase
+        .from('politica_compra')
+        .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque')
+        .eq('fornecedor_id', selected.id)
+        .eq('empresa_id', empresaId)
+        .eq('status', true)
+        .single()
+
+      setPolitica(politicaData || null)
+    }
+  }
+
+  // Filtrar fornecedores no modal
+  const filteredFornecedores = fornecedores.filter(f =>
+    f.nome.toLowerCase().includes(fornecedorSearch.toLowerCase()) ||
+    (f.cnpj && f.cnpj.includes(fornecedorSearch))
+  )
+
+  // Calcular sugestoes via API externa
   const calcularSugestoes = async () => {
     if (!fornecedor) return
 
@@ -140,98 +211,48 @@ function GerarAutomaticoContent() {
     setError(null)
 
     try {
-      const empresaId = empresa?.id || user?.empresa_id
+      const response = await fetch('/api/pedidos-compra/calcular-automatico', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fornecedor_id: fornecedor.id })
+      })
 
-      // Buscar produtos do fornecedor com dados de estoque e vendas
-      const { data: produtos, error: produtosError } = await supabase
-        .from('fornecedores_produtos')
-        .select(`
-          produto_id,
-          valor_de_compra,
-          produtos:produto_id (
-            id,
-            codigo,
-            nome,
-            estoque_atual,
-            itens_por_caixa
-          )
-        `)
-        .eq('fornecedor_id', fornecedor.id)
-        .eq('empresa_id', empresaId)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erro ao calcular sugestoes')
+      }
 
-      if (produtosError) throw produtosError
+      const data = await response.json()
 
-      if (!produtos || produtos.length === 0) {
-        setError('Nenhum produto encontrado para este fornecedor')
+      // Verificar se retornou sugestoes
+      if (!data.sugestoes || data.sugestoes.length === 0) {
+        setError('Nenhuma sugestao de compra para este fornecedor. Verifique se ha produtos com vendas recentes.')
         setCalculando(false)
         return
       }
 
-      // Para cada produto, calcular sugestao baseada em vendas recentes
-      const sugestoesCalculadas: SugestaoItem[] = []
-      const prazoEstoque = politica?.prazo_estoque || 30 // dias de estoque desejado
-
-      for (const item of produtos) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const produtoData = item.produtos as any
-        if (!produtoData) continue
-
-        const produto = {
-          id: produtoData.id as number,
-          codigo: produtoData.codigo as string || '-',
-          nome: produtoData.nome as string || '-',
-          estoque_atual: (produtoData.estoque_atual as number) || 0,
-          itens_por_caixa: (produtoData.itens_por_caixa as number) || 1
-        }
-
-        // Buscar vendas dos ultimos 90 dias para calcular media
-        const dataInicio = new Date()
-        dataInicio.setDate(dataInicio.getDate() - 90)
-
-        const { data: vendas } = await supabase
-          .from('itens_pedido_venda')
-          .select('quantidade, pedidos_venda!inner(data, empresa_id)')
-          .eq('produto_id', produto.id)
-          .gte('pedidos_venda.data', dataInicio.toISOString().split('T')[0])
-          .eq('pedidos_venda.empresa_id', empresaId)
-
-        // Calcular media diaria de vendas
-        const totalVendido = vendas?.reduce((acc, v) => acc + (v.quantidade || 0), 0) || 0
-        const mediaVendasDia = totalVendido / 90
-
-        // Calcular sugestao: (media * prazo) - estoque_atual
-        const necessidade = (mediaVendasDia * prazoEstoque) - (produto.estoque_atual || 0)
-
-        // So sugerir se necessidade positiva e produto teve vendas
-        if (necessidade > 0 && totalVendido > 0) {
-          const itensPorCaixa = produto.itens_por_caixa || 1
-          // Arredondar para cima por embalagem
-          const caixas = Math.ceil(necessidade / itensPorCaixa)
-          const quantidadeSugerida = caixas * itensPorCaixa
-          const valorUnitario = item.valor_de_compra || 0
-
-          sugestoesCalculadas.push({
-            produto_id: produto.id,
-            codigo: produto.codigo || '-',
-            nome: produto.nome || '-',
-            estoque_atual: produto.estoque_atual || 0,
-            media_vendas_dia: parseFloat(mediaVendasDia.toFixed(2)),
-            sugestao_quantidade: quantidadeSugerida,
-            quantidade_ajustada: quantidadeSugerida,
-            valor_unitario: valorUnitario,
-            valor_total: quantidadeSugerida * valorUnitario,
-            itens_por_caixa: itensPorCaixa,
-            caixas: caixas
-          })
-        }
-      }
+      // Mapear resposta da API para SugestaoItem
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sugestoesCalculadas: SugestaoItem[] = data.sugestoes.map((item: any) => ({
+        produto_id: item.produto_id,
+        codigo: item.codigo || '-',
+        nome: item.nome,
+        estoque_atual: item.estoque_atual || 0,
+        media_vendas_dia: item.media_venda_dia || 0,
+        sugestao_quantidade: item.quantidade_sugerida,
+        quantidade_ajustada: item.quantidade_sugerida,
+        valor_unitario: item.valor_unitario,
+        valor_total: item.valor_total,
+        itens_por_caixa: item.itens_por_caixa || 1,
+        caixas: Math.ceil(item.quantidade_sugerida / (item.itens_por_caixa || 1))
+      }))
 
       // Ordenar por valor total decrescente
       sugestoesCalculadas.sort((a, b) => b.valor_total - a.valor_total)
       setSugestoes(sugestoesCalculadas)
     } catch (err) {
       console.error('Erro ao calcular sugestoes:', err)
-      setError('Erro ao calcular sugestoes de compra')
+      setError(err instanceof Error ? err.message : 'Erro ao calcular sugestoes de compra')
     } finally {
       setCalculando(false)
     }
@@ -434,9 +455,14 @@ function GerarAutomaticoContent() {
         {/* Calculando */}
         {calculando && (
           <div className="px-6 py-12 text-center">
-            <SpinnerIcon />
-            <p className="mt-4 text-sm text-gray-500">
+            <div className="flex justify-center">
+              <SpinnerIcon />
+            </div>
+            <p className="mt-4 text-sm text-gray-700 font-medium">
               Analisando vendas e calculando sugestoes...
+            </p>
+            <p className="mt-2 text-xs text-gray-500">
+              Este processo pode levar alguns minutos. Por favor, aguarde.
             </p>
           </div>
         )}
@@ -551,6 +577,104 @@ function GerarAutomaticoContent() {
           </>
         )}
       </div>
+
+      {/* Modal de selecao de fornecedor */}
+      {showFornecedorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Overlay */}
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => router.push('/compras/pedidos')}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-white rounded-[20px] shadow-xl w-full max-w-[600px] mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="px-8 pt-8 pb-4">
+              <h2 className="text-[22px] font-semibold text-[#344054] leading-[1.3] tracking-[0.22px]">
+                Gerar Pedido Automatico
+              </h2>
+              <p className="mt-3 text-[14px] text-[#667085] leading-[1.5]">
+                Selecione o fornecedor para gerar o pedido automaticamente com base nas vendas e estoque.
+              </p>
+            </div>
+
+            {/* Search */}
+            <div className="px-8 pb-4">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <svg className="w-[18px] h-[18px] text-[#898989]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Buscar fornecedor..."
+                  value={fornecedorSearch}
+                  onChange={(e) => setFornecedorSearch(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 text-[13px] text-[#344054] placeholder-[#C9C9C9] bg-white border border-[#D0D5DD] rounded-[14px] shadow-[0px_1px_2px_0px_rgba(16,24,40,0.05)] focus:outline-none focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                />
+              </div>
+            </div>
+
+            {/* Lista de fornecedores */}
+            <div className="mx-8 border border-[#E4E4E4] rounded-[12px] overflow-hidden">
+              <div className="max-h-[320px] overflow-y-auto">
+                {loadingFornecedores ? (
+                  <div className="flex items-center justify-center py-12">
+                    <SpinnerIcon />
+                    <span className="ml-2 text-[13px] text-[#667085]">Carregando fornecedores...</span>
+                  </div>
+                ) : filteredFornecedores.length === 0 ? (
+                  <div className="py-12 text-center text-[13px] text-[#667085]">
+                    Nenhum fornecedor encontrado
+                  </div>
+                ) : (
+                  <div>
+                    {filteredFornecedores.map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => setSelectedFornecedor(f)}
+                        className={`w-full px-5 py-4 text-left border-b border-[#EFEFEF] last:border-b-0 transition-colors ${
+                          selectedFornecedor?.id === f.id
+                            ? 'bg-[#EEF4FB]'
+                            : 'hover:bg-[#F9F9F9]'
+                        }`}
+                      >
+                        <p className="text-[14px] font-medium text-[#344054] leading-[1.3] tracking-[0.14px] uppercase">
+                          {f.nome}
+                        </p>
+                        {f.cnpj && (
+                          <p className="mt-1 text-[13px] text-[#667085] leading-[1.3] tracking-[0.13px]">
+                            {f.cnpj}
+                          </p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer com botoes */}
+            <div className="px-8 py-6 flex items-center justify-center gap-4">
+              <button
+                onClick={() => router.push('/compras/pedidos')}
+                className="px-8 py-2.5 text-[13px] font-medium text-[#52525B] bg-white border border-[#D0D5DD] rounded-[30px] hover:bg-gray-50 transition-colors shadow-[0px_1px_2px_0px_rgba(16,24,40,0.05)]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => selectedFornecedor && handleSelectFornecedor(selectedFornecedor)}
+                disabled={!selectedFornecedor}
+                className="px-8 py-2.5 text-[13px] font-medium text-white bg-[#8BA9D1] rounded-[30px] hover:bg-[#7A9AC5] transition-colors shadow-[0px_1px_2px_0px_rgba(16,24,40,0.05)] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Continuar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   )
 }
