@@ -268,6 +268,13 @@ export default function PedidoCompraPage() {
           filteredData = data.filter(p => p.status === situacaoFilter)
         }
 
+        // Ordenar por data mais recente primeiro
+        filteredData.sort((a, b) => {
+          const dateA = new Date(a.data_pedido).getTime()
+          const dateB = new Date(b.data_pedido).getTime()
+          return dateB - dateA
+        })
+
         setPedidos(filteredData)
       } else {
         setPedidos([])
