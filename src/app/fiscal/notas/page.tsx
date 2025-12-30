@@ -61,6 +61,30 @@ function DocumentIcon() {
   )
 }
 
+function PdfIcon() {
+  return (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zM8.5 17h-.7l-.2-.4L7 15.4l-.6 1.2-.2.4h-.7l1.1-2-1-1.9h.7l.1.3.5 1.1.5-1.1.1-.3h.7l-1 1.9 1.1 2zm2.5-3.5v2a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5zm-.5.5h-1v2h1v-2zm3 2.5v-2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v.3a.5.5 0 0 0 .5.5h.7v.4h-.7a.5.5 0 0 0-.5.5v.8h1.5a.5.5 0 0 0 .5-.5z"/>
+    </svg>
+  )
+}
+
+function XmlIcon() {
+  return (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zM9.8 15.5L8 13.7l-.8.8-1.2-1.2L7.2 12l-1.2-1.3 1.2-1.2.8.8 1.8-1.8 1.2 1.2-1.8 1.8 1.8 1.8-1.2 1.2zm6.4 0l-1.2-1.2.8-.8-1.8-1.8 1.8-1.8-.8-.8 1.2-1.2 1.2 1.2-.8.8 1.8 1.8-1.8 1.8.8.8-1.2 1.2z"/>
+    </svg>
+  )
+}
+
+function DanfeIcon() {
+  return (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+    </svg>
+  )
+}
+
 function XIcon() {
   return (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -632,27 +656,38 @@ export default function NotasEntradaPage() {
                       {getStatusBadge(nota.situacao)}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center gap-1">
+                        {nota.link_pdf && (
+                          <a
+                            href={nota.link_pdf}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center w-8 h-8 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Baixar PDF"
+                          >
+                            <PdfIcon />
+                          </a>
+                        )}
                         {nota.link_danfe && (
                           <a
                             href={nota.link_danfe}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-[#336FB6] hover:bg-blue-50 rounded-lg transition-colors"
+                            className="inline-flex items-center justify-center w-8 h-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                             title="Ver DANFE"
                           >
-                            <DocumentIcon />
+                            <DanfeIcon />
                           </a>
                         )}
-                        {nota.chave_acesso && (
+                        {(nota.xml_url || nota.chave_acesso) && (
                           <a
-                            href={`https://www.bling.com.br/relatorios/nfe.xml.php?chaveAcesso=${nota.chave_acesso}`}
+                            href={nota.xml_url || `https://www.bling.com.br/relatorios/nfe.xml.php?chaveAcesso=${nota.chave_acesso}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center px-2 py-1 text-[10px] font-medium text-gray-600 hover:text-[#336FB6] hover:bg-blue-50 rounded transition-colors"
+                            className="inline-flex items-center justify-center w-8 h-8 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors"
                             title="Baixar XML"
                           >
-                            XML
+                            <XmlIcon />
                           </a>
                         )}
                       </div>
