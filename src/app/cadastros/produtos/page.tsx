@@ -78,14 +78,25 @@ export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<ProdutoListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedProdutos, setSelectedProdutos] = useState<number[]>([])
   const [currentPage, setCurrentPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
   const [actionLoading, setActionLoading] = useState(false)
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [situacaoFilter, setSituacaoFilter] = useState<string>('')
   const [tipoFilter, setTipoFilter] = useState<string>('')
   const filterDropdownRef = useRef<HTMLDivElement>(null)
   const itemsPerPage = 10
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm)
+      setCurrentPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -108,6 +119,7 @@ export default function ProdutosPage() {
     }
 
     try {
+      setLoading(true)
       const empresaId = empresa?.id || user?.empresa_id
 
       if (!empresaId) {
@@ -115,17 +127,44 @@ export default function ProdutosPage() {
         return
       }
 
-      const { data, error } = await supabase
+      // Calcular range para paginacao server-side
+      const from = (currentPage - 1) * itemsPerPage
+      const to = from + itemsPerPage - 1
+
+      // Construir query com filtros server-side
+      let query = supabase
         .from('produtos')
-        .select('id, codigo, nome, unidade, preco, estoque_atual, situacao, tipo')
+        .select('id, codigo, nome, unidade, preco, estoque_atual, situacao, tipo', { count: 'exact' })
         .eq('empresa_id', empresaId)
+
+      // Filtro por situacao (server-side)
+      if (situacaoFilter) {
+        query = query.eq('situacao', situacaoFilter)
+      }
+
+      // Filtro por tipo (server-side)
+      if (tipoFilter) {
+        query = query.eq('tipo', tipoFilter)
+      }
+
+      // Busca por nome ou codigo (server-side)
+      if (debouncedSearch) {
+        query = query.or(`nome.ilike.%${debouncedSearch}%,codigo.ilike.%${debouncedSearch}%`)
+      }
+
+      // Ordenar e paginar
+      const { data, error, count } = await query
         .order('nome', { ascending: true })
+        .range(from, to)
 
       if (error) {
         console.error('Erro ao buscar produtos:', error)
         setLoading(false)
         return
       }
+
+      // Atualizar total count para paginacao
+      setTotalCount(count || 0)
 
       if (data) {
         const produtosFormatados: ProdutoListItem[] = data.map(p => ({
@@ -150,25 +189,10 @@ export default function ProdutosPage() {
     }
   }
 
+  // Buscar quando mudar pagina, filtros ou busca
   useEffect(() => {
     fetchProdutos()
-  }, [user?.id, user?.empresa_id, empresa?.id])
-
-  // Filtrar produtos
-  const filteredProdutos = produtos.filter((prod) => {
-    const searchLower = searchTerm.toLowerCase()
-    const matchesSearch =
-      prod.nome?.toLowerCase().includes(searchLower) ||
-      prod.codigo?.toLowerCase().includes(searchLower)
-
-    // Filtro por situacao
-    const matchesSituacao = !situacaoFilter || prod.situacao === situacaoFilter
-
-    // Filtro por tipo
-    const matchesTipo = !tipoFilter || prod.tipo === tipoFilter
-
-    return matchesSearch && matchesSituacao && matchesTipo
-  })
+  }, [user?.id, user?.empresa_id, empresa?.id, currentPage, debouncedSearch, situacaoFilter, tipoFilter])
 
   // Verificar se ha filtros ativos
   const hasActiveFilters = situacaoFilter !== '' || tipoFilter !== ''
@@ -187,17 +211,15 @@ export default function ProdutosPage() {
     setCurrentPage(1)
   }
 
-  // Paginacao
-  const totalPages = Math.ceil(filteredProdutos.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedProdutos = filteredProdutos.slice(startIndex, startIndex + itemsPerPage)
+  // Paginacao (server-side - produtos ja vem paginados)
+  const totalPages = Math.ceil(totalCount / itemsPerPage)
 
   // Selecao
   const handleSelectAll = () => {
-    if (selectedProdutos.length === paginatedProdutos.length) {
+    if (selectedProdutos.length === produtos.length) {
       setSelectedProdutos([])
     } else {
-      setSelectedProdutos(paginatedProdutos.map((p) => p.id))
+      setSelectedProdutos(produtos.map((p) => p.id))
     }
   }
 
@@ -262,7 +284,7 @@ export default function ProdutosPage() {
       {/* Page Header com seletor de empresa */}
       <PageHeader
         title="Produtos"
-        subtitle={`${filteredProdutos.length} produtos`}
+        subtitle={`${totalCount} produtos`}
       />
 
       {/* Card Container */}
@@ -383,10 +405,7 @@ export default function ProdutosPage() {
               type="text"
               placeholder="Pesquisar por nome, codigo..."
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value)
-                setCurrentPage(1)
-              }}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="block w-full pl-10 pr-4 py-2.5 text-[13px] text-gray-900 placeholder:text-[#C9C9C9] bg-white border border-[#D0D5DD] rounded-[14px] shadow-xs focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
@@ -417,7 +436,7 @@ export default function ProdutosPage() {
                 <th className="px-4 py-3 text-left w-12">
                   <input
                     type="checkbox"
-                    checked={paginatedProdutos.length > 0 && selectedProdutos.length === paginatedProdutos.length}
+                    checked={produtos.length > 0 && selectedProdutos.length === produtos.length}
                     onChange={handleSelectAll}
                     className="w-5 h-5 text-[#336FB6] bg-white border-[#DCDCDC] rounded focus:ring-[#336FB6]"
                   />
@@ -445,7 +464,7 @@ export default function ProdutosPage() {
             <tbody>
               {loading ? (
                 <TableSkeleton columns={5} rows={5} showCheckbox showActions />
-              ) : paginatedProdutos.length === 0 ? (
+              ) : produtos.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                     {searchTerm || hasActiveFilters ? (
@@ -474,7 +493,7 @@ export default function ProdutosPage() {
                   </td>
                 </tr>
               ) : (
-                paginatedProdutos.map((prod, index) => (
+                produtos.map((prod, index) => (
                   <tr
                     key={prod.id}
                     className={`border-b border-[#EFEFEF] hover:bg-gray-50 ${
@@ -530,7 +549,7 @@ export default function ProdutosPage() {
         </div>
 
         {/* Pagination */}
-        {!loading && filteredProdutos.length > 0 && (
+        {!loading && totalCount > 0 && (
           <div className="px-7 py-4 flex items-center justify-between bg-white">
             <button
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
