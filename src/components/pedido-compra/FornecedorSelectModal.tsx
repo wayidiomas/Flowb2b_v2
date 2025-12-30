@@ -216,7 +216,7 @@ export function FornecedorSelectModal({
                   e.stopPropagation()
                   setShowSortDropdown(!showSortDropdown)
                 }}
-                className="h-full px-4 py-3 flex items-center gap-2 text-[14px] font-medium text-white bg-[#336FB6] rounded-xl hover:bg-[#2660A5] transition-all shadow-sm min-w-[160px] justify-between"
+                className="h-full px-4 py-3 flex items-center gap-2 text-[14px] font-medium text-white bg-[#FFAA11] rounded-xl hover:bg-[#E69900] transition-all shadow-sm min-w-[160px] justify-between"
               >
                 <span>{SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
                 <ChevronDownIcon />
