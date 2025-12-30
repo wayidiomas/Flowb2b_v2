@@ -173,7 +173,7 @@ export default function PedidoCompraPage() {
     }
   }, [showFilterDropdown])
 
-  // Buscar fornecedores
+  // Buscar fornecedores com metricas
   const fetchFornecedores = async () => {
     if (!user?.id) return
     setLoadingFornecedores(true)
@@ -181,15 +181,43 @@ export default function PedidoCompraPage() {
       const empresaId = empresa?.id || user?.empresa_id
       if (!empresaId) return
 
-      const { data, error } = await supabase
+      // Buscar fornecedores
+      const { data: fornecedoresData, error: fornecedoresError } = await supabase
         .from('fornecedores')
         .select('id, nome, cnpj')
         .eq('empresa_id', empresaId)
         .order('nome', { ascending: true })
         .limit(100)
 
-      if (error) throw error
-      setFornecedores(data || [])
+      if (fornecedoresError) throw fornecedoresError
+
+      // Buscar metricas de pedidos por fornecedor
+      const { data: pedidosData, error: pedidosError } = await supabase
+        .from('pedidos_compra')
+        .select('fornecedor_id, total')
+        .eq('empresa_id', empresaId)
+
+      if (pedidosError) throw pedidosError
+
+      // Calcular metricas por fornecedor
+      const metricas: Record<number, { total_pedidos: number; valor_total_comprado: number }> = {}
+      pedidosData?.forEach(pedido => {
+        if (!pedido.fornecedor_id) return
+        if (!metricas[pedido.fornecedor_id]) {
+          metricas[pedido.fornecedor_id] = { total_pedidos: 0, valor_total_comprado: 0 }
+        }
+        metricas[pedido.fornecedor_id].total_pedidos++
+        metricas[pedido.fornecedor_id].valor_total_comprado += pedido.total || 0
+      })
+
+      // Combinar fornecedores com metricas
+      const fornecedoresComMetricas = fornecedoresData?.map(f => ({
+        ...f,
+        total_pedidos: metricas[f.id]?.total_pedidos || 0,
+        valor_total_comprado: metricas[f.id]?.valor_total_comprado || 0,
+      })) || []
+
+      setFornecedores(fornecedoresComMetricas)
     } catch (err) {
       console.error('Erro ao buscar fornecedores:', err)
     } finally {

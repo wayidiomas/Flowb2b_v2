@@ -102,6 +102,8 @@ export interface FornecedorOption {
   id: number
   nome: string
   cnpj?: string
+  total_pedidos?: number
+  valor_total_comprado?: number
 }
 
 // Produto do fornecedor (para modal de adicao)
