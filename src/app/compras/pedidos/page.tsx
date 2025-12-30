@@ -96,7 +96,7 @@ export default function PedidoCompraPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [actionLoading, setActionLoading] = useState(false)
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
-  const [showSidebar, setShowSidebar] = useState(true)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showFornecedorModal, setShowFornecedorModal] = useState(false)
 
   // Filtros
@@ -431,9 +431,9 @@ export default function PedidoCompraPage() {
                 <div className="flex items-center gap-2">
                   {/* Toggle Sidebar */}
                   <button
-                    onClick={() => setShowSidebar(!showSidebar)}
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                     className="p-2.5 text-[#667085] hover:text-[#344054] hover:bg-gray-100 rounded-lg transition-colors"
-                    title={showSidebar ? 'Ocultar sidebar' : 'Mostrar sidebar'}
+                    title={sidebarCollapsed ? 'Expandir sidebar' : 'Recolher sidebar'}
                   >
                     <SidebarToggleIcon />
                   </button>
@@ -776,13 +776,12 @@ export default function PedidoCompraPage() {
         </div>
 
         {/* Sidebar */}
-        {showSidebar && (
-          <SidebarAcoes
-            resumo={resumo}
-            onNovoPedido={handleNovoPedido}
-            onCollapse={() => setShowSidebar(false)}
-          />
-        )}
+        <SidebarAcoes
+          resumo={resumo}
+          onNovoPedido={handleNovoPedido}
+          isCollapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
       </div>
 
       {/* Modal Selecionar Fornecedor */}

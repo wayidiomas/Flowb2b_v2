@@ -8,7 +8,8 @@ interface SidebarAcoesProps {
   onNovoPedido: () => void
   onGerarAutomatico?: () => void
   onImprimir?: () => void
-  onCollapse: () => void
+  isCollapsed: boolean
+  onToggleCollapse: () => void
 }
 
 // Icons
@@ -44,6 +45,14 @@ function ChevronLeftIcon() {
   )
 }
 
+function ChevronRightIcon() {
+  return (
+    <svg className="w-[14px] h-[24px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+    </svg>
+  )
+}
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -51,10 +60,60 @@ function formatCurrency(value: number): string {
   }).format(value)
 }
 
-export function SidebarAcoes({ resumo, onNovoPedido, onGerarAutomatico, onImprimir, onCollapse }: SidebarAcoesProps) {
+export function SidebarAcoes({ resumo, onNovoPedido, onGerarAutomatico, onImprimir, isCollapsed, onToggleCollapse }: SidebarAcoesProps) {
+  // Estado colapsado - barra estreita com chevron
+  if (isCollapsed) {
+    return (
+      <div className="w-[48px] flex-shrink-0 transition-all duration-300 ease-in-out">
+        <div className="bg-white rounded-[20px] overflow-hidden flex flex-col h-full shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)]">
+          {/* Botao de expandir */}
+          <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-[20px] px-2 py-[18px] flex flex-col items-center">
+            <button
+              onClick={onToggleCollapse}
+              className="p-2 text-[#667085] hover:text-[#344054] hover:bg-gray-100 rounded-lg transition-colors"
+              title="Expandir"
+            >
+              <ChevronRightIcon />
+            </button>
+          </div>
+
+          {/* Icones das acoes colapsadas */}
+          <div className="bg-white flex-1 flex flex-col items-center py-2">
+            <button
+              onClick={onNovoPedido}
+              className="p-3 text-[#009E3F] hover:bg-gray-50 rounded-lg transition-colors"
+              title="Novo pedido"
+            >
+              <PlusIcon />
+            </button>
+
+            <button
+              onClick={onGerarAutomatico}
+              disabled={!onGerarAutomatico}
+              className="p-3 text-[#4684CD] hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={!onGerarAutomatico ? 'Em breve' : 'Gerar automaticamente'}
+            >
+              <AutoFixIcon />
+            </button>
+
+            <button
+              onClick={onImprimir}
+              disabled={!onImprimir}
+              className="p-3 text-[#5C5C5C] hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={!onImprimir ? 'Em breve' : 'Imprimir pedidos'}
+            >
+              <PrintIcon />
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Estado expandido - sidebar completa
   return (
-    <div className="w-[280px] flex-shrink-0">
-      <div className="bg-white rounded-[20px] overflow-hidden flex flex-col">
+    <div className="w-[280px] flex-shrink-0 transition-all duration-300 ease-in-out">
+      <div className="bg-white rounded-[20px] overflow-hidden flex flex-col shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)]">
         {/* Header */}
         <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-tl-[20px] rounded-bl-[20px] px-[19px] py-[18px]">
           <div className="flex items-center justify-between">
@@ -67,7 +126,7 @@ export function SidebarAcoes({ resumo, onNovoPedido, onGerarAutomatico, onImprim
               </p>
             </div>
             <button
-              onClick={onCollapse}
+              onClick={onToggleCollapse}
               className="p-1 text-[#667085] hover:text-[#344054] hover:bg-gray-100 rounded transition-colors"
               title="Recolher"
             >
