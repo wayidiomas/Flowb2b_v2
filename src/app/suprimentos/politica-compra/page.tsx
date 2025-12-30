@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, memo } from 'react'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout'
 import { useAuth } from '@/contexts/AuthContext'
@@ -104,6 +104,144 @@ const defaultPoliticaForm: PoliticaFormData = {
   observacao: '',
   estoque_eficiente: true,
 }
+
+// Componente de formulario de politica (fora do componente principal para evitar re-render)
+const PoliticaFormFields = memo(function PoliticaFormFields({
+  form,
+  setForm,
+  novoDia,
+  setNovoDia,
+  onAddDia,
+  onRemoveDia,
+}: {
+  form: PoliticaFormData
+  setForm: React.Dispatch<React.SetStateAction<PoliticaFormData>>
+  novoDia: string
+  setNovoDia: React.Dispatch<React.SetStateAction<string>>
+  onAddDia: () => void
+  onRemoveDia: (dia: number) => void
+}) {
+  return (
+    <div className="space-y-4">
+      {/* Forma de pagamento */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Formas de Pagamento (dias)</label>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex flex-wrap items-center gap-2 min-h-[42px] px-3 py-2 border border-gray-300 rounded-lg bg-white">
+            {form.forma_pagamento_dias.length === 0 ? (
+              <span className="text-sm text-gray-400">Adicione os dias...</span>
+            ) : (
+              form.forma_pagamento_dias.map(dia => (
+                <span
+                  key={dia}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#336FB6] text-white text-sm rounded-full"
+                >
+                  {dia}d
+                  <button
+                    type="button"
+                    onClick={() => onRemoveDia(dia)}
+                    className="ml-0.5 hover:bg-white/20 rounded-full p-0.5"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              value={novoDia}
+              onChange={(e) => setNovoDia(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), onAddDia())}
+              placeholder="Dias"
+              min="1"
+              className="w-20 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+            />
+            <button
+              type="button"
+              onClick={onAddDia}
+              className="p-2 bg-[#336FB6] text-white rounded-lg hover:bg-[#2660A5] transition-colors"
+            >
+              <PlusIcon />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        {/* Prazo de entrega */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de entrega (dias)</label>
+          <input
+            type="number"
+            value={form.prazo_entrega || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, prazo_entrega: parseInt(e.target.value) || 0 }))}
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+
+        {/* Valor minimo */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Valor minimo do pedido (R$)</label>
+          <input
+            type="number"
+            value={form.valor_minimo || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, valor_minimo: parseFloat(e.target.value) || 0 }))}
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+
+        {/* Peso */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Peso (kg)</label>
+          <input
+            type="number"
+            value={form.peso || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, peso: parseFloat(e.target.value) || 0 }))}
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+
+        {/* Desconto */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Desconto (%)</label>
+          <input
+            type="number"
+            value={form.desconto || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0 }))}
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+
+        {/* Bonificacao */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Bonificacao (%)</label>
+          <input
+            type="number"
+            value={form.bonificacao || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, bonificacao: parseFloat(e.target.value) || 0 }))}
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+
+        {/* Observacao */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Observacao</label>
+          <input
+            type="text"
+            value={form.observacao || ''}
+            onChange={(e) => setForm(prev => ({ ...prev, observacao: e.target.value }))}
+            placeholder="Ex: Produtos da linha Pet"
+            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+          />
+        </div>
+      </div>
+    </div>
+  )
+})
 
 export default function PoliticaCompraPage() {
   const { user, empresa } = useAuth()
@@ -371,46 +509,6 @@ export default function PoliticaCompraPage() {
     })
   }, [fornecedores, politicaToDuplicate, duplicateSearchTerm])
 
-  // Adicionar dia de pagamento
-  const handleAddDiaPagamento = (form: 'create' | 'duplicate') => {
-    const diaStr = form === 'create' ? novoDiaPagamentoCreate : novoDiaPagamentoDuplicate
-    const dia = parseInt(diaStr)
-    if (isNaN(dia) || dia <= 0) return
-
-    if (form === 'create') {
-      if (!createForm.forma_pagamento_dias.includes(dia)) {
-        setCreateForm(prev => ({
-          ...prev,
-          forma_pagamento_dias: [...prev.forma_pagamento_dias, dia].sort((a, b) => a - b)
-        }))
-      }
-      setNovoDiaPagamentoCreate('')
-    } else {
-      if (!duplicateForm.forma_pagamento_dias.includes(dia)) {
-        setDuplicateForm(prev => ({
-          ...prev,
-          forma_pagamento_dias: [...prev.forma_pagamento_dias, dia].sort((a, b) => a - b)
-        }))
-      }
-      setNovoDiaPagamentoDuplicate('')
-    }
-  }
-
-  // Remover dia de pagamento
-  const handleRemoveDiaPagamento = (dia: number, form: 'create' | 'duplicate') => {
-    if (form === 'create') {
-      setCreateForm(prev => ({
-        ...prev,
-        forma_pagamento_dias: prev.forma_pagamento_dias.filter(d => d !== dia)
-      }))
-    } else {
-      setDuplicateForm(prev => ({
-        ...prev,
-        forma_pagamento_dias: prev.forma_pagamento_dias.filter(d => d !== dia)
-      }))
-    }
-  }
-
   // Duplicar politica
   const handleDuplicate = async () => {
     if (!politicaToDuplicate || selectedFornecedores.length === 0) return
@@ -477,139 +575,47 @@ export default function PoliticaCompraPage() {
     }).format(Number(value))
   }
 
-  // Componente de formulario de politica (reutilizado em criar e duplicar)
-  const PoliticaFormFields = ({
-    form,
-    setForm,
-    novoDia,
-    setNovoDia,
-    formType
-  }: {
-    form: PoliticaFormData
-    setForm: React.Dispatch<React.SetStateAction<PoliticaFormData>>
-    novoDia: string
-    setNovoDia: React.Dispatch<React.SetStateAction<string>>
-    formType: 'create' | 'duplicate'
-  }) => (
-    <div className="space-y-4">
-      {/* Forma de pagamento */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Formas de Pagamento (dias)</label>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 flex flex-wrap items-center gap-2 min-h-[42px] px-3 py-2 border border-gray-300 rounded-lg bg-white">
-            {form.forma_pagamento_dias.length === 0 ? (
-              <span className="text-sm text-gray-400">Adicione os dias...</span>
-            ) : (
-              form.forma_pagamento_dias.map(dia => (
-                <span
-                  key={dia}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#336FB6] text-white text-sm rounded-full"
-                >
-                  {dia}d
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveDiaPagamento(dia, formType)}
-                    className="ml-0.5 hover:bg-white/20 rounded-full p-0.5"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </span>
-              ))
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              value={novoDia}
-              onChange={(e) => setNovoDia(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddDiaPagamento(formType))}
-              placeholder="Dias"
-              min="1"
-              className="w-20 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-            />
-            <button
-              type="button"
-              onClick={() => handleAddDiaPagamento(formType)}
-              className="p-2 bg-[#336FB6] text-white rounded-lg hover:bg-[#2660A5] transition-colors"
-            >
-              <PlusIcon />
-            </button>
-          </div>
-        </div>
-      </div>
+  // Handlers para adicionar/remover dias - Create (memoizados para evitar re-render)
+  const handleAddDiaCreate = useCallback(() => {
+    const dia = parseInt(novoDiaPagamentoCreate)
+    if (isNaN(dia) || dia <= 0) return
+    setCreateForm(prev => {
+      if (prev.forma_pagamento_dias.includes(dia)) return prev
+      return {
+        ...prev,
+        forma_pagamento_dias: [...prev.forma_pagamento_dias, dia].sort((a, b) => a - b)
+      }
+    })
+    setNovoDiaPagamentoCreate('')
+  }, [novoDiaPagamentoCreate])
 
-      <div className="grid grid-cols-2 gap-4">
-        {/* Prazo de entrega */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de entrega (dias)</label>
-          <input
-            type="number"
-            value={form.prazo_entrega || ''}
-            onChange={(e) => setForm(prev => ({ ...prev, prazo_entrega: parseInt(e.target.value) || 0 }))}
-            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-          />
-        </div>
+  const handleRemoveDiaCreate = useCallback((dia: number) => {
+    setCreateForm(prev => ({
+      ...prev,
+      forma_pagamento_dias: prev.forma_pagamento_dias.filter(d => d !== dia)
+    }))
+  }, [])
 
-        {/* Valor minimo */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Valor minimo do pedido (R$)</label>
-          <input
-            type="number"
-            value={form.valor_minimo || ''}
-            onChange={(e) => setForm(prev => ({ ...prev, valor_minimo: parseFloat(e.target.value) || 0 }))}
-            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-          />
-        </div>
+  // Handlers para adicionar/remover dias - Duplicate (memoizados para evitar re-render)
+  const handleAddDiaDuplicate = useCallback(() => {
+    const dia = parseInt(novoDiaPagamentoDuplicate)
+    if (isNaN(dia) || dia <= 0) return
+    setDuplicateForm(prev => {
+      if (prev.forma_pagamento_dias.includes(dia)) return prev
+      return {
+        ...prev,
+        forma_pagamento_dias: [...prev.forma_pagamento_dias, dia].sort((a, b) => a - b)
+      }
+    })
+    setNovoDiaPagamentoDuplicate('')
+  }, [novoDiaPagamentoDuplicate])
 
-        {/* Peso */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Peso (kg)</label>
-          <input
-            type="number"
-            value={form.peso || ''}
-            onChange={(e) => setForm(prev => ({ ...prev, peso: parseFloat(e.target.value) || 0 }))}
-            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-          />
-        </div>
-
-        {/* Desconto */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Desconto (%)</label>
-          <input
-            type="number"
-            value={form.desconto || ''}
-            onChange={(e) => setForm(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0 }))}
-            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-          />
-        </div>
-
-        {/* Bonificacao */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Bonificacao (%)</label>
-          <input
-            type="number"
-            value={form.bonificacao || ''}
-            onChange={(e) => setForm(prev => ({ ...prev, bonificacao: parseFloat(e.target.value) || 0 }))}
-            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-          />
-        </div>
-
-        {/* Observacao */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Observacao</label>
-          <input
-            type="text"
-            value={form.observacao || ''}
-            onChange={(e) => setForm(prev => ({ ...prev, observacao: e.target.value }))}
-            placeholder="Ex: Produtos da linha Pet"
-            className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
-          />
-        </div>
-      </div>
-    </div>
-  )
+  const handleRemoveDiaDuplicate = useCallback((dia: number) => {
+    setDuplicateForm(prev => ({
+      ...prev,
+      forma_pagamento_dias: prev.forma_pagamento_dias.filter(d => d !== dia)
+    }))
+  }, [])
 
   if (loading) {
     return (
@@ -930,7 +936,8 @@ export default function PoliticaCompraPage() {
                 setForm={setCreateForm}
                 novoDia={novoDiaPagamentoCreate}
                 setNovoDia={setNovoDiaPagamentoCreate}
-                formType="create"
+                onAddDia={handleAddDiaCreate}
+                onRemoveDia={handleRemoveDiaCreate}
               />
             </div>
 
@@ -1007,7 +1014,8 @@ export default function PoliticaCompraPage() {
                   setForm={setDuplicateForm}
                   novoDia={novoDiaPagamentoDuplicate}
                   setNovoDia={setNovoDiaPagamentoDuplicate}
-                  formType="duplicate"
+                  onAddDia={handleAddDiaDuplicate}
+                  onRemoveDia={handleRemoveDiaDuplicate}
                 />
               </div>
 
