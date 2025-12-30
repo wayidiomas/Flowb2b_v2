@@ -699,7 +699,7 @@ export default function PoliticaCompraPage() {
               <option value="">Todos os fornecedores</option>
               {fornecedores.map(f => (
                 <option key={f.id} value={f.id}>
-                  {f.nome_fantasia || f.nome}
+                  {f.nome}
                 </option>
               ))}
             </select>
@@ -917,10 +917,10 @@ export default function PoliticaCompraPage() {
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-900">
-                              {f.nome_fantasia || f.nome}
+                              {f.nome}
                             </p>
                             {f.nome_fantasia && (
-                              <p className="text-xs text-gray-500">{f.nome}</p>
+                              <p className="text-xs text-gray-500">{f.nome_fantasia}</p>
                             )}
                           </div>
                         </button>
@@ -1078,10 +1078,10 @@ export default function PoliticaCompraPage() {
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-900">
-                              {f.nome_fantasia || f.nome}
+                              {f.nome}
                             </p>
                             {f.nome_fantasia && (
-                              <p className="text-xs text-gray-500">{f.nome}</p>
+                              <p className="text-xs text-gray-500">{f.nome_fantasia}</p>
                             )}
                           </div>
                         </button>
