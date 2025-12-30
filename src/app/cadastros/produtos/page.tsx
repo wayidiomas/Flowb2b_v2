@@ -86,6 +86,9 @@ export default function ProdutosPage() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [situacaoFilter, setSituacaoFilter] = useState<string>('')
   const [tipoFilter, setTipoFilter] = useState<string>('')
+  const [estoqueFilter, setEstoqueFilter] = useState<string>('')
+  const [precoMinFilter, setPrecoMinFilter] = useState<string>('')
+  const [precoMaxFilter, setPrecoMaxFilter] = useState<string>('')
   const filterDropdownRef = useRef<HTMLDivElement>(null)
   const itemsPerPage = 10
 
@@ -147,6 +150,37 @@ export default function ProdutosPage() {
         query = query.eq('tipo', tipoFilter)
       }
 
+      // Filtro por estoque (server-side)
+      if (estoqueFilter) {
+        switch (estoqueFilter) {
+          case 'sem_estoque':
+            query = query.eq('estoque_atual', 0)
+            break
+          case 'estoque_baixo':
+            query = query.gt('estoque_atual', 0).lte('estoque_atual', 10)
+            break
+          case 'com_estoque':
+            query = query.gt('estoque_atual', 10)
+            break
+        }
+      }
+
+      // Filtro por preco minimo (server-side)
+      if (precoMinFilter) {
+        const min = parseFloat(precoMinFilter)
+        if (!isNaN(min)) {
+          query = query.gte('preco', min)
+        }
+      }
+
+      // Filtro por preco maximo (server-side)
+      if (precoMaxFilter) {
+        const max = parseFloat(precoMaxFilter)
+        if (!isNaN(max)) {
+          query = query.lte('preco', max)
+        }
+      }
+
       // Busca por nome ou codigo (server-side)
       if (debouncedSearch) {
         query = query.or(`nome.ilike.%${debouncedSearch}%,codigo.ilike.%${debouncedSearch}%`)
@@ -192,21 +226,26 @@ export default function ProdutosPage() {
   // Buscar quando mudar pagina, filtros ou busca
   useEffect(() => {
     fetchProdutos()
-  }, [user?.id, user?.empresa_id, empresa?.id, currentPage, debouncedSearch, situacaoFilter, tipoFilter])
+  }, [user?.id, user?.empresa_id, empresa?.id, currentPage, debouncedSearch, situacaoFilter, tipoFilter, estoqueFilter, precoMinFilter, precoMaxFilter])
 
   // Verificar se ha filtros ativos
-  const hasActiveFilters = situacaoFilter !== '' || tipoFilter !== ''
+  const hasActiveFilters = situacaoFilter !== '' || tipoFilter !== '' || estoqueFilter !== '' || precoMinFilter !== '' || precoMaxFilter !== ''
 
   // Contar filtros ativos
   const activeFiltersCount = [
     situacaoFilter !== '',
-    tipoFilter !== ''
+    tipoFilter !== '',
+    estoqueFilter !== '',
+    precoMinFilter !== '' || precoMaxFilter !== ''
   ].filter(Boolean).length
 
   // Limpar filtros
   const clearFilters = () => {
     setSituacaoFilter('')
     setTipoFilter('')
+    setEstoqueFilter('')
+    setPrecoMinFilter('')
+    setPrecoMaxFilter('')
     setShowFilterDropdown(false)
     setCurrentPage(1)
   }
@@ -316,7 +355,7 @@ export default function ProdutosPage() {
 
                 {/* Dropdown */}
                 {showFilterDropdown && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-[80vh] overflow-y-auto">
                     <div className="p-4">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-semibold text-gray-900">Filtros</h3>
@@ -364,6 +403,60 @@ export default function ProdutosPage() {
                           <option value="P">Produto</option>
                           <option value="S">Servico</option>
                         </select>
+                      </div>
+
+                      {/* Filtro por Estoque */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Estoque
+                        </label>
+                        <select
+                          value={estoqueFilter}
+                          onChange={(e) => {
+                            setEstoqueFilter(e.target.value)
+                            setCurrentPage(1)
+                          }}
+                          className="block w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        >
+                          <option value="">Todos</option>
+                          <option value="sem_estoque">Sem estoque</option>
+                          <option value="estoque_baixo">Estoque baixo (1-10)</option>
+                          <option value="com_estoque">Com estoque (&gt;10)</option>
+                        </select>
+                      </div>
+
+                      {/* Filtro por Preco */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Faixa de Preco (R$)
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            placeholder="Min"
+                            value={precoMinFilter}
+                            onChange={(e) => {
+                              setPrecoMinFilter(e.target.value)
+                              setCurrentPage(1)
+                            }}
+                            min="0"
+                            step="0.01"
+                            className="block w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                          <span className="text-gray-500">-</span>
+                          <input
+                            type="number"
+                            placeholder="Max"
+                            value={precoMaxFilter}
+                            onChange={(e) => {
+                              setPrecoMaxFilter(e.target.value)
+                              setCurrentPage(1)
+                            }}
+                            min="0"
+                            step="0.01"
+                            className="block w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                        </div>
                       </div>
 
                       {/* Botoes de Acao */}
