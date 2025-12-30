@@ -738,10 +738,10 @@ export default function PoliticaCompraPage() {
                     <td className="px-4 py-3">
                       <div>
                         <p className="text-sm font-medium text-gray-900">
-                          {pol.fornecedor_nome_fantasia || pol.fornecedor_nome}
+                          {pol.fornecedor_nome}
                         </p>
                         {pol.fornecedor_nome_fantasia && (
-                          <p className="text-xs text-gray-500">{pol.fornecedor_nome}</p>
+                          <p className="text-xs text-gray-500">{pol.fornecedor_nome_fantasia}</p>
                         )}
                       </div>
                     </td>
@@ -1002,8 +1002,11 @@ export default function PoliticaCompraPage() {
               <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                 <p className="text-xs text-gray-500">Copiando politica de:</p>
                 <p className="text-sm font-medium text-gray-900">
-                  {politicaToDuplicate.fornecedor_nome_fantasia || politicaToDuplicate.fornecedor_nome}
+                  {politicaToDuplicate.fornecedor_nome}
                 </p>
+                {politicaToDuplicate.fornecedor_nome_fantasia && (
+                  <p className="text-xs text-gray-500">{politicaToDuplicate.fornecedor_nome_fantasia}</p>
+                )}
               </div>
 
               {/* Campos editaveis */}
