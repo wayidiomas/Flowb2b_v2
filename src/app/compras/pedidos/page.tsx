@@ -186,6 +186,48 @@ export default function PedidoCompraPage() {
 
       const offset = (currentPage - 1) * itemsPerPage
 
+      // Query para obter count total e resumo (server-side)
+      let countQuery = supabase
+        .from('pedidos_compra')
+        .select('id, total, situacao', { count: 'exact' })
+        .eq('empresa_id', empresaId)
+
+      // Aplicar filtros na query de count
+      if (fornecedorFilter) {
+        countQuery = countQuery.eq('fornecedor_id', parseInt(fornecedorFilter))
+      }
+      if (dataInicioFilter) {
+        countQuery = countQuery.gte('data', dataInicioFilter)
+      }
+      if (dataFimFilter) {
+        countQuery = countQuery.lte('data', dataFimFilter)
+      }
+      if (situacaoFilter) {
+        // Mapear label para numero
+        const situacaoMap: Record<string, number> = {
+          'Emitida': 1,
+          'Cancelada': 2,
+          'Registrada': 3,
+          'Aguardando Entrega': 4,
+          'Rascunho': 5
+        }
+        if (situacaoMap[situacaoFilter]) {
+          countQuery = countQuery.eq('situacao', situacaoMap[situacaoFilter])
+        }
+      }
+      if (debouncedSearch) {
+        countQuery = countQuery.or(`numero.ilike.%${debouncedSearch}%`)
+      }
+
+      const countResult = await countQuery
+
+      // Calcular resumo a partir do count query
+      const totalPedidos = countResult.count || 0
+      const valorTotalGeral = countResult.data?.reduce((acc, p) => acc + (p.total || 0), 0) || 0
+      setTotalCount(totalPedidos)
+      setResumo({ qtd: totalPedidos, valorTotal: valorTotalGeral })
+
+      // Agora buscar dados paginados via RPC
       let data: PedidoCompraListItem[] | null = null
       let error = null
 
@@ -220,24 +262,15 @@ export default function PedidoCompraPage() {
       }
 
       if (data) {
-        // Filtrar por situacao no frontend se necessario
+        // Filtrar por situacao no frontend se necessario (RPC nao filtra por situacao)
         let filteredData = data
         if (situacaoFilter) {
           filteredData = data.filter(p => p.status === situacaoFilter)
         }
 
         setPedidos(filteredData)
-
-        // Calcular resumo
-        const valorTotal = filteredData.reduce((acc, p) => acc + (p.valor_total || 0), 0)
-        setResumo({ qtd: filteredData.length, valorTotal })
-
-        // Total count (aproximado - sem paginacao na RPC)
-        setTotalCount(filteredData.length)
       } else {
         setPedidos([])
-        setResumo({ qtd: 0, valorTotal: 0 })
-        setTotalCount(0)
       }
     } catch (err) {
       console.error('Erro:', err)
@@ -740,6 +773,7 @@ export default function PedidoCompraPage() {
           <SidebarAcoes
             resumo={resumo}
             onNovoPedido={handleNovoPedido}
+            onCollapse={() => setShowSidebar(false)}
           />
         )}
       </div>
