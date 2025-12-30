@@ -1,11 +1,22 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions, Permissoes } from '@/hooks/usePermissions'
+
+// Interface de notificacao
+interface Notificacao {
+  id: number
+  tipo: string
+  titulo: string
+  mensagem: string | null
+  lida: boolean
+  data_criacao: string
+  metadata: Record<string, unknown>
+}
 
 // Icone de seta para baixo
 function ChevronDownIcon({ className = 'w-3 h-3' }: { className?: string }) {
@@ -82,8 +93,62 @@ export function MainHeader() {
   const { hasPermission, isAdmin } = usePermissions()
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [notificacoesOpen, setNotificacoesOpen] = useState(false)
+  const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
+  const [naoLidas, setNaoLidas] = useState(0)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
+  const notificacoesRef = useRef<HTMLDivElement>(null)
+
+  // Buscar notificacoes
+  const fetchNotificacoes = useCallback(async () => {
+    try {
+      const response = await fetch('/api/notifications')
+      const data = await response.json()
+      if (data.success) {
+        setNotificacoes(data.notificacoes || [])
+        setNaoLidas(data.naoLidas || 0)
+      }
+    } catch (error) {
+      console.error('Erro ao buscar notificacoes:', error)
+    }
+  }, [])
+
+  // Marcar notificacao como lida
+  const marcarComoLida = async (notificationId: number) => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId }),
+      })
+      fetchNotificacoes()
+    } catch (error) {
+      console.error('Erro ao marcar notificacao:', error)
+    }
+  }
+
+  // Marcar todas como lidas
+  const marcarTodasComoLidas = async () => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markAllAsRead: true }),
+      })
+      fetchNotificacoes()
+    } catch (error) {
+      console.error('Erro ao marcar notificacoes:', error)
+    }
+  }
+
+  // Buscar notificacoes ao montar e periodicamente
+  useEffect(() => {
+    fetchNotificacoes()
+    // Atualizar a cada 60 segundos
+    const interval = setInterval(fetchNotificacoes, 60000)
+    return () => clearInterval(interval)
+  }, [fetchNotificacoes])
 
   // Filtrar navegacao baseado em permissoes
   const filteredNavigation = useMemo(() => {
@@ -118,6 +183,9 @@ export function MainHeader() {
       }
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false)
+      }
+      if (notificacoesRef.current && !notificacoesRef.current.contains(event.target as Node)) {
+        setNotificacoesOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -273,10 +341,83 @@ export function MainHeader() {
           </div>
 
           {/* Notifications */}
-          <button className="p-2 rounded-md text-white/80 hover:text-white hover:bg-white/10 transition-colors relative">
-            <BellIcon />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-          </button>
+          <div className="relative" ref={notificacoesRef}>
+            <button
+              onClick={() => setNotificacoesOpen(!notificacoesOpen)}
+              className="p-2 rounded-md text-white/80 hover:text-white hover:bg-white/10 transition-colors relative"
+            >
+              <BellIcon />
+              {naoLidas > 0 && (
+                <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full">
+                  {naoLidas > 9 ? '9+' : naoLidas}
+                </span>
+              )}
+            </button>
+
+            {/* Dropdown de notificacoes */}
+            {notificacoesOpen && (
+              <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg py-2 w-80 max-h-96 overflow-y-auto z-50">
+                <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-900">Notificacoes</p>
+                  {naoLidas > 0 && (
+                    <button
+                      onClick={marcarTodasComoLidas}
+                      className="text-xs text-[#336FB6] hover:text-[#2660A5]"
+                    >
+                      Marcar todas como lidas
+                    </button>
+                  )}
+                </div>
+
+                {notificacoes.length === 0 ? (
+                  <div className="px-4 py-8 text-center">
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 flex items-center justify-center">
+                      <BellIcon />
+                    </div>
+                    <p className="text-sm text-gray-500">Nenhuma notificacao</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {notificacoes.map((notif) => (
+                      <button
+                        key={notif.id}
+                        onClick={() => {
+                          if (!notif.lida) marcarComoLida(notif.id)
+                        }}
+                        className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${
+                          !notif.lida ? 'bg-blue-50/50' : ''
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`w-2 h-2 mt-1.5 rounded-full flex-shrink-0 ${
+                            !notif.lida ? 'bg-[#336FB6]' : 'bg-transparent'
+                          }`} />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm ${!notif.lida ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
+                              {notif.titulo}
+                            </p>
+                            {notif.mensagem && (
+                              <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                                {notif.mensagem}
+                              </p>
+                            )}
+                            <p className="text-xs text-gray-400 mt-1">
+                              {new Date(notif.data_criacao).toLocaleDateString('pt-BR', {
+                                day: '2-digit',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Settings */}
           <Link

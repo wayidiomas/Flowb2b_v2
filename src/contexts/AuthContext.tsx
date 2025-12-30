@@ -4,6 +4,16 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { useRouter } from 'next/navigation'
 import type { User } from '@/types/auth'
 
+// Interface para status do trial
+export interface TrialStatus {
+  isInTrial: boolean
+  isTrialExpired: boolean
+  daysRemaining: number
+  trialStartDate: string
+  trialEndDate: string
+  hasActiveSubscription: boolean
+}
+
 interface AuthContextType {
   user: User | null
   empresa: {
@@ -12,6 +22,7 @@ interface AuthContextType {
     nome_fantasia: string
     cnpj: string
   } | null
+  trialStatus: TrialStatus | null
   loading: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
@@ -23,6 +34,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [empresa, setEmpresa] = useState<AuthContextType['empresa']>(null)
+  const [trialStatus, setTrialStatus] = useState<TrialStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
@@ -37,18 +49,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (data.success) {
           setUser(data.user)
           setEmpresa(data.user.empresa)
+          setTrialStatus(data.trialStatus || null)
         } else {
           setUser(null)
           setEmpresa(null)
+          setTrialStatus(null)
         }
       } else {
         setUser(null)
         setEmpresa(null)
+        setTrialStatus(null)
       }
     } catch (error) {
       console.error('Error refreshing user:', error)
       setUser(null)
       setEmpresa(null)
+      setTrialStatus(null)
     }
   }
 
@@ -94,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, empresa, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, empresa, trialStatus, loading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )
