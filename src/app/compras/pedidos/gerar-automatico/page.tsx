@@ -401,6 +401,7 @@ function GerarAutomaticoContent() {
       if (!empresaId) throw new Error('Empresa nao encontrada')
 
       // Inserir politica de compra (prazo_estoque e calculado automaticamente pelo banco)
+      // IMPORTANTE: Enviar 0 em vez de null para campos numericos (API Python espera numeros)
       const { data: novaPolitica, error: insertError } = await supabase
         .from('politica_compra')
         .insert({
@@ -408,8 +409,8 @@ function GerarAutomaticoContent() {
           fornecedor_id: fornecedor.id,
           forma_pagamento_dias: politicaForm.forma_pagamento_dias,
           prazo_entrega: politicaForm.prazo_entrega,
-          valor_minimo: politicaForm.valor_minimo || null,
-          desconto: politicaForm.desconto || null,
+          valor_minimo: politicaForm.valor_minimo || 0,
+          desconto: politicaForm.desconto || 0,
           status: true,
         })
         .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque')
