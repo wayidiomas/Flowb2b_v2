@@ -351,6 +351,20 @@ function GerarAutomaticoContent() {
   const calcularSugestoes = async () => {
     if (!fornecedor) return
 
+    // Validacao: Politica de compra obrigatoria
+    if (!politica) {
+      showToast('error', 'Politica de compra obrigatoria',
+        'Este fornecedor nao possui uma politica de compra configurada.\n\nO calculo automatico precisa do prazo de estoque e prazo de entrega para funcionar corretamente.')
+      return
+    }
+
+    // Validacao: Prazo de estoque obrigatorio
+    if (!politica.prazo_estoque) {
+      showToast('warning', 'Politica incompleta',
+        'A politica de compra nao possui o prazo de estoque configurado.\n\nEsse valor e essencial para calcular a quantidade ideal de produtos.')
+      return
+    }
+
     setCalculando(true)
     setError(null)
 
@@ -605,8 +619,9 @@ function GerarAutomaticoContent() {
             {sugestoes.length === 0 && (
               <button
                 onClick={calcularSugestoes}
-                disabled={calculando}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#4684CD] hover:bg-[#3A75B8] rounded-lg transition-colors disabled:opacity-50"
+                disabled={calculando || !politica}
+                title={!politica ? 'Configure uma politica de compra primeiro' : undefined}
+                className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#4684CD] hover:bg-[#3A75B8] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {calculando ? (
                   <>
@@ -634,6 +649,35 @@ function GerarAutomaticoContent() {
               </p>
             </div>
           )}
+
+          {/* Alerta: Politica de compra nao configurada */}
+          {fornecedor && !politica && (
+            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 text-amber-500">
+                  <ExclamationTriangleIcon />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-amber-800">
+                    Politica de compra nao configurada
+                  </p>
+                  <p className="mt-1 text-sm text-amber-700">
+                    Para gerar pedidos automaticos, e necessario configurar uma politica de compra para este fornecedor.
+                    A politica define o prazo de estoque, prazo de entrega, desconto e valor minimo.
+                  </p>
+                  <Link
+                    href={`/suprimentos/politica-compra?fornecedor_id=${fornecedor.id}`}
+                    className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-amber-800 hover:text-amber-900"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Configurar politica de compra
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Erro */}
@@ -649,13 +693,36 @@ function GerarAutomaticoContent() {
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
               <AutoFixIcon />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Gerar sugestoes de compra
-            </h3>
-            <p className="text-sm text-gray-500 max-w-md mx-auto mb-6">
-              Clique em &quot;Calcular Sugestoes&quot; para analisar as vendas e estoque
-              e receber sugestoes de quantidades a comprar.
-            </p>
+            {politica ? (
+              <>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Gerar sugestoes de compra
+                </h3>
+                <p className="text-sm text-gray-500 max-w-md mx-auto mb-6">
+                  Clique em &quot;Calcular Sugestoes&quot; para analisar as vendas e estoque
+                  e receber sugestoes de quantidades a comprar.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Politica de compra necessaria
+                </h3>
+                <p className="text-sm text-gray-500 max-w-md mx-auto mb-4">
+                  Para calcular sugestoes de compra automaticamente, e necessario
+                  configurar uma politica de compra para este fornecedor.
+                </p>
+                <Link
+                  href={`/suprimentos/politica-compra?fornecedor_id=${fornecedor?.id}`}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#4684CD] hover:bg-[#3A75B8] rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Configurar Politica de Compra
+                </Link>
+              </>
+            )}
           </div>
         )}
 
