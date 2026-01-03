@@ -11,8 +11,16 @@ import type {
   ItemPedidoCompra,
   PoliticaCompra,
   ProdutoFornecedor,
+  ParcelaPedido,
   FRETE_POR_CONTA_OPTIONS
 } from '@/types/pedido-compra'
+
+// Interface local para formas de pagamento
+interface FormaPagamento {
+  id: number
+  id_bling: number | null
+  descricao: string
+}
 
 // Icons
 function ArrowLeftIcon() {
@@ -71,6 +79,7 @@ function NovoPedidoContent() {
 
   // Form state
   const [fornecedorId, setFornecedorId] = useState<number | null>(null)
+  const [fornecedorIdBling, setFornecedorIdBling] = useState<number | null>(null)
   const [fornecedorNome, setFornecedorNome] = useState('')
   const [dataPedido, setDataPedido] = useState(new Date().toISOString().split('T')[0])
   const [dataPrevista, setDataPrevista] = useState('')
@@ -83,11 +92,13 @@ function NovoPedidoContent() {
   const [transportador, setTransportador] = useState('')
   const [fretePorConta, setFretePorConta] = useState('CIF')
   const [itens, setItens] = useState<ItemPedidoCompra[]>([])
+  const [parcelas, setParcelas] = useState<ParcelaPedido[]>([])
 
   // UI state
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<'produtos' | 'politicas'>('produtos')
+  const [activeTab, setActiveTab] = useState<'produtos' | 'politicas' | 'pagamento'>('produtos')
+  const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([])
   const [showProdutoModal, setShowProdutoModal] = useState(false)
   const [produtoSearch, setProdutoSearch] = useState('')
   const [produtosFornecedor, setProdutosFornecedor] = useState<ProdutoFornecedor[]>([])
@@ -112,10 +123,10 @@ function NovoPedidoContent() {
         const fId = parseInt(fornecedorIdParam)
         setFornecedorId(fId)
 
-        // Buscar dados do fornecedor
+        // Buscar dados do fornecedor (incluindo id_bling para integracao)
         const { data: fornecedor, error: fError } = await supabase
           .from('fornecedores')
-          .select('id, nome')
+          .select('id, id_bling, nome')
           .eq('id', fId)
           .eq('empresa_id', empresaId)
           .single()
@@ -123,6 +134,7 @@ function NovoPedidoContent() {
         if (fError) throw fError
         if (fornecedor) {
           setFornecedorNome(fornecedor.nome)
+          setFornecedorIdBling(fornecedor.id_bling)
         }
 
         // Buscar politica de compra do fornecedor
@@ -142,6 +154,21 @@ function NovoPedidoContent() {
             prevista.setDate(prevista.getDate() + politicas.prazo_entrega)
             setDataPrevista(prevista.toISOString().split('T')[0])
           }
+        }
+
+        // Buscar formas de pagamento (incluindo id_bling para integracao)
+        const { data: formas } = await supabase
+          .from('formas_de_pagamento')
+          .select('id, id_forma_de_pagamento_bling, descricao')
+          .eq('empresa_id', empresaId)
+          .order('descricao')
+
+        if (formas) {
+          setFormasPagamento(formas.map(f => ({
+            id: f.id,
+            id_bling: f.id_forma_de_pagamento_bling,
+            descricao: f.descricao
+          })))
         }
 
       } catch (err) {
@@ -168,7 +195,7 @@ function NovoPedidoContent() {
         .select(`
           produto_id,
           valor_de_compra,
-          produtos!inner(id, codigo, nome, unidade, estoque_atual, gtin)
+          produtos!inner(id, id_produto_bling, codigo, nome, unidade, estoque_atual, gtin)
         `)
         .eq('fornecedor_id', fornecedorId)
         .eq('empresa_id', empresaId)
@@ -184,6 +211,7 @@ function NovoPedidoContent() {
       if (data) {
         const formatted: ProdutoFornecedor[] = data.map((item: any) => ({
           produto_id: item.produto_id,
+          id_produto_bling: item.produtos.id_produto_bling,
           codigo: item.produtos.codigo || '',
           nome: item.produtos.nome || '',
           unidade: item.produtos.unidade || 'UN',
@@ -216,6 +244,7 @@ function NovoPedidoContent() {
 
     const novoItem: ItemPedidoCompra = {
       produto_id: produto.produto_id,
+      id_produto_bling: produto.id_produto_bling,
       descricao: produto.nome,
       codigo_produto: produto.codigo,
       unidade: produto.unidade,
@@ -243,6 +272,37 @@ function NovoPedidoContent() {
     setItens(newItens)
   }
 
+  // Adicionar parcela
+  const handleAddParcela = () => {
+    const novaParcela: ParcelaPedido = {
+      valor: 0,
+      data_vencimento: new Date().toISOString().split('T')[0]
+    }
+    setParcelas([...parcelas, novaParcela])
+  }
+
+  // Remover parcela
+  const handleRemoveParcela = (index: number) => {
+    setParcelas(parcelas.filter((_, i) => i !== index))
+  }
+
+  // Atualizar parcela
+  const handleUpdateParcela = (index: number, field: keyof ParcelaPedido, value: any) => {
+    const newParcelas = [...parcelas]
+    newParcelas[index] = { ...newParcelas[index], [field]: value }
+
+    // Se atualizou forma_pagamento_id, tambem atualizar forma_pagamento_id_bling
+    if (field === 'forma_pagamento_id' && value) {
+      const formaSelecionada = formasPagamento.find(fp => fp.id === Number(value))
+      if (formaSelecionada) {
+        newParcelas[index].forma_pagamento_id_bling = formaSelecionada.id_bling || undefined
+        newParcelas[index].forma_pagamento_nome = formaSelecionada.descricao
+      }
+    }
+
+    setParcelas(newParcelas)
+  }
+
   // Calculos
   const totalProdutos = itens.reduce((acc, item) => {
     const subtotal = item.quantidade * item.valor
@@ -264,53 +324,80 @@ function NovoPedidoContent() {
     }).format(valor)
   }
 
-  // Salvar pedido
+  // Salvar pedido - Envia para Bling e depois salva localmente
   const handleSave = async () => {
     if (!fornecedorId || itens.length === 0) {
       alert('Adicione pelo menos um produto ao pedido.')
       return
     }
 
+    if (!fornecedorIdBling) {
+      alert('Este fornecedor nao esta sincronizado com o Bling. Sincronize o fornecedor primeiro.')
+      return
+    }
+
     setSaving(true)
     try {
-      const empresaId = empresa?.id || user?.empresa_id
-      if (!empresaId) throw new Error('Empresa nao identificada')
-
+      // Montar payload para API
       const itensPayload = itens.map(item => ({
         descricao: item.descricao,
-        codigo_fornecedor: item.codigo_produto,
         unidade: item.unidade,
         valor: item.valor,
         quantidade: item.quantidade,
         aliquotaIPI: item.aliquota_ipi,
-        produto: item.produto_id ? { id: item.produto_id, codigo: item.codigo_produto } : null
+        produto: item.id_produto_bling ? {
+          id: item.id_produto_bling,
+          codigo: item.codigo_produto
+        } : undefined
       }))
 
-      const { data, error } = await supabase.rpc('flowb2b_add_pedido_compra', {
-        p_empresa_id: empresaId,
-        p_fornecedor_id: fornecedorId,
-        p_data: dataPedido,
-        p_data_prevista: dataPrevista || null,
-        p_situacao: 5, // Rascunho
-        p_total_produtos: totalProdutos,
-        p_total: totalPedido,
-        p_desconto: desconto,
-        p_frete: frete,
-        p_total_icms: totalIcms,
-        p_transportador: transportador || null,
-        p_frete_por_conta: fretePorConta,
-        p_politica_compra_id: politica?.id || null,
-        p_observacoes: observacoes || null,
-        p_observacoes_internas: observacoesInternas || null,
-        p_itens: JSON.stringify(itensPayload)
+      // Montar parcelas para API (com forma de pagamento Bling)
+      const parcelasPayload = parcelas.length > 0 ? parcelas.map(p => ({
+        valor: p.valor,
+        dataVencimento: p.data_vencimento,
+        observacao: p.observacao || '',
+        formaPagamento: p.forma_pagamento_id_bling ? {
+          id: p.forma_pagamento_id_bling
+        } : undefined
+      })) : undefined
+
+      const payload = {
+        fornecedor_id: fornecedorId,
+        fornecedor_id_bling: fornecedorIdBling,
+        data: dataPedido,
+        dataPrevista: dataPrevista || undefined,
+        totalProdutos: totalProdutos,
+        total: totalPedido,
+        desconto: desconto,
+        frete: frete,
+        totalIcms: totalIcms,
+        transportador: transportador || undefined,
+        fretePorConta: fretePorConta,
+        ordemCompra: ordemCompra || undefined,
+        observacoes: observacoes || undefined,
+        observacoesInternas: observacoesInternas || undefined,
+        itens: itensPayload,
+        parcelas: parcelasPayload
+      }
+
+      // Chamar API que integra com Bling
+      const response = await fetch('/api/pedidos-compra', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       })
 
-      if (error) throw error
+      const result = await response.json()
 
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao criar pedido')
+      }
+
+      alert(`Pedido ${result.numero || result.id} criado com sucesso!`)
       router.push('/compras/pedidos')
     } catch (err) {
       console.error('Erro ao salvar pedido:', err)
-      alert('Erro ao salvar pedido. Tente novamente.')
+      alert(err instanceof Error ? err.message : 'Erro ao salvar pedido. Tente novamente.')
     } finally {
       setSaving(false)
     }
@@ -480,6 +567,16 @@ function NovoPedidoContent() {
                 >
                   Politicas de Compra
                 </button>
+                <button
+                  onClick={() => setActiveTab('pagamento')}
+                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'pagamento'
+                      ? 'border-[#336FB6] text-[#336FB6]'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Pagamento
+                </button>
               </nav>
             </div>
 
@@ -637,6 +734,101 @@ function NovoPedidoContent() {
                       >
                         Cadastrar politica
                       </Link>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'pagamento' && (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">Parcelas</h3>
+                    <button
+                      onClick={handleAddParcela}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#336FB6] border border-[#336FB6] rounded-lg hover:bg-[#336FB6]/5 transition-colors"
+                    >
+                      <PlusIcon />
+                      Adicionar parcela
+                    </button>
+                  </div>
+
+                  {parcelas.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                      <p>Nenhuma parcela adicionada.</p>
+                      <button
+                        onClick={handleAddParcela}
+                        className="mt-2 text-sm text-[#336FB6] hover:underline"
+                      >
+                        Adicionar primeira parcela
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-gray-200">
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-10">No</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-32">Valor</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-40">Data Vencimento</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Forma de Pagamento</th>
+                            <th className="px-3 py-2 w-10"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parcelas.map((parcela, index) => (
+                            <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="px-3 py-2 text-sm text-gray-500">{index + 1}</td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={parcela.valor}
+                                  onChange={(e) => handleUpdateParcela(index, 'valor', Number(e.target.value))}
+                                  className="w-full px-2 py-1 text-sm text-right border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="date"
+                                  value={parcela.data_vencimento}
+                                  onChange={(e) => handleUpdateParcela(index, 'data_vencimento', e.target.value)}
+                                  className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <select
+                                  value={parcela.forma_pagamento_id || ''}
+                                  onChange={(e) => handleUpdateParcela(index, 'forma_pagamento_id', e.target.value ? Number(e.target.value) : null)}
+                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                                >
+                                  <option value="">Selecione...</option>
+                                  {formasPagamento.map(fp => (
+                                    <option key={fp.id} value={fp.id}>{fp.descricao}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="px-3 py-2">
+                                <button
+                                  onClick={() => handleRemoveParcela(index)}
+                                  className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                >
+                                  <TrashIcon />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {parcelas.length > 0 && (
+                    <div className="mt-4 flex justify-end">
+                      <div className="text-sm">
+                        <span className="text-gray-500">Total das parcelas: </span>
+                        <span className="font-semibold">{formatCurrency(parcelas.reduce((acc, p) => acc + p.valor, 0))}</span>
+                      </div>
                     </div>
                   )}
                 </div>

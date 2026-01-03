@@ -43,6 +43,7 @@ function CheckIcon() {
 
 interface SugestaoItem {
   produto_id: number
+  id_produto_bling?: number
   codigo: string
   nome: string
   estoque_atual: number
@@ -57,12 +58,14 @@ interface SugestaoItem {
 
 interface Fornecedor {
   id: number
+  id_bling: number | null
   nome: string
   cnpj: string | null
 }
 
 interface FornecedorOption {
   id: number
+  id_bling?: number
   nome: string
   cnpj?: string
 }
@@ -106,7 +109,7 @@ function GerarAutomaticoContent() {
 
       const { data, error } = await supabase
         .from('fornecedores')
-        .select('id, nome, cnpj')
+        .select('id, id_bling, nome, cnpj')
         .eq('empresa_id', empresaId)
         .order('nome', { ascending: true })
         .limit(100)
@@ -140,10 +143,10 @@ function GerarAutomaticoContent() {
         const empresaId = empresa?.id || user?.empresa_id
         if (!empresaId) return
 
-        // Buscar fornecedor
+        // Buscar fornecedor (incluindo id_bling para integracao)
         const { data: fornecedorData, error: fornecedorError } = await supabase
           .from('fornecedores')
-          .select('id, nome, cnpj')
+          .select('id, id_bling, nome, cnpj')
           .eq('id', parseInt(fornecedorIdParam))
           .eq('empresa_id', empresaId)
           .single()
@@ -179,7 +182,7 @@ function GerarAutomaticoContent() {
 
   // Selecionar fornecedor do modal
   const handleSelectFornecedor = async (selected: FornecedorOption) => {
-    setFornecedor({ id: selected.id, nome: selected.nome, cnpj: selected.cnpj || null })
+    setFornecedor({ id: selected.id, id_bling: selected.id_bling || null, nome: selected.nome, cnpj: selected.cnpj || null })
     setShowFornecedorModal(false)
 
     // Buscar politica do fornecedor selecionado
@@ -235,6 +238,7 @@ function GerarAutomaticoContent() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sugestoesCalculadas: SugestaoItem[] = data.sugestoes.map((item: any) => ({
         produto_id: item.produto_id,
+        id_produto_bling: item.id_produto_bling,
         codigo: item.codigo || '-',
         nome: item.nome,
         estoque_atual: item.estoque_atual || 0,
@@ -280,55 +284,69 @@ function GerarAutomaticoContent() {
     setSugestoes(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Criar pedido com as sugestoes
+  // Criar pedido com as sugestoes - Envia para Bling e depois salva localmente
   const handleCriarPedido = async () => {
     if (sugestoes.length === 0 || !fornecedor) return
 
+    if (!fornecedor.id_bling) {
+      setError('Este fornecedor nao esta sincronizado com o Bling. Sincronize o fornecedor primeiro.')
+      return
+    }
+
     setSaving(true)
+    setError(null)
+
     try {
-      const empresaId = empresa?.id || user?.empresa_id
       const dataAtual = new Date().toISOString().split('T')[0]
 
-      // Criar pedido de compra
-      const { data: pedido, error: pedidoError } = await supabase
-        .from('pedidos_compra')
-        .insert({
-          empresa_id: empresaId,
-          fornecedor_id: fornecedor.id,
-          data: dataAtual,
-          situacao: 5, // Rascunho
-          total_produtos: sugestoes.reduce((acc, item) => acc + item.valor_total, 0),
-          total: sugestoes.reduce((acc, item) => acc + item.valor_total, 0),
-          desconto: politica?.desconto || 0,
-          observacoes_internas: 'Pedido gerado automaticamente'
-        })
-        .select('id')
-        .single()
+      // Calcular data prevista baseada na politica
+      const dataPrevista = politica?.prazo_entrega
+        ? new Date(Date.now() + politica.prazo_entrega * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        : undefined
 
-      if (pedidoError) throw pedidoError
-
-      // Criar itens do pedido
-      const itensParaInserir = sugestoes.map(item => ({
-        pedido_compra_id: pedido.id,
-        produto_id: item.produto_id,
-        codigo: item.codigo,
+      // Montar payload para API
+      const itensPayload = sugestoes.map(item => ({
         descricao: item.nome,
-        quantidade: item.quantidade_ajustada,
+        unidade: 'UN',
         valor: item.valor_unitario,
-        unidade: 'UN'
+        quantidade: item.quantidade_ajustada,
+        aliquotaIPI: 0,
+        produto: item.id_produto_bling ? {
+          id: item.id_produto_bling,
+          codigo: item.codigo
+        } : undefined
       }))
 
-      const { error: itensError } = await supabase
-        .from('itens_pedido_compra')
-        .insert(itensParaInserir)
+      const payload = {
+        fornecedor_id: fornecedor.id,
+        fornecedor_id_bling: fornecedor.id_bling,
+        data: dataAtual,
+        dataPrevista: dataPrevista,
+        totalProdutos: valorTotal,
+        total: valorTotal,
+        desconto: politica?.desconto || 0,
+        observacoesInternas: 'Pedido gerado automaticamente',
+        itens: itensPayload
+      }
 
-      if (itensError) throw itensError
+      // Chamar API que integra com Bling
+      const response = await fetch('/api/pedidos-compra', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
 
-      // Redirecionar para edicao do pedido
-      router.push(`/compras/pedidos/${pedido.id}/editar`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao criar pedido')
+      }
+
+      alert(`Pedido ${result.numero || result.id} criado com sucesso!`)
+      router.push(`/compras/pedidos/${result.id}/editar`)
     } catch (err) {
       console.error('Erro ao criar pedido:', err)
-      setError('Erro ao criar pedido de compra')
+      setError(err instanceof Error ? err.message : 'Erro ao criar pedido de compra')
     } finally {
       setSaving(false)
     }

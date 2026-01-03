@@ -44,6 +44,7 @@ export interface ItemPedidoResumo {
 export interface ItemPedidoCompra {
   id?: number
   produto_id?: number
+  id_produto_bling?: number  // ID do produto no Bling
   descricao: string
   codigo_produto?: string
   codigo_fornecedor?: string
@@ -88,12 +89,23 @@ export interface PoliticaCompra {
   status?: string
 }
 
+// Forma de pagamento
+export interface FormaPagamento {
+  id: number
+  id_bling: number              // id_forma_de_pagamento_bling
+  descricao: string
+  tipo_pagamento?: number
+  situacao?: number
+}
+
 // Parcela do pedido
 export interface ParcelaPedido {
   id?: number
   valor: number
   data_vencimento: string
-  forma_pagamento_id?: number
+  observacao?: string
+  forma_pagamento_id?: number          // ID interno (Supabase)
+  forma_pagamento_id_bling?: number    // ID Bling da forma de pagamento
   forma_pagamento_nome?: string
 }
 
@@ -106,9 +118,18 @@ export interface FornecedorOption {
   valor_total_comprado?: number
 }
 
+// Fornecedor com ID Bling (para criacao de pedidos)
+export interface FornecedorComBling {
+  id: number
+  id_bling: number
+  nome: string
+  cnpj?: string
+}
+
 // Produto do fornecedor (para modal de adicao)
 export interface ProdutoFornecedor {
   produto_id: number
+  id_produto_bling?: number  // ID do produto no Bling
   codigo: string
   nome: string
   unidade: string

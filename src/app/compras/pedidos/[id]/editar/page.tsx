@@ -84,6 +84,7 @@ const FRETE_OPTIONS = [
 
 interface FormaPagamento {
   id: number
+  id_bling: number | null  // id_forma_de_pagamento_bling
   descricao: string
 }
 
@@ -198,15 +199,19 @@ export default function EditarPedidoCompraPage() {
           }
         }
 
-        // Carregar formas de pagamento
+        // Carregar formas de pagamento (incluindo id_bling para integracao)
         const { data: formas } = await supabase
           .from('formas_de_pagamento')
-          .select('id, descricao')
+          .select('id, id_forma_de_pagamento_bling, descricao')
           .eq('empresa_id', empresaId)
           .order('descricao')
 
         if (formas) {
-          setFormasPagamento(formas)
+          setFormasPagamento(formas.map(f => ({
+            id: f.id,
+            id_bling: f.id_forma_de_pagamento_bling,
+            descricao: f.descricao
+          })))
         }
 
       } catch (err) {
@@ -311,6 +316,16 @@ export default function EditarPedidoCompraPage() {
   const handleUpdateParcela = (index: number, field: keyof ParcelaPedido, value: any) => {
     const newParcelas = [...parcelas]
     newParcelas[index] = { ...newParcelas[index], [field]: value }
+
+    // Se atualizou forma_pagamento_id, tambem atualizar forma_pagamento_id_bling
+    if (field === 'forma_pagamento_id' && value) {
+      const formaSelecionada = formasPagamento.find(fp => fp.id === Number(value))
+      if (formaSelecionada) {
+        newParcelas[index].forma_pagamento_id_bling = formaSelecionada.id_bling || undefined
+        newParcelas[index].forma_pagamento_nome = formaSelecionada.descricao
+      }
+    }
+
     setParcelas(newParcelas)
   }
 
