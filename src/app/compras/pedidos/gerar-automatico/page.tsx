@@ -244,11 +244,12 @@ function GerarAutomaticoContent() {
   const [showPoliticaForm, setShowPoliticaForm] = useState(false)
   const [savingPolitica, setSavingPolitica] = useState(false)
   const [politicaForm, setPoliticaForm] = useState({
-    prazo_estoque: 30,
+    forma_pagamento_dias: [30] as number[],  // Array de dias de pagamento
     prazo_entrega: 7,
     valor_minimo: 0,
     desconto: 0,
   })
+  const [novoDiaPagamento, setNovoDiaPagamento] = useState('')
 
   // Buscar fornecedores para o modal
   const fetchFornecedores = async () => {
@@ -357,13 +358,39 @@ function GerarAutomaticoContent() {
     (f.cnpj && f.cnpj.includes(fornecedorSearch))
   )
 
+  // Adicionar dia de pagamento
+  const handleAddDiaPagamento = () => {
+    const dia = parseInt(novoDiaPagamento)
+    if (isNaN(dia) || dia <= 0) return
+    if (politicaForm.forma_pagamento_dias.includes(dia)) return
+
+    setPoliticaForm(prev => ({
+      ...prev,
+      forma_pagamento_dias: [...prev.forma_pagamento_dias, dia].sort((a, b) => a - b)
+    }))
+    setNovoDiaPagamento('')
+  }
+
+  // Remover dia de pagamento
+  const handleRemoveDiaPagamento = (dia: number) => {
+    setPoliticaForm(prev => ({
+      ...prev,
+      forma_pagamento_dias: prev.forma_pagamento_dias.filter(d => d !== dia)
+    }))
+  }
+
   // Salvar politica de compra e calcular sugestoes
   const handleSavePoliticaAndCalculate = async () => {
     if (!fornecedor) return
 
     // Validacao basica
-    if (politicaForm.prazo_estoque <= 0) {
-      showToast('warning', 'Campo obrigatorio', 'Informe o prazo de estoque (dias).')
+    if (politicaForm.forma_pagamento_dias.length === 0) {
+      showToast('warning', 'Campo obrigatorio', 'Adicione pelo menos um prazo de pagamento (ex: 30 dias).')
+      return
+    }
+
+    if (politicaForm.prazo_entrega <= 0) {
+      showToast('warning', 'Campo obrigatorio', 'Informe o prazo de entrega (dias).')
       return
     }
 
@@ -373,14 +400,14 @@ function GerarAutomaticoContent() {
       const empresaId = empresa?.id || user?.empresa_id
       if (!empresaId) throw new Error('Empresa nao encontrada')
 
-      // Inserir politica de compra
+      // Inserir politica de compra (prazo_estoque e calculado automaticamente pelo banco)
       const { data: novaPolitica, error: insertError } = await supabase
         .from('politica_compra')
         .insert({
           empresa_id: empresaId,
           fornecedor_id: fornecedor.id,
-          prazo_estoque: politicaForm.prazo_estoque,
-          prazo_entrega: politicaForm.prazo_entrega || null,
+          forma_pagamento_dias: politicaForm.forma_pagamento_dias,
+          prazo_entrega: politicaForm.prazo_entrega,
           valor_minimo: politicaForm.valor_minimo || null,
           desconto: politicaForm.desconto || null,
           status: true,
@@ -804,29 +831,65 @@ function GerarAutomaticoContent() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* Formas de pagamento (dias) */}
+                  <div className="mb-4">
+                    <label className="block text-xs font-medium text-amber-800 mb-1">
+                      Prazos de pagamento (dias) *
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 flex flex-wrap items-center gap-2 min-h-[38px] px-3 py-1.5 border border-amber-300 rounded-lg bg-white">
+                        {politicaForm.forma_pagamento_dias.length === 0 ? (
+                          <span className="text-xs text-amber-400">Adicione os prazos...</span>
+                        ) : (
+                          politicaForm.forma_pagamento_dias.map(dia => (
+                            <span
+                              key={dia}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#336FB6] text-white text-xs rounded-full"
+                            >
+                              {dia}d
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDiaPagamento(dia)}
+                                className="hover:bg-white/20 rounded-full p-0.5"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        value={novoDiaPagamento}
+                        onChange={(e) => setNovoDiaPagamento(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddDiaPagamento())}
+                        placeholder="Ex: 30"
+                        min="1"
+                        className="w-20 px-2 py-1.5 text-sm border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddDiaPagamento}
+                        className="p-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[10px] text-amber-600">Ex: 10, 20, 30 dias. O prazo de estoque e calculado automaticamente.</p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-amber-800 mb-1">
-                        Prazo de estoque (dias) *
+                        Prazo de entrega (dias) *
                       </label>
                       <input
                         type="number"
                         min="1"
-                        value={politicaForm.prazo_estoque}
-                        onChange={(e) => setPoliticaForm(prev => ({ ...prev, prazo_estoque: parseInt(e.target.value) || 0 }))}
-                        className="w-full px-3 py-2 text-sm border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                        placeholder="30"
-                      />
-                      <p className="mt-1 text-[10px] text-amber-600">Dias de estoque que deseja manter</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-amber-800 mb-1">
-                        Prazo de entrega (dias)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
                         value={politicaForm.prazo_entrega}
                         onChange={(e) => setPoliticaForm(prev => ({ ...prev, prazo_entrega: parseInt(e.target.value) || 0 }))}
                         className="w-full px-3 py-2 text-sm border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
