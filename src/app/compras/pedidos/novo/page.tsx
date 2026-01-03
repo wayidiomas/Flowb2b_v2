@@ -341,6 +341,7 @@ function NovoPedidoContent() {
       // Montar payload para API
       const itensPayload = itens.map(item => ({
         descricao: item.descricao,
+        codigoFornecedor: item.codigo_fornecedor || undefined,
         unidade: item.unidade,
         valor: item.valor,
         quantidade: item.quantidade,

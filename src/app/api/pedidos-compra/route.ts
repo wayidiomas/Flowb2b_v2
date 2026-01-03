@@ -6,6 +6,7 @@ import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 // Interface para item do pedido
 interface ItemPedidoRequest {
   descricao: string
+  codigoFornecedor?: string  // Codigo do produto no fornecedor
   unidade: string
   valor: number
   quantidade: number
@@ -103,8 +104,7 @@ function buildBlingPayload(data: PedidoCompraRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const payload: Record<string, any> = {
     data: data.data,
-    totalProdutos: data.totalProdutos,
-    total: data.total,
+    // Nota: totalProdutos e total sao calculados automaticamente pelo Bling
     fornecedor: { id: data.fornecedor_id_bling },
     situacao: { valor: 3 }, // Registrada
     itens: data.itens.map(item => {
@@ -115,6 +115,11 @@ function buildBlingPayload(data: PedidoCompraRequest) {
         valor: item.valor,
         quantidade: item.quantidade,
         aliquotaIPI: item.aliquotaIPI || 0,
+      }
+
+      // Codigo do produto no fornecedor
+      if (item.codigoFornecedor) {
+        itemPayload.codigoFornecedor = item.codigoFornecedor
       }
 
       if (item.produto?.id) {
@@ -152,6 +157,13 @@ function buildBlingPayload(data: PedidoCompraRequest) {
     payload.desconto = {
       valor: data.desconto,
       unidade: 'REAL',
+    }
+  }
+
+  // Tributacao
+  if (data.totalIcms && data.totalIcms > 0) {
+    payload.tributacao = {
+      totalICMS: data.totalIcms,
     }
   }
 
