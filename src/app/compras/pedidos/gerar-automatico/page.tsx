@@ -41,6 +41,133 @@ function CheckIcon() {
   )
 }
 
+function CheckCircleIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  )
+}
+
+function XCircleIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  )
+}
+
+function ExclamationTriangleIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+    </svg>
+  )
+}
+
+function XMarkIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  )
+}
+
+// Tipo para notificacoes
+type ToastType = 'success' | 'error' | 'warning'
+
+interface Toast {
+  type: ToastType
+  title: string
+  message: string
+}
+
+// Componente Toast
+function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => void }) {
+  const styles = {
+    success: {
+      bg: 'bg-green-50',
+      border: 'border-green-200',
+      icon: <CheckCircleIcon />,
+      iconColor: 'text-green-500',
+      titleColor: 'text-green-800',
+      textColor: 'text-green-700',
+    },
+    error: {
+      bg: 'bg-red-50',
+      border: 'border-red-200',
+      icon: <XCircleIcon />,
+      iconColor: 'text-red-500',
+      titleColor: 'text-red-800',
+      textColor: 'text-red-700',
+    },
+    warning: {
+      bg: 'bg-yellow-50',
+      border: 'border-yellow-200',
+      icon: <ExclamationTriangleIcon />,
+      iconColor: 'text-yellow-500',
+      titleColor: 'text-yellow-800',
+      textColor: 'text-yellow-700',
+    },
+  }
+
+  const style = styles[toast.type]
+
+  return (
+    <div className={`fixed top-4 right-4 z-50 max-w-md w-full ${style.bg} ${style.border} border rounded-lg shadow-lg p-4 animate-slide-in`}>
+      <div className="flex items-start gap-3">
+        <div className={style.iconColor}>{style.icon}</div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold ${style.titleColor}`}>{toast.title}</p>
+          <p className={`text-sm mt-1 ${style.textColor} whitespace-pre-wrap`}>{toast.message}</p>
+        </div>
+        <button
+          onClick={onClose}
+          className={`${style.textColor} hover:opacity-70 transition-opacity`}
+        >
+          <XMarkIcon />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Funcao para parsear erros do Bling
+function parseBlingError(errorMessage: string, details?: string): string {
+  const errorMappings: Record<string, string> = {
+    'fornecedor': 'O fornecedor selecionado nao esta cadastrado ou sincronizado corretamente no Bling.',
+    'produto': 'Um ou mais produtos nao estao cadastrados no Bling. Sincronize os produtos primeiro.',
+    'token': 'Sessao do Bling expirada. Reconecte sua conta Bling nas configuracoes.',
+    'autoriza': 'Sem autorizacao para criar pedidos. Verifique as permissoes da sua conta Bling.',
+    'limite': 'Limite de requisicoes atingido. Aguarde alguns minutos e tente novamente.',
+    'obrigatorio': 'Campos obrigatorios nao preenchidos. Verifique os dados do pedido.',
+    'valor': 'Valores invalidos detectados. Verifique precos e quantidades.',
+    'data': 'Data invalida. Verifique as datas informadas.',
+  }
+
+  const lowerError = errorMessage.toLowerCase()
+
+  for (const [key, message] of Object.entries(errorMappings)) {
+    if (lowerError.includes(key)) {
+      return message
+    }
+  }
+
+  if (details) {
+    try {
+      const parsed = JSON.parse(details)
+      if (parsed.error?.fields) {
+        const fields = Object.keys(parsed.error.fields).join(', ')
+        return `Campos com problema: ${fields}. Verifique os dados informados.`
+      }
+    } catch {
+      // Ignorar erro de parse
+    }
+  }
+
+  return errorMessage
+}
+
 interface SugestaoItem {
   produto_id: number
   id_produto_bling?: number
@@ -91,6 +218,20 @@ function GerarAutomaticoContent() {
   const [calculando, setCalculando] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<Toast | null>(null)
+
+  // Auto-fechar toast apos 6 segundos
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 6000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
+
+  // Funcao para mostrar notificacao
+  const showToast = (type: ToastType, title: string, message: string) => {
+    setToast({ type, title, message })
+  }
 
   // Estados para modal de fornecedor
   const [showFornecedorModal, setShowFornecedorModal] = useState(false)
@@ -286,10 +427,39 @@ function GerarAutomaticoContent() {
 
   // Criar pedido com as sugestoes - Envia para Bling e depois salva localmente
   const handleCriarPedido = async () => {
-    if (sugestoes.length === 0 || !fornecedor) return
+    // Validacao: Sugestoes existentes
+    if (sugestoes.length === 0) {
+      showToast('warning', 'Sem produtos', 'Nenhum produto para criar pedido. Calcule a sugestao primeiro.')
+      return
+    }
 
+    // Validacao: Fornecedor selecionado
+    if (!fornecedor) {
+      showToast('warning', 'Fornecedor obrigatorio', 'Selecione um fornecedor para criar o pedido.')
+      return
+    }
+
+    // Validacao: Fornecedor sincronizado com Bling
     if (!fornecedor.id_bling) {
-      setError('Este fornecedor nao esta sincronizado com o Bling. Sincronize o fornecedor primeiro.')
+      showToast('error', 'Fornecedor nao sincronizado',
+        'Este fornecedor nao esta sincronizado com o Bling.\n\nVa em Cadastros > Fornecedores e sincronize o fornecedor primeiro.')
+      return
+    }
+
+    // Validacao: Produtos com ID Bling
+    const produtosSemBling = sugestoes.filter(item => !item.id_produto_bling)
+    if (produtosSemBling.length > 0) {
+      const nomes = produtosSemBling.map(p => p.nome).slice(0, 3).join(', ')
+      const mais = produtosSemBling.length > 3 ? ` e mais ${produtosSemBling.length - 3}` : ''
+      showToast('warning', 'Produtos nao sincronizados',
+        `${produtosSemBling.length} produto(s) nao estao sincronizados com o Bling:\n${nomes}${mais}\n\nO pedido sera criado, mas esses produtos nao serao vinculados no Bling.`)
+    }
+
+    // Validacao: Quantidades validas
+    const itensInvalidos = sugestoes.filter(item => item.quantidade_ajustada <= 0 || item.valor_unitario <= 0)
+    if (itensInvalidos.length > 0) {
+      showToast('error', 'Valores invalidos',
+        'Existem produtos com quantidade ou valor zerado/negativo. Corrija antes de continuar.')
       return
     }
 
@@ -339,14 +509,30 @@ function GerarAutomaticoContent() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Erro ao criar pedido')
+        // Parsear erro do Bling para mensagem amigavel
+        const errorMessage = parseBlingError(result.error || 'Erro desconhecido', result.details)
+        showToast('error', 'Erro ao criar pedido', errorMessage)
+        return
       }
 
-      alert(`Pedido ${result.numero || result.id} criado com sucesso!`)
-      router.push(`/compras/pedidos/${result.id}/editar`)
+      // Verificar se houve warning (pedido criado no Bling mas erro local)
+      if (result.warning) {
+        showToast('warning', 'Pedido criado com ressalvas',
+          `Pedido #${result.numero || result.bling_id} criado no Bling.\n\n${result.warning}`)
+      } else {
+        showToast('success', 'Pedido criado com sucesso!',
+          `Pedido #${result.numero || result.id} foi registrado no Bling e salvo localmente.`)
+      }
+
+      // Aguardar um pouco para o usuario ver a mensagem antes de redirecionar
+      setTimeout(() => {
+        router.push(`/compras/pedidos/${result.id}/editar`)
+      }, 2000)
+
     } catch (err) {
       console.error('Erro ao criar pedido:', err)
-      setError(err instanceof Error ? err.message : 'Erro ao criar pedido de compra')
+      const errorMessage = err instanceof Error ? err.message : 'Erro inesperado ao criar pedido.'
+      showToast('error', 'Erro ao criar pedido', parseBlingError(errorMessage))
     } finally {
       setSaving(false)
     }
@@ -377,6 +563,9 @@ function GerarAutomaticoContent() {
 
   return (
     <DashboardLayout>
+      {/* Toast de notificacao */}
+      {toast && <ToastNotification toast={toast} onClose={() => setToast(null)} />}
+
       <PageHeader
         title="Gerar Pedido Automatico"
         subtitle={fornecedor?.nome || ''}
