@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 
+// Interface para o produto retornado pela API Python
+interface ProdutoAPI {
+  produto_id: number
+  id_produto_bling: number
+  codigo_do_produto?: string
+  nome_produto?: string
+  quantidade_vendida: number
+  periodo_venda: number
+  sugestao_quantidade: number
+  valor_total_produto: number
+  valor_total_produto_com_desconto: number
+  estoque_atual: number
+  itens_por_caixa: number
+  valor_de_compra?: number
+}
+
+// Interface para a politica retornada pela API Python
+interface PoliticaAPI {
+  politica_id: number
+  melhor_politica: boolean
+  produtos: ProdutoAPI[]
+  valor_total_pedido_sem_desconto: number
+  valor_total_pedido_com_desconto: number
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -50,7 +75,67 @@ export async function POST(request: NextRequest) {
       }
 
       const data = await response.json()
-      return NextResponse.json(data)
+
+      // A API Python retorna uma lista de politicas de compra
+      // Cada politica tem um array de produtos
+      // Precisamos encontrar a melhor politica e extrair os produtos
+
+      // Se for um objeto com message, retornar erro
+      if (data.message) {
+        return NextResponse.json({ error: data.message }, { status: 400 })
+      }
+
+      // Se for um array vazio
+      if (!Array.isArray(data) || data.length === 0) {
+        return NextResponse.json({
+          sugestoes: [],
+          message: 'Nenhuma sugestao encontrada'
+        })
+      }
+
+      // Encontrar a melhor politica (marcada com melhor_politica: true)
+      // ou usar a primeira se nenhuma estiver marcada
+      const politicas = data as PoliticaAPI[]
+      const melhorPolitica = politicas.find(p => p.melhor_politica) || politicas[0]
+
+      if (!melhorPolitica.produtos || melhorPolitica.produtos.length === 0) {
+        return NextResponse.json({
+          sugestoes: [],
+          message: 'Nenhum produto na sugestao'
+        })
+      }
+
+      // Transformar os produtos para o formato esperado pelo frontend
+      const sugestoes = melhorPolitica.produtos.map((produto: ProdutoAPI) => {
+        // Calcular media de venda por dia
+        const mediaVendaDia = produto.periodo_venda > 0
+          ? produto.quantidade_vendida / produto.periodo_venda
+          : 0
+
+        // Calcular valor unitario
+        const valorUnitario = produto.sugestao_quantidade > 0
+          ? produto.valor_total_produto / produto.sugestao_quantidade
+          : (produto.valor_de_compra || 0)
+
+        return {
+          produto_id: produto.produto_id,
+          id_produto_bling: produto.id_produto_bling,
+          codigo: produto.codigo_do_produto || '-',
+          nome: produto.nome_produto || produto.codigo_do_produto || `Produto ${produto.produto_id}`,
+          estoque_atual: produto.estoque_atual || 0,
+          media_venda_dia: Number(mediaVendaDia.toFixed(2)),
+          quantidade_sugerida: produto.sugestao_quantidade,
+          valor_unitario: Number(valorUnitario.toFixed(2)),
+          valor_total: produto.valor_total_produto,
+          itens_por_caixa: produto.itens_por_caixa || 1
+        }
+      })
+
+      return NextResponse.json({
+        sugestoes,
+        politica_id: melhorPolitica.politica_id,
+        valor_total_pedido: melhorPolitica.valor_total_pedido_com_desconto
+      })
     } catch (fetchError) {
       clearTimeout(timeoutId)
 
