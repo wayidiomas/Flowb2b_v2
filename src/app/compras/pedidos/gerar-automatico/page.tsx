@@ -240,6 +240,16 @@ function GerarAutomaticoContent() {
   const [fornecedorSearch, setFornecedorSearch] = useState('')
   const [selectedFornecedor, setSelectedFornecedor] = useState<FornecedorOption | null>(null)
 
+  // Estados para criacao de politica de compra inline
+  const [showPoliticaForm, setShowPoliticaForm] = useState(false)
+  const [savingPolitica, setSavingPolitica] = useState(false)
+  const [politicaForm, setPoliticaForm] = useState({
+    prazo_estoque: 30,
+    prazo_entrega: 7,
+    valor_minimo: 0,
+    desconto: 0,
+  })
+
   // Buscar fornecedores para o modal
   const fetchFornecedores = async () => {
     if (!user?.id) return
@@ -346,6 +356,110 @@ function GerarAutomaticoContent() {
     f.nome.toLowerCase().includes(fornecedorSearch.toLowerCase()) ||
     (f.cnpj && f.cnpj.includes(fornecedorSearch))
   )
+
+  // Salvar politica de compra e calcular sugestoes
+  const handleSavePoliticaAndCalculate = async () => {
+    if (!fornecedor) return
+
+    // Validacao basica
+    if (politicaForm.prazo_estoque <= 0) {
+      showToast('warning', 'Campo obrigatorio', 'Informe o prazo de estoque (dias).')
+      return
+    }
+
+    setSavingPolitica(true)
+
+    try {
+      const empresaId = empresa?.id || user?.empresa_id
+      if (!empresaId) throw new Error('Empresa nao encontrada')
+
+      // Inserir politica de compra
+      const { data: novaPolitica, error: insertError } = await supabase
+        .from('politica_compra')
+        .insert({
+          empresa_id: empresaId,
+          fornecedor_id: fornecedor.id,
+          prazo_estoque: politicaForm.prazo_estoque,
+          prazo_entrega: politicaForm.prazo_entrega || null,
+          valor_minimo: politicaForm.valor_minimo || null,
+          desconto: politicaForm.desconto || null,
+          status: true,
+        })
+        .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque')
+        .single()
+
+      if (insertError) throw insertError
+
+      // Atualizar estado da politica
+      setPolitica(novaPolitica)
+      setShowPoliticaForm(false)
+      showToast('success', 'Politica criada!', 'Calculando sugestoes de compra...')
+
+      // Aguardar um pouco e depois calcular sugestoes automaticamente
+      setTimeout(() => {
+        calcularSugestoesComPolitica(novaPolitica)
+      }, 500)
+
+    } catch (err) {
+      console.error('Erro ao salvar politica:', err)
+      showToast('error', 'Erro ao salvar', 'Nao foi possivel criar a politica de compra.')
+    } finally {
+      setSavingPolitica(false)
+    }
+  }
+
+  // Calcular sugestoes com politica especifica (usado apos criar politica)
+  const calcularSugestoesComPolitica = async (pol: PoliticaCompra) => {
+    if (!fornecedor) return
+
+    setCalculando(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/pedidos-compra/calcular-automatico', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fornecedor_id: fornecedor.id })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erro ao calcular sugestoes')
+      }
+
+      const data = await response.json()
+
+      if (!data.sugestoes || data.sugestoes.length === 0) {
+        setError('Nenhuma sugestao de compra para este fornecedor. Verifique se ha produtos com vendas recentes.')
+        setCalculando(false)
+        return
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sugestoesCalculadas: SugestaoItem[] = data.sugestoes.map((item: any) => ({
+        produto_id: item.produto_id,
+        id_produto_bling: item.id_produto_bling,
+        codigo: item.codigo || '-',
+        nome: item.nome,
+        estoque_atual: item.estoque_atual || 0,
+        media_vendas_dia: item.media_venda_dia || 0,
+        sugestao_quantidade: item.quantidade_sugerida,
+        quantidade_ajustada: item.quantidade_sugerida,
+        valor_unitario: item.valor_unitario,
+        valor_total: item.valor_total,
+        itens_por_caixa: item.itens_por_caixa || 1,
+        caixas: Math.ceil(item.quantidade_sugerida / (item.itens_por_caixa || 1))
+      }))
+
+      sugestoesCalculadas.sort((a, b) => b.valor_total - a.valor_total)
+      setSugestoes(sugestoesCalculadas)
+    } catch (err) {
+      console.error('Erro ao calcular sugestoes:', err)
+      setError(err instanceof Error ? err.message : 'Erro ao calcular sugestoes de compra')
+    } finally {
+      setCalculando(false)
+    }
+  }
 
   // Calcular sugestoes via API externa
   const calcularSugestoes = async () => {
@@ -650,32 +764,138 @@ function GerarAutomaticoContent() {
             </div>
           )}
 
-          {/* Alerta: Politica de compra nao configurada */}
+          {/* Formulario inline: Criar politica de compra rapidamente */}
           {fornecedor && !politica && (
             <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 text-amber-500">
-                  <ExclamationTriangleIcon />
+              {!showPoliticaForm ? (
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 text-amber-500">
+                    <ExclamationTriangleIcon />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-amber-800">
+                      Politica de compra necessaria
+                    </p>
+                    <p className="mt-1 text-sm text-amber-700">
+                      Configure rapidamente os parametros de compra para gerar o pedido automaticamente.
+                    </p>
+                    <button
+                      onClick={() => setShowPoliticaForm(true)}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                      Configurar agora
+                    </button>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-amber-800">
-                    Politica de compra nao configurada
-                  </p>
-                  <p className="mt-1 text-sm text-amber-700">
-                    Para gerar pedidos automaticos, e necessario configurar uma politica de compra para este fornecedor.
-                    A politica define o prazo de estoque, prazo de entrega, desconto e valor minimo.
-                  </p>
-                  <Link
-                    href={`/suprimentos/politica-compra?fornecedor_id=${fornecedor.id}`}
-                    className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-amber-800 hover:text-amber-900"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    Configurar politica de compra
-                  </Link>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-semibold text-amber-800">
+                      Configurar Politica de Compra
+                    </h4>
+                    <button
+                      onClick={() => setShowPoliticaForm(false)}
+                      className="text-amber-600 hover:text-amber-800"
+                    >
+                      <XMarkIcon />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-amber-800 mb-1">
+                        Prazo de estoque (dias) *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={politicaForm.prazo_estoque}
+                        onChange={(e) => setPoliticaForm(prev => ({ ...prev, prazo_estoque: parseInt(e.target.value) || 0 }))}
+                        className="w-full px-3 py-2 text-sm border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        placeholder="30"
+                      />
+                      <p className="mt-1 text-[10px] text-amber-600">Dias de estoque que deseja manter</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-amber-800 mb-1">
+                        Prazo de entrega (dias)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={politicaForm.prazo_entrega}
+                        onChange={(e) => setPoliticaForm(prev => ({ ...prev, prazo_entrega: parseInt(e.target.value) || 0 }))}
+                        className="w-full px-3 py-2 text-sm border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        placeholder="7"
+                      />
+                      <p className="mt-1 text-[10px] text-amber-600">Tempo medio de entrega</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-amber-800 mb-1">
+                        Valor minimo (R$)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={politicaForm.valor_minimo}
+                        onChange={(e) => setPoliticaForm(prev => ({ ...prev, valor_minimo: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-2 text-sm border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        placeholder="0"
+                      />
+                      <p className="mt-1 text-[10px] text-amber-600">Pedido minimo do fornecedor</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-amber-800 mb-1">
+                        Desconto (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={politicaForm.desconto}
+                        onChange={(e) => setPoliticaForm(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-2 text-sm border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        placeholder="0"
+                      />
+                      <p className="mt-1 text-[10px] text-amber-600">Desconto padrao negociado</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-end gap-3">
+                    <button
+                      onClick={() => setShowPoliticaForm(false)}
+                      className="px-4 py-2 text-sm font-medium text-amber-700 hover:text-amber-900"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleSavePoliticaAndCalculate}
+                      disabled={savingPolitica}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#4684CD] hover:bg-[#3A75B8] rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {savingPolitica ? (
+                        <>
+                          <SpinnerIcon />
+                          Salvando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckIcon />
+                          Salvar e Calcular
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -709,18 +929,17 @@ function GerarAutomaticoContent() {
                   Politica de compra necessaria
                 </h3>
                 <p className="text-sm text-gray-500 max-w-md mx-auto mb-4">
-                  Para calcular sugestoes de compra automaticamente, e necessario
-                  configurar uma politica de compra para este fornecedor.
+                  Configure os parametros de compra acima para gerar o pedido automaticamente.
                 </p>
-                <Link
-                  href={`/suprimentos/politica-compra?fornecedor_id=${fornecedor?.id}`}
+                <button
+                  onClick={() => setShowPoliticaForm(true)}
                   className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#4684CD] hover:bg-[#3A75B8] rounded-lg transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                   </svg>
-                  Configurar Politica de Compra
-                </Link>
+                  Configurar Agora
+                </button>
               </>
             )}
           </div>
