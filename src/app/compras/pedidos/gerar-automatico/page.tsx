@@ -203,7 +203,31 @@ interface PoliticaCompra {
   desconto: number | null
   prazo_entrega: number | null
   prazo_estoque: number | null
+  bonificacao?: number | null
+  forma_pagamento_dias?: number[]
+  observacao?: string
 }
+
+interface ParcelaPedido {
+  valor: number
+  data_vencimento: string
+  observacao?: string
+  forma_pagamento_id?: number
+  forma_pagamento_id_bling?: number
+  forma_pagamento_nome?: string
+}
+
+interface FormaPagamento {
+  id: number
+  id_bling: number | null
+  descricao: string
+}
+
+// Opcoes de frete
+const FRETE_OPTIONS = [
+  { value: 'CIF', label: 'CIF - Frete por conta do remetente' },
+  { value: 'FOB', label: 'FOB - Frete por conta do destinatario' },
+]
 
 function GerarAutomaticoContent() {
   const { user, empresa } = useAuth()
@@ -212,13 +236,17 @@ function GerarAutomaticoContent() {
   const fornecedorIdParam = searchParams.get('fornecedor_id')
 
   const [fornecedor, setFornecedor] = useState<Fornecedor | null>(null)
-  const [politica, setPolitica] = useState<PoliticaCompra | null>(null)
+  const [politicas, setPoliticas] = useState<PoliticaCompra[]>([])
+  const [politicaSelecionadaId, setPoliticaSelecionadaId] = useState<number | null>(null)
   const [sugestoes, setSugestoes] = useState<SugestaoItem[]>([])
   const [loading, setLoading] = useState(true)
   const [calculando, setCalculando] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
+
+  // Politica selecionada (computed)
+  const politica = politicas.find(p => p.id === politicaSelecionadaId) || politicas[0] || null
 
   // Auto-fechar toast apos 6 segundos
   useEffect(() => {
@@ -250,6 +278,15 @@ function GerarAutomaticoContent() {
     desconto: 0,
   })
   const [novoDiaPagamento, setNovoDiaPagamento] = useState('')
+
+  // Estados para detalhes do pedido
+  const [frete, setFrete] = useState(0)
+  const [fretePorConta, setFretePorConta] = useState('CIF')
+  const [observacoes, setObservacoes] = useState('')
+  const [observacoesInternas, setObservacoesInternas] = useState('Pedido gerado automaticamente')
+  const [dataPrevista, setDataPrevista] = useState('')
+  const [parcelas, setParcelas] = useState<ParcelaPedido[]>([])
+  const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([])
 
   // Buscar fornecedores para o modal
   const fetchFornecedores = async () => {
@@ -311,16 +348,19 @@ function GerarAutomaticoContent() {
 
         setFornecedor(fornecedorData)
 
-        // Buscar politica de compra
-        const { data: politicaData } = await supabase
+        // Buscar TODAS as politicas de compra do fornecedor
+        const { data: politicasData } = await supabase
           .from('politica_compra')
-          .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque')
+          .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque, bonificacao, forma_pagamento_dias, observacao')
           .eq('fornecedor_id', parseInt(fornecedorIdParam))
           .eq('empresa_id', empresaId)
           .eq('status', true)
-          .single()
+          .order('id', { ascending: false })
 
-        setPolitica(politicaData || null)
+        if (politicasData && politicasData.length > 0) {
+          setPoliticas(politicasData)
+          setPoliticaSelecionadaId(politicasData[0].id)
+        }
         setLoading(false)
       } catch (err) {
         console.error('Erro ao carregar dados:', err)
@@ -337,18 +377,25 @@ function GerarAutomaticoContent() {
     setFornecedor({ id: selected.id, id_bling: selected.id_bling || null, nome: selected.nome, cnpj: selected.cnpj || null })
     setShowFornecedorModal(false)
 
-    // Buscar politica do fornecedor selecionado
+    // Resetar politicas anteriores
+    setPoliticas([])
+    setPoliticaSelecionadaId(null)
+
+    // Buscar TODAS as politicas do fornecedor selecionado
     const empresaId = empresa?.id || user?.empresa_id
     if (empresaId) {
-      const { data: politicaData } = await supabase
+      const { data: politicasData } = await supabase
         .from('politica_compra')
-        .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque')
+        .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque, bonificacao, forma_pagamento_dias, observacao')
         .eq('fornecedor_id', selected.id)
         .eq('empresa_id', empresaId)
         .eq('status', true)
-        .single()
+        .order('id', { ascending: false })
 
-      setPolitica(politicaData || null)
+      if (politicasData && politicasData.length > 0) {
+        setPoliticas(politicasData)
+        setPoliticaSelecionadaId(politicasData[0].id)
+      }
     }
   }
 
@@ -377,6 +424,83 @@ function GerarAutomaticoContent() {
       ...prev,
       forma_pagamento_dias: prev.forma_pagamento_dias.filter(d => d !== dia)
     }))
+  }
+
+  // Buscar formas de pagamento
+  const fetchFormasPagamento = async () => {
+    const empresaId = empresa?.id || user?.empresa_id
+    if (!empresaId) return
+
+    const { data } = await supabase
+      .from('formas_de_pagamento')
+      .select('id, id_forma_de_pagamento_bling, descricao')
+      .eq('empresa_id', empresaId)
+      .order('descricao')
+
+    if (data) {
+      setFormasPagamento(data.map(f => ({
+        id: f.id,
+        id_bling: f.id_forma_de_pagamento_bling,
+        descricao: f.descricao
+      })))
+    }
+  }
+
+  // Carregar formas de pagamento quando sugestoes sao calculadas
+  useEffect(() => {
+    if (sugestoes.length > 0 && formasPagamento.length === 0) {
+      fetchFormasPagamento()
+      // Calcular data prevista baseada na politica
+      if (politica?.prazo_entrega) {
+        const data = new Date(Date.now() + politica.prazo_entrega * 24 * 60 * 60 * 1000)
+        setDataPrevista(data.toISOString().split('T')[0])
+      }
+    }
+  }, [sugestoes.length, formasPagamento.length, politica?.prazo_entrega])
+
+  // Adicionar parcela
+  const handleAddParcela = () => {
+    const novaParcela: ParcelaPedido = {
+      valor: 0,
+      data_vencimento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    }
+    setParcelas([...parcelas, novaParcela])
+  }
+
+  // Remover parcela
+  const handleRemoveParcela = (index: number) => {
+    setParcelas(parcelas.filter((_, i) => i !== index))
+  }
+
+  // Atualizar parcela
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleUpdateParcela = (index: number, field: keyof ParcelaPedido, value: any) => {
+    const newParcelas = [...parcelas]
+    newParcelas[index] = { ...newParcelas[index], [field]: value }
+
+    // Se mudou a forma de pagamento, atualizar os campos relacionados
+    if (field === 'forma_pagamento_id' && value) {
+      const formaSelecionada = formasPagamento.find(f => f.id === Number(value))
+      if (formaSelecionada) {
+        newParcelas[index].forma_pagamento_id_bling = formaSelecionada.id_bling || undefined
+        newParcelas[index].forma_pagamento_nome = formaSelecionada.descricao
+      }
+    }
+
+    setParcelas(newParcelas)
+  }
+
+  // Distribuir valor total nas parcelas
+  const handleDistribuirParcelas = () => {
+    if (parcelas.length === 0) return
+    const valorPorParcela = Number((valorTotalComFrete / parcelas.length).toFixed(2))
+    const newParcelas = parcelas.map((p, i) => ({
+      ...p,
+      valor: i === parcelas.length - 1
+        ? Number((valorTotalComFrete - valorPorParcela * (parcelas.length - 1)).toFixed(2))
+        : valorPorParcela
+    }))
+    setParcelas(newParcelas)
   }
 
   // Salvar politica de compra e calcular sugestoes
@@ -418,8 +542,9 @@ function GerarAutomaticoContent() {
 
       if (insertError) throw insertError
 
-      // Atualizar estado da politica
-      setPolitica(novaPolitica)
+      // Adicionar nova politica ao array e seleciona-la
+      setPoliticas(prev => [novaPolitica, ...prev])
+      setPoliticaSelecionadaId(novaPolitica.id)
       setShowPoliticaForm(false)
       showToast('success', 'Politica criada!', 'Calculando sugestoes de compra...')
 
@@ -468,7 +593,7 @@ function GerarAutomaticoContent() {
         produto_id: item.produto_id,
         id_produto_bling: item.id_produto_bling,
         codigo: item.codigo || '-',
-        nome: item.nome,
+        nome: item.nome || item.codigo || `Produto ${item.produto_id}`,
         estoque_atual: item.estoque_atual || 0,
         media_vendas_dia: item.media_venda_dia || 0,
         sugestao_quantidade: item.quantidade_sugerida,
@@ -537,7 +662,7 @@ function GerarAutomaticoContent() {
         produto_id: item.produto_id,
         id_produto_bling: item.id_produto_bling,
         codigo: item.codigo || '-',
-        nome: item.nome,
+        nome: item.nome || item.codigo || `Produto ${item.produto_id}`,
         estoque_atual: item.estoque_atual || 0,
         media_vendas_dia: item.media_venda_dia || 0,
         sugestao_quantidade: item.quantidade_sugerida,
@@ -625,11 +750,6 @@ function GerarAutomaticoContent() {
     try {
       const dataAtual = new Date().toISOString().split('T')[0]
 
-      // Calcular data prevista baseada na politica
-      const dataPrevista = politica?.prazo_entrega
-        ? new Date(Date.now() + politica.prazo_entrega * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-        : undefined
-
       // Montar payload para API
       const itensPayload = sugestoes.map(item => ({
         descricao: item.nome,
@@ -643,16 +763,28 @@ function GerarAutomaticoContent() {
         } : undefined
       }))
 
+      // Montar parcelas para API (com forma de pagamento Bling)
+      const parcelasPayload = parcelas.length > 0 ? parcelas.map(p => ({
+        valor: p.valor,
+        dataVencimento: p.data_vencimento,
+        observacao: p.observacao || '',
+        formaPagamento: p.forma_pagamento_id_bling ? { id: p.forma_pagamento_id_bling } : undefined
+      })) : undefined
+
       const payload = {
         fornecedor_id: fornecedor.id,
         fornecedor_id_bling: fornecedor.id_bling,
         data: dataAtual,
-        dataPrevista: dataPrevista,
+        dataPrevista: dataPrevista || undefined,
         totalProdutos: valorTotal,
-        total: valorTotal,
+        total: valorTotalComFrete,
         desconto: politica?.desconto || 0,
-        observacoesInternas: 'Pedido gerado automaticamente',
-        itens: itensPayload
+        frete: frete,
+        fretePorConta: fretePorConta,
+        observacoes: observacoes || undefined,
+        observacoesInternas: observacoesInternas || undefined,
+        itens: itensPayload,
+        parcelas: parcelasPayload
       }
 
       // Chamar API que integra com Bling
@@ -705,6 +837,8 @@ function GerarAutomaticoContent() {
   // Calcular totais
   const totalItens = sugestoes.reduce((acc, item) => acc + item.quantidade_ajustada, 0)
   const valorTotal = sugestoes.reduce((acc, item) => acc + item.valor_total, 0)
+  const valorTotalComFrete = valorTotal + frete
+  const totalParcelas = parcelas.reduce((acc, p) => acc + p.valor, 0)
 
   if (loading) {
     return (
@@ -780,15 +914,115 @@ function GerarAutomaticoContent() {
             )}
           </div>
 
-          {/* Info da politica */}
-          {politica && (
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm text-blue-700">
-                <strong>Politica de compra:</strong>{' '}
-                {politica.valor_minimo && `Valor minimo: ${formatCurrency(politica.valor_minimo)}`}
-                {politica.desconto && ` | Desconto: ${politica.desconto}%`}
-                {politica.prazo_estoque && ` | Prazo estoque: ${politica.prazo_estoque} dias`}
-              </p>
+          {/* Selecao de politica de compra */}
+          {politicas.length > 0 && (
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-blue-800">
+                  Politica de compra
+                  {politicas.length > 1 && (
+                    <span className="ml-2 text-xs font-normal text-blue-600">
+                      ({politicas.length} disponiveis)
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {/* Se houver mais de uma politica, mostrar seletor */}
+              {politicas.length > 1 ? (
+                <div className="space-y-2">
+                  {politicas.map((pol) => (
+                    <label
+                      key={pol.id}
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                        politicaSelecionadaId === pol.id
+                          ? 'bg-white border-blue-400 shadow-sm'
+                          : 'bg-blue-50/50 border-blue-200 hover:bg-white hover:border-blue-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="politica"
+                        value={pol.id}
+                        checked={politicaSelecionadaId === pol.id}
+                        onChange={() => setPoliticaSelecionadaId(pol.id)}
+                        className="mt-0.5 w-4 h-4 text-blue-600 border-blue-300 focus:ring-blue-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap text-sm text-blue-800">
+                          {pol.valor_minimo ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 rounded-full text-xs">
+                              Min: {formatCurrency(pol.valor_minimo)}
+                            </span>
+                          ) : null}
+                          {pol.desconto ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
+                              -{pol.desconto}%
+                            </span>
+                          ) : null}
+                          {pol.prazo_entrega ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">
+                              Entrega: {pol.prazo_entrega}d
+                            </span>
+                          ) : null}
+                          {pol.prazo_estoque ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs">
+                              Estoque: {pol.prazo_estoque}d
+                            </span>
+                          ) : null}
+                          {pol.bonificacao ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs">
+                              Bonif: {pol.bonificacao}%
+                            </span>
+                          ) : null}
+                          {pol.forma_pagamento_dias && pol.forma_pagamento_dias.length > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs">
+                              Pgto: {pol.forma_pagamento_dias.join('/')}d
+                            </span>
+                          )}
+                        </div>
+                        {pol.observacao && (
+                          <p className="mt-1 text-xs text-blue-600 truncate">{pol.observacao}</p>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                // Uma unica politica
+                <div className="flex items-center gap-2 flex-wrap text-sm text-blue-700">
+                  {politica?.valor_minimo ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 rounded-full text-xs">
+                      Min: {formatCurrency(politica.valor_minimo)}
+                    </span>
+                  ) : null}
+                  {politica?.desconto ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
+                      -{politica.desconto}%
+                    </span>
+                  ) : null}
+                  {politica?.prazo_entrega ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">
+                      Entrega: {politica.prazo_entrega}d
+                    </span>
+                  ) : null}
+                  {politica?.prazo_estoque ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs">
+                      Estoque: {politica.prazo_estoque}d
+                    </span>
+                  ) : null}
+                  {politica?.bonificacao ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs">
+                      Bonif: {politica.bonificacao}%
+                    </span>
+                  ) : null}
+                  {politica?.forma_pagamento_dias && politica.forma_pagamento_dias.length > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs">
+                      Pgto: {politica.forma_pagamento_dias.join('/')}d
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1087,6 +1321,175 @@ function GerarAutomaticoContent() {
               </table>
             </div>
 
+            {/* Secao de detalhes do pedido */}
+            <div className="px-6 py-5 border-t border-[#EDEDED]">
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Detalhes do Pedido</h3>
+
+              {/* Data prevista e Frete */}
+              <div className="grid grid-cols-4 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Data Prevista</label>
+                  <input
+                    type="date"
+                    value={dataPrevista}
+                    onChange={(e) => setDataPrevista(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Frete (R$)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={frete}
+                    onChange={(e) => setFrete(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Frete por Conta</label>
+                  <select
+                    value={fretePorConta}
+                    onChange={(e) => setFretePorConta(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                  >
+                    {FRETE_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <div className="text-right w-full">
+                    <p className="text-xs text-gray-500">Total com frete</p>
+                    <p className="text-lg font-semibold text-[#336FB6]">{formatCurrency(valorTotalComFrete)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Observacoes */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Observacoes (visivel ao fornecedor)</label>
+                  <textarea
+                    value={observacoes}
+                    onChange={(e) => setObservacoes(e.target.value)}
+                    placeholder="Observacoes para o fornecedor..."
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#336FB6] resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Observacoes Internas</label>
+                  <textarea
+                    value={observacoesInternas}
+                    onChange={(e) => setObservacoesInternas(e.target.value)}
+                    placeholder="Observacoes internas..."
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#336FB6] resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Parcelas */}
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium text-gray-900">Parcelas</h4>
+                  <div className="flex items-center gap-2">
+                    {parcelas.length > 0 && (
+                      <button
+                        onClick={handleDistribuirParcelas}
+                        className="text-xs text-[#336FB6] hover:underline"
+                      >
+                        Distribuir valor
+                      </button>
+                    )}
+                    <button
+                      onClick={handleAddParcela}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-[#336FB6] bg-blue-50 rounded hover:bg-blue-100 transition-colors"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                      Adicionar
+                    </button>
+                  </div>
+                </div>
+
+                {parcelas.length === 0 ? (
+                  <p className="text-xs text-gray-500 italic">Nenhuma parcela adicionada. Se deixar vazio, o pedido sera criado sem parcelas definidas.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {parcelas.map((parcela, index) => (
+                      <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                        <div className="flex-1 grid grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-[10px] text-gray-500 mb-0.5">Valor (R$)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={parcela.valor}
+                              onChange={(e) => handleUpdateParcela(index, 'valor', Number(e.target.value))}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-gray-500 mb-0.5">Vencimento</label>
+                            <input
+                              type="date"
+                              value={parcela.data_vencimento}
+                              onChange={(e) => handleUpdateParcela(index, 'data_vencimento', e.target.value)}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-gray-500 mb-0.5">Forma de Pagamento</label>
+                            <select
+                              value={parcela.forma_pagamento_id || ''}
+                              onChange={(e) => handleUpdateParcela(index, 'forma_pagamento_id', e.target.value ? Number(e.target.value) : null)}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                            >
+                              <option value="">Selecione...</option>
+                              {formasPagamento.map(fp => (
+                                <option key={fp.id} value={fp.id}>{fp.descricao}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex items-end">
+                            <button
+                              onClick={() => handleRemoveParcela(index)}
+                              className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                              title="Remover parcela"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Total das parcelas */}
+                    <div className="flex justify-end pt-2 border-t border-gray-200">
+                      <div className="text-right">
+                        <span className="text-xs text-gray-500">Total das parcelas: </span>
+                        <span className={`text-sm font-semibold ${Math.abs(totalParcelas - valorTotalComFrete) > 0.01 ? 'text-amber-600' : 'text-gray-900'}`}>
+                          {formatCurrency(totalParcelas)}
+                        </span>
+                        {Math.abs(totalParcelas - valorTotalComFrete) > 0.01 && (
+                          <span className="ml-2 text-xs text-amber-600">
+                            (diferenca: {formatCurrency(valorTotalComFrete - totalParcelas)})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Footer com totais */}
             <div className="px-6 py-4 bg-[#FBFBFB] border-t border-[#EDEDED] flex items-center justify-between">
               <div className="flex items-center gap-6">
@@ -1099,8 +1502,12 @@ function GerarAutomaticoContent() {
                   <p className="text-lg font-semibold text-[#344054]">{totalItens}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Valor total</p>
-                  <p className="text-lg font-semibold text-[#336FB6]">{formatCurrency(valorTotal)}</p>
+                  <p className="text-xs text-gray-500">Valor produtos</p>
+                  <p className="text-lg font-semibold text-[#667085]">{formatCurrency(valorTotal)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Total do pedido</p>
+                  <p className="text-lg font-semibold text-[#336FB6]">{formatCurrency(valorTotalComFrete)}</p>
                 </div>
               </div>
 
