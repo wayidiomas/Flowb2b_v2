@@ -1006,19 +1006,20 @@ function GerarAutomaticoContent() {
             )}
           </div>
 
-          {/* Selecao de politica de compra - APOS o calculo mostra apenas as aplicaveis */}
+          {/* Selecao de politica de compra - APOS o calculo mostra aplicaveis e nao aplicaveis */}
           {politicasAplicaveis.length > 0 && (
             <div className="mt-4 p-4 bg-blue-50 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold text-blue-800">
-                  Politicas aplicaveis
+                  Politicas de compra
                   <span className="ml-2 text-xs font-normal text-blue-600">
-                    ({politicasAplicaveis.length} {politicasAplicaveis.length === 1 ? 'atingiu' : 'atingiram'} valor minimo)
+                    ({politicasAplicaveis.length} de {politicas.length} {politicasAplicaveis.length === 1 ? 'atingiu' : 'atingiram'} valor minimo)
                   </span>
                 </p>
               </div>
 
               <div className="space-y-2">
+                {/* Politicas aplicaveis (atingiram valor minimo) */}
                 {politicasAplicaveis.map((polAplicavel) => {
                   // Buscar detalhes da politica no Supabase
                   const polDetalhes = politicas.find(p => p.id === polAplicavel.politica_id)
@@ -1082,6 +1083,74 @@ function GerarAutomaticoContent() {
                     </label>
                   )
                 })}
+
+                {/* Politicas NAO aplicaveis (nao atingiram valor minimo) */}
+                {(() => {
+                  // Calcular valor total atual (da melhor politica aplicavel)
+                  const melhorPolitica = politicasAplicaveis.find(p => p.melhor_politica) || politicasAplicaveis[0]
+                  const valorTotalAtual = melhorPolitica?.valor_total_sem_desconto || 0
+
+                  // Filtrar politicas que NAO estao nas aplicaveis
+                  const politicasNaoAplicaveis = politicas.filter(
+                    pol => !politicasAplicaveis.some(pa => pa.politica_id === pol.id)
+                  )
+
+                  if (politicasNaoAplicaveis.length === 0) return null
+
+                  return (
+                    <>
+                      {/* Separador */}
+                      <div className="flex items-center gap-2 pt-2">
+                        <div className="flex-1 h-px bg-gray-300" />
+                        <span className="text-xs text-gray-400">Nao atingiram valor minimo</span>
+                        <div className="flex-1 h-px bg-gray-300" />
+                      </div>
+
+                      {politicasNaoAplicaveis.map((polNaoAplicavel) => {
+                        const valorFaltante = (polNaoAplicavel.valor_minimo || 0) - valorTotalAtual
+                        return (
+                          <div
+                            key={polNaoAplicavel.id}
+                            className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50 opacity-60"
+                          >
+                            <input
+                              type="radio"
+                              disabled
+                              className="mt-0.5 w-4 h-4 text-gray-300 border-gray-300 cursor-not-allowed"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
+                                    Falta {formatCurrency(valorFaltante > 0 ? valorFaltante : 0)}
+                                  </span>
+                                  {polNaoAplicavel.desconto ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs">
+                                      -{polNaoAplicavel.desconto}%
+                                    </span>
+                                  ) : null}
+                                  {polNaoAplicavel.prazo_entrega ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs">
+                                      Entrega: {polNaoAplicavel.prazo_entrega}d
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-medium text-gray-400">
+                                    Min: {formatCurrency(polNaoAplicavel.valor_minimo || 0)}
+                                  </p>
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-400">
+                                Adicione mais produtos para atingir esta politica
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </>
+                  )
+                })()}
               </div>
             </div>
           )}
