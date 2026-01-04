@@ -208,6 +208,26 @@ interface PoliticaCompra {
   observacao?: string
 }
 
+// Politica aplicavel retornada pela API de calculo (atingiu valor minimo)
+interface PoliticaAplicavel {
+  politica_id: number
+  melhor_politica: boolean
+  valor_total_sem_desconto: number
+  valor_total_com_desconto: number
+  sugestoes: Array<{
+    produto_id: number
+    id_produto_bling: number
+    codigo: string
+    nome: string
+    estoque_atual: number
+    media_venda_dia: number
+    quantidade_sugerida: number
+    valor_unitario: number
+    valor_total: number
+    itens_por_caixa: number
+  }>
+}
+
 interface ParcelaPedido {
   valor: number
   data_vencimento: string
@@ -245,7 +265,10 @@ function GerarAutomaticoContent() {
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
 
-  // Politica selecionada (computed)
+  // Politicas aplicaveis (retornadas pela API de calculo - atingiram valor minimo)
+  const [politicasAplicaveis, setPoliticasAplicaveis] = useState<PoliticaAplicavel[]>([])
+
+  // Politica selecionada (computed) - busca nas politicas do Supabase para ter detalhes completos
   const politica = politicas.find(p => p.id === politicaSelecionadaId) || politicas[0] || null
 
   // Auto-fechar toast apos 6 segundos
@@ -675,23 +698,39 @@ function GerarAutomaticoContent() {
     }
   }
 
+  // Funcao auxiliar para converter sugestoes da API para SugestaoItem
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapSugestoesAPI = (sugestoesAPI: any[]): SugestaoItem[] => {
+    return sugestoesAPI.map(item => ({
+      produto_id: item.produto_id,
+      id_produto_bling: item.id_produto_bling,
+      codigo: item.codigo || '-',
+      nome: item.nome || item.codigo || `Produto ${item.produto_id}`,
+      estoque_atual: item.estoque_atual || 0,
+      media_vendas_dia: item.media_venda_dia || 0,
+      sugestao_quantidade: item.quantidade_sugerida,
+      quantidade_ajustada: item.quantidade_sugerida,
+      valor_unitario: item.valor_unitario,
+      valor_total: item.valor_total,
+      itens_por_caixa: item.itens_por_caixa || 1,
+      caixas: Math.ceil(item.quantidade_sugerida / (item.itens_por_caixa || 1))
+    })).sort((a, b) => b.valor_total - a.valor_total)
+  }
+
+  // Quando trocar de politica, atualizar sugestoes com os produtos daquela politica
+  useEffect(() => {
+    if (politicasAplicaveis.length > 0 && politicaSelecionadaId) {
+      const politicaAtual = politicasAplicaveis.find(p => p.politica_id === politicaSelecionadaId)
+      if (politicaAtual) {
+        const sugestoesAtualizadas = mapSugestoesAPI(politicaAtual.sugestoes)
+        setSugestoes(sugestoesAtualizadas)
+      }
+    }
+  }, [politicaSelecionadaId, politicasAplicaveis])
+
   // Calcular sugestoes via API externa
   const calcularSugestoes = async () => {
     if (!fornecedor) return
-
-    // Validacao: Politica de compra obrigatoria
-    if (!politica) {
-      showToast('error', 'Politica de compra obrigatoria',
-        'Este fornecedor nao possui uma politica de compra configurada.\n\nO calculo automatico precisa do prazo de estoque e prazo de entrega para funcionar corretamente.')
-      return
-    }
-
-    // Validacao: Prazo de estoque obrigatorio
-    if (!politica.prazo_estoque) {
-      showToast('warning', 'Politica incompleta',
-        'A politica de compra nao possui o prazo de estoque configurado.\n\nEsse valor e essencial para calcular a quantidade ideal de produtos.')
-      return
-    }
 
     setCalculando(true)
     setError(null)
@@ -710,33 +749,25 @@ function GerarAutomaticoContent() {
 
       const data = await response.json()
 
-      // Verificar se retornou sugestoes
-      if (!data.sugestoes || data.sugestoes.length === 0) {
-        setError('Nenhuma sugestao de compra para este fornecedor. Verifique se ha produtos com vendas recentes.')
+      // Verificar se retornou politicas aplicaveis
+      if (!data.politicas_aplicaveis || data.politicas_aplicaveis.length === 0) {
+        setError('Nenhuma politica de compra atingiu o valor minimo para este fornecedor.')
         setCalculando(false)
         return
       }
 
-      // Mapear resposta da API para SugestaoItem
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sugestoesCalculadas: SugestaoItem[] = data.sugestoes.map((item: any) => ({
-        produto_id: item.produto_id,
-        id_produto_bling: item.id_produto_bling,
-        codigo: item.codigo || '-',
-        nome: item.nome || item.codigo || `Produto ${item.produto_id}`,
-        estoque_atual: item.estoque_atual || 0,
-        media_vendas_dia: item.media_venda_dia || 0,
-        sugestao_quantidade: item.quantidade_sugerida,
-        quantidade_ajustada: item.quantidade_sugerida,
-        valor_unitario: item.valor_unitario,
-        valor_total: item.valor_total,
-        itens_por_caixa: item.itens_por_caixa || 1,
-        caixas: Math.ceil(item.quantidade_sugerida / (item.itens_por_caixa || 1))
-      }))
+      // Armazenar todas as politicas aplicaveis
+      setPoliticasAplicaveis(data.politicas_aplicaveis)
 
-      // Ordenar por valor total decrescente
-      sugestoesCalculadas.sort((a, b) => b.valor_total - a.valor_total)
-      setSugestoes(sugestoesCalculadas)
+      // Selecionar a melhor politica (ou a primeira)
+      const melhorPoliticaId = data.politica_selecionada_id || data.politicas_aplicaveis[0].politica_id
+      setPoliticaSelecionadaId(melhorPoliticaId)
+
+      // Mostrar quantas politicas foram aplicaveis
+      if (data.politicas_aplicaveis.length > 1) {
+        showToast('success', 'Calculo concluido!',
+          `${data.politicas_aplicaveis.length} politicas atingiram o valor minimo. Voce pode alternar entre elas.`)
+      }
     } catch (err) {
       console.error('Erro ao calcular sugestoes:', err)
       setError(err instanceof Error ? err.message : 'Erro ao calcular sugestoes de compra')
@@ -975,28 +1006,27 @@ function GerarAutomaticoContent() {
             )}
           </div>
 
-          {/* Selecao de politica de compra */}
-          {politicas.length > 0 && (
+          {/* Selecao de politica de compra - APOS o calculo mostra apenas as aplicaveis */}
+          {politicasAplicaveis.length > 0 && (
             <div className="mt-4 p-4 bg-blue-50 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold text-blue-800">
-                  Politica de compra
-                  {politicas.length > 1 && (
-                    <span className="ml-2 text-xs font-normal text-blue-600">
-                      ({politicas.length} disponiveis)
-                    </span>
-                  )}
+                  Politicas aplicaveis
+                  <span className="ml-2 text-xs font-normal text-blue-600">
+                    ({politicasAplicaveis.length} {politicasAplicaveis.length === 1 ? 'atingiu' : 'atingiram'} valor minimo)
+                  </span>
                 </p>
               </div>
 
-              {/* Se houver mais de uma politica, mostrar seletor */}
-              {politicas.length > 1 ? (
-                <div className="space-y-2">
-                  {politicas.map((pol) => (
+              <div className="space-y-2">
+                {politicasAplicaveis.map((polAplicavel) => {
+                  // Buscar detalhes da politica no Supabase
+                  const polDetalhes = politicas.find(p => p.id === polAplicavel.politica_id)
+                  return (
                     <label
-                      key={pol.id}
+                      key={polAplicavel.politica_id}
                       className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                        politicaSelecionadaId === pol.id
+                        politicaSelecionadaId === polAplicavel.politica_id
                           ? 'bg-white border-blue-400 shadow-sm'
                           : 'bg-blue-50/50 border-blue-200 hover:bg-white hover:border-blue-300'
                       }`}
@@ -1004,86 +1034,67 @@ function GerarAutomaticoContent() {
                       <input
                         type="radio"
                         name="politica"
-                        value={pol.id}
-                        checked={politicaSelecionadaId === pol.id}
-                        onChange={() => setPoliticaSelecionadaId(pol.id)}
+                        value={polAplicavel.politica_id}
+                        checked={politicaSelecionadaId === polAplicavel.politica_id}
+                        onChange={() => setPoliticaSelecionadaId(polAplicavel.politica_id)}
                         className="mt-0.5 w-4 h-4 text-blue-600 border-blue-300 focus:ring-blue-500"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap text-sm text-blue-800">
-                          {pol.valor_minimo ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 rounded-full text-xs">
-                              Min: {formatCurrency(pol.valor_minimo)}
-                            </span>
-                          ) : null}
-                          {pol.desconto ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
-                              -{pol.desconto}%
-                            </span>
-                          ) : null}
-                          {pol.prazo_entrega ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">
-                              Entrega: {pol.prazo_entrega}d
-                            </span>
-                          ) : null}
-                          {pol.prazo_estoque ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs">
-                              Estoque: {pol.prazo_estoque}d
-                            </span>
-                          ) : null}
-                          {pol.bonificacao ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs">
-                              Bonif: {pol.bonificacao}%
-                            </span>
-                          ) : null}
-                          {pol.forma_pagamento_dias && pol.forma_pagamento_dias.length > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs">
-                              Pgto: {pol.forma_pagamento_dias.join('/')}d
-                            </span>
-                          )}
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {polAplicavel.melhor_politica && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500 text-white rounded-full text-xs font-medium">
+                                Melhor opcao
+                              </span>
+                            )}
+                            {polDetalhes?.desconto ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
+                                -{polDetalhes.desconto}%
+                              </span>
+                            ) : null}
+                            {polDetalhes?.prazo_entrega ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">
+                                Entrega: {polDetalhes.prazo_entrega}d
+                              </span>
+                            ) : null}
+                            {polDetalhes?.forma_pagamento_dias && polDetalhes.forma_pagamento_dias.length > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs">
+                                Pgto: {polDetalhes.forma_pagamento_dias.join('/')}d
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-blue-800">
+                              {formatCurrency(polAplicavel.valor_total_com_desconto)}
+                            </p>
+                            {polAplicavel.valor_total_sem_desconto !== polAplicavel.valor_total_com_desconto && (
+                              <p className="text-xs text-gray-500 line-through">
+                                {formatCurrency(polAplicavel.valor_total_sem_desconto)}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        {pol.observacao && (
-                          <p className="mt-1 text-xs text-blue-600 truncate">{pol.observacao}</p>
-                        )}
+                        <p className="text-xs text-gray-500">
+                          {polAplicavel.sugestoes.length} produtos
+                          {polDetalhes?.valor_minimo ? ` • Min: ${formatCurrency(polDetalhes.valor_minimo)}` : ''}
+                        </p>
                       </div>
                     </label>
-                  ))}
-                </div>
-              ) : (
-                // Uma unica politica
-                <div className="flex items-center gap-2 flex-wrap text-sm text-blue-700">
-                  {politica?.valor_minimo ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 rounded-full text-xs">
-                      Min: {formatCurrency(politica.valor_minimo)}
-                    </span>
-                  ) : null}
-                  {politica?.desconto ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
-                      -{politica.desconto}%
-                    </span>
-                  ) : null}
-                  {politica?.prazo_entrega ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs">
-                      Entrega: {politica.prazo_entrega}d
-                    </span>
-                  ) : null}
-                  {politica?.prazo_estoque ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs">
-                      Estoque: {politica.prazo_estoque}d
-                    </span>
-                  ) : null}
-                  {politica?.bonificacao ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs">
-                      Bonif: {politica.bonificacao}%
-                    </span>
-                  ) : null}
-                  {politica?.forma_pagamento_dias && politica.forma_pagamento_dias.length > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs">
-                      Pgto: {politica.forma_pagamento_dias.join('/')}d
-                    </span>
-                  )}
-                </div>
-              )}
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Antes do calculo: mostra politicas disponiveis (informativo) */}
+          {politicasAplicaveis.length === 0 && politicas.length > 0 && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600 mb-2">
+                {politicas.length} {politicas.length === 1 ? 'politica disponivel' : 'politicas disponiveis'}
+              </p>
+              <p className="text-xs text-gray-500">
+                Clique em &quot;Calcular Sugestoes&quot; para ver quais atingem o valor minimo.
+              </p>
             </div>
           )}
 

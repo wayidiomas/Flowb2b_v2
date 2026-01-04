@@ -93,48 +93,56 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // Encontrar a melhor politica (marcada com melhor_politica: true)
-      // ou usar a primeira se nenhuma estiver marcada
-      const politicas = data as PoliticaAPI[]
-      const melhorPolitica = politicas.find(p => p.melhor_politica) || politicas[0]
+      // A API Python retorna TODAS as politicas que atingiram valor minimo
+      // Cada politica tem seus produtos calculados
+      const politicasAPI = data as PoliticaAPI[]
 
-      if (!melhorPolitica.produtos || melhorPolitica.produtos.length === 0) {
-        return NextResponse.json({
-          sugestoes: [],
-          message: 'Nenhum produto na sugestao'
+      // Transformar cada politica para o formato do frontend
+      const politicasAplicaveis = politicasAPI.map(pol => {
+        const sugestoes = pol.produtos.map((produto: ProdutoAPI) => {
+          // Calcular media de venda por dia
+          const mediaVendaDia = produto.periodo_venda > 0
+            ? produto.quantidade_vendida / produto.periodo_venda
+            : 0
+
+          // Calcular valor unitario
+          const valorUnitario = produto.sugestao_quantidade > 0
+            ? produto.valor_total_produto / produto.sugestao_quantidade
+            : (produto.valor_de_compra || 0)
+
+          return {
+            produto_id: produto.produto_id,
+            id_produto_bling: produto.id_produto_bling,
+            codigo: produto.codigo_do_produto || '-',
+            nome: produto.nome_produto || produto.codigo_do_produto || `Produto ${produto.produto_id}`,
+            estoque_atual: produto.estoque_atual || 0,
+            media_venda_dia: Number(mediaVendaDia.toFixed(2)),
+            quantidade_sugerida: produto.sugestao_quantidade,
+            valor_unitario: Number(valorUnitario.toFixed(2)),
+            valor_total: produto.valor_total_produto,
+            itens_por_caixa: produto.itens_por_caixa || 1
+          }
         })
-      }
-
-      // Transformar os produtos para o formato esperado pelo frontend
-      const sugestoes = melhorPolitica.produtos.map((produto: ProdutoAPI) => {
-        // Calcular media de venda por dia
-        const mediaVendaDia = produto.periodo_venda > 0
-          ? produto.quantidade_vendida / produto.periodo_venda
-          : 0
-
-        // Calcular valor unitario
-        const valorUnitario = produto.sugestao_quantidade > 0
-          ? produto.valor_total_produto / produto.sugestao_quantidade
-          : (produto.valor_de_compra || 0)
 
         return {
-          produto_id: produto.produto_id,
-          id_produto_bling: produto.id_produto_bling,
-          codigo: produto.codigo_do_produto || '-',
-          nome: produto.nome_produto || produto.codigo_do_produto || `Produto ${produto.produto_id}`,
-          estoque_atual: produto.estoque_atual || 0,
-          media_venda_dia: Number(mediaVendaDia.toFixed(2)),
-          quantidade_sugerida: produto.sugestao_quantidade,
-          valor_unitario: Number(valorUnitario.toFixed(2)),
-          valor_total: produto.valor_total_produto,
-          itens_por_caixa: produto.itens_por_caixa || 1
+          politica_id: pol.politica_id,
+          melhor_politica: pol.melhor_politica,
+          valor_total_sem_desconto: pol.valor_total_pedido_sem_desconto,
+          valor_total_com_desconto: pol.valor_total_pedido_com_desconto,
+          sugestoes
         }
       })
 
+      // Encontrar a melhor politica para pre-selecionar
+      const melhorPolitica = politicasAplicaveis.find(p => p.melhor_politica) || politicasAplicaveis[0]
+
       return NextResponse.json({
-        sugestoes,
-        politica_id: melhorPolitica.politica_id,
-        valor_total_pedido: melhorPolitica.valor_total_pedido_com_desconto
+        politicas_aplicaveis: politicasAplicaveis,
+        politica_selecionada_id: melhorPolitica?.politica_id || null,
+        // Retrocompatibilidade: retorna sugestoes da melhor politica
+        sugestoes: melhorPolitica?.sugestoes || [],
+        politica_id: melhorPolitica?.politica_id,
+        valor_total_pedido: melhorPolitica?.valor_total_com_desconto
       })
     } catch (fetchError) {
       clearTimeout(timeoutId)
