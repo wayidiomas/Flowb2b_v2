@@ -458,11 +458,72 @@ function GerarAutomaticoContent() {
     }
   }, [sugestoes.length, formasPagamento.length, politica?.prazo_entrega])
 
-  // Adicionar parcela
+  // Gerar parcelas baseado nos dias da politica de compra
+  const handleGerarParcelasPolitica = () => {
+    if (!politica?.forma_pagamento_dias || politica.forma_pagamento_dias.length === 0) return
+
+    const dias = politica.forma_pagamento_dias
+    const quantidade = dias.length
+    const valorPorParcela = Number((valorTotalComFrete / quantidade).toFixed(2))
+    const hoje = new Date()
+
+    const novasParcelas: ParcelaPedido[] = dias.map((diasVencimento, i) => {
+      const dataVencimento = new Date(hoje.getTime() + diasVencimento * 24 * 60 * 60 * 1000)
+
+      // Ultima parcela pega o resto para evitar centavos perdidos
+      const valorParcela = i === quantidade - 1
+        ? Number((valorTotalComFrete - valorPorParcela * (quantidade - 1)).toFixed(2))
+        : valorPorParcela
+
+      return {
+        valor: valorParcela,
+        data_vencimento: dataVencimento.toISOString().split('T')[0],
+      }
+    })
+
+    setParcelas(novasParcelas)
+  }
+
+  // Gerar parcelas com quantidade fixa (atalhos rapidos: 1x, 3x, 6x, etc)
+  const handleGerarParcelas = (quantidade: number) => {
+    const valorPorParcela = Number((valorTotalComFrete / quantidade).toFixed(2))
+    const hoje = new Date()
+
+    const novasParcelas: ParcelaPedido[] = Array.from({ length: quantidade }, (_, i) => {
+      // A vista = hoje, parcelado = 30, 60, 90 dias...
+      const diasParaVencimento = quantidade === 1 ? 0 : (i + 1) * 30
+      const dataVencimento = new Date(hoje.getTime() + diasParaVencimento * 24 * 60 * 60 * 1000)
+
+      // Ultima parcela pega o resto para evitar centavos perdidos
+      const valorParcela = i === quantidade - 1
+        ? Number((valorTotalComFrete - valorPorParcela * (quantidade - 1)).toFixed(2))
+        : valorPorParcela
+
+      return {
+        valor: valorParcela,
+        data_vencimento: dataVencimento.toISOString().split('T')[0],
+      }
+    })
+
+    setParcelas(novasParcelas)
+  }
+
+  // Adicionar parcela individual (modo personalizado)
   const handleAddParcela = () => {
+    // Calcula a proxima data baseada na ultima parcela ou 30 dias a partir de hoje
+    const ultimaParcela = parcelas[parcelas.length - 1]
+    let proximaData: Date
+
+    if (ultimaParcela) {
+      proximaData = new Date(ultimaParcela.data_vencimento)
+      proximaData.setDate(proximaData.getDate() + 30)
+    } else {
+      proximaData = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    }
+
     const novaParcela: ParcelaPedido = {
       valor: 0,
-      data_vencimento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      data_vencimento: proximaData.toISOString().split('T')[0],
     }
     setParcelas([...parcelas, novaParcela])
   }
@@ -1397,27 +1458,68 @@ function GerarAutomaticoContent() {
                   <h4 className="text-sm font-medium text-gray-900">Parcelas</h4>
                   <div className="flex items-center gap-2">
                     {parcelas.length > 0 && (
+                      <>
+                        <button
+                          onClick={handleDistribuirParcelas}
+                          className="text-xs text-[#336FB6] hover:underline"
+                        >
+                          Redistribuir
+                        </button>
+                        <button
+                          onClick={() => setParcelas([])}
+                          className="text-xs text-red-500 hover:underline"
+                        >
+                          Limpar
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Atalhos de parcelamento */}
+                <div className="mb-4">
+                  <p className="text-xs text-gray-500 mb-2">Gerar parcelas rapidamente:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {/* Botao da politica - se tiver forma_pagamento_dias */}
+                    {politica?.forma_pagamento_dias && politica.forma_pagamento_dias.length > 0 && (
                       <button
-                        onClick={handleDistribuirParcelas}
-                        className="text-xs text-[#336FB6] hover:underline"
+                        onClick={handleGerarParcelasPolitica}
+                        className="px-3 py-1.5 text-xs font-medium text-white bg-[#336FB6] rounded-lg hover:bg-[#2A5A94] transition-colors"
                       >
-                        Distribuir valor
+                        Usar politica ({politica.forma_pagamento_dias.length}x: {politica.forma_pagamento_dias.join('/')}d)
                       </button>
                     )}
+                    {/* Atalhos comuns */}
+                    {[
+                      { label: 'A vista', qtd: 1 },
+                      { label: '3x', qtd: 3 },
+                      { label: '6x', qtd: 6 },
+                      { label: '10x', qtd: 10 },
+                      { label: '12x', qtd: 12 },
+                    ].map(({ label, qtd }) => (
+                      <button
+                        key={qtd}
+                        onClick={() => handleGerarParcelas(qtd)}
+                        className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    {/* Botao personalizado */}
                     <button
                       onClick={handleAddParcela}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-[#336FB6] bg-blue-50 rounded hover:bg-blue-100 transition-colors"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#336FB6] bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
                     >
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                       </svg>
-                      Adicionar
+                      Manual
                     </button>
                   </div>
                 </div>
 
                 {parcelas.length === 0 ? (
-                  <p className="text-xs text-gray-500 italic">Nenhuma parcela adicionada. Se deixar vazio, o pedido sera criado sem parcelas definidas.</p>
+                  <p className="text-xs text-gray-500 italic">Selecione uma opcao acima para gerar as parcelas automaticamente.</p>
                 ) : (
                   <div className="space-y-2">
                     {parcelas.map((parcela, index) => (
