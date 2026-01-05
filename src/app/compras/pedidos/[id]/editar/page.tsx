@@ -166,11 +166,6 @@ export default function EditarPedidoCompraPage() {
             setItens(itensFormatados)
           }
 
-          // Carregar parcelas
-          if (p.parcelas) {
-            setParcelas(p.parcelas)
-          }
-
           // Carregar politicas do fornecedor
           if (p.fornecedor_id) {
             const { data: pols } = await supabase
@@ -183,21 +178,54 @@ export default function EditarPedidoCompraPage() {
               setPoliticas(pols)
             }
           }
-        }
 
-        // Carregar formas de pagamento (incluindo id_bling para integracao)
-        const { data: formas } = await supabase
-          .from('formas_de_pagamento')
-          .select('id, id_forma_de_pagamento_bling, descricao')
-          .eq('empresa_id', empresaId)
-          .order('descricao')
+          // Carregar formas de pagamento ANTES de processar parcelas
+          const { data: formas } = await supabase
+            .from('formas_de_pagamento')
+            .select('id, id_forma_de_pagamento_bling, descricao')
+            .eq('empresa_id', empresaId)
+            .order('descricao')
 
-        if (formas) {
-          setFormasPagamento(formas.map(f => ({
-            id: f.id,
-            id_bling: f.id_forma_de_pagamento_bling,
-            descricao: f.descricao
-          })))
+          if (formas) {
+            const formasFormatadas = formas.map(f => ({
+              id: f.id,
+              id_bling: f.id_forma_de_pagamento_bling,
+              descricao: f.descricao
+            }))
+            setFormasPagamento(formasFormatadas)
+
+            // Criar mapa de Bling ID -> ID interno
+            const blingToInternalMap = new Map<number, number>()
+            formas.forEach(f => {
+              if (f.id_forma_de_pagamento_bling) {
+                blingToInternalMap.set(f.id_forma_de_pagamento_bling, f.id)
+              }
+            })
+
+            // Carregar parcelas com mapeamento de forma de pagamento
+            if (p.parcelas && p.parcelas.length > 0) {
+              const parcelasFormatadas = p.parcelas.map((parcela: any) => {
+                // O forma_pagamento_id da RPC e o Bling ID, precisamos converter
+                const blingId = parcela.forma_pagamento_id
+                const idInterno = blingId ? blingToInternalMap.get(blingId) : undefined
+                const formaEncontrada = formasFormatadas.find(f => f.id_bling === blingId)
+
+                return {
+                  id: parcela.id,
+                  valor: parcela.valor,
+                  data_vencimento: parcela.data_vencimento,
+                  observacao: parcela.observacao || '',
+                  forma_pagamento_id: idInterno,
+                  forma_pagamento_id_bling: blingId,
+                  forma_pagamento_nome: formaEncontrada?.descricao,
+                }
+              })
+              setParcelas(parcelasFormatadas)
+            }
+          } else if (p.parcelas && p.parcelas.length > 0) {
+            // Fallback se nao tiver formas de pagamento
+            setParcelas(p.parcelas)
+          }
         }
 
       } catch (err) {
