@@ -1770,6 +1770,12 @@ function GerarAutomaticoContent() {
                     <p className="text-lg font-semibold text-green-600">-{formatCurrency(valorDesconto)}</p>
                   </div>
                 )}
+                {frete > 0 && fretePorConta !== 'CIF' && fretePorConta !== 'SEM_FRETE' && (
+                  <div>
+                    <p className="text-xs text-gray-500">Frete ({fretePorConta})</p>
+                    <p className="text-lg font-semibold text-[#667085]">+{formatCurrency(frete)}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-gray-500">Total do pedido</p>
                   <p className="text-lg font-semibold text-[#336FB6]">{formatCurrency(valorTotalComFrete)}</p>
