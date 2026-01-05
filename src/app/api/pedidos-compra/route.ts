@@ -12,8 +12,9 @@ interface ItemPedidoRequest {
   valor: number
   quantidade: number
   aliquotaIPI?: number
+  produto_id?: number  // ID interno do Supabase (para FK em itens_pedido_compra)
   produto?: {
-    id: number  // id_produto_bling
+    id: number  // id_produto_bling (para API Bling)
     codigo?: string
   }
 }
@@ -317,6 +318,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Preparar itens para RPC (JSONB - sem JSON.stringify)
+    // produto_id = ID interno Supabase (para FK em itens_pedido_compra)
+    // produto.id = id_produto_bling (para referencia)
     const itensRPC = body.itens.map(item => ({
       descricao: item.descricao,
       codigo_fornecedor: item.codigoFornecedor || item.produto?.codigo || '',
@@ -324,8 +327,9 @@ export async function POST(request: NextRequest) {
       valor: item.valor,
       quantidade: item.quantidade,
       aliquotaIPI: item.aliquotaIPI || 0,
+      produto_id: item.produto_id || null, // ID interno para FK
       produto: item.produto ? {
-        id: item.produto.id,
+        id: item.produto.id, // id_produto_bling
         codigo: item.produto.codigo,
       } : null,
     }))

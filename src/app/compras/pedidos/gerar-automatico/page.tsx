@@ -886,14 +886,17 @@ function GerarAutomaticoContent() {
       const dataAtual = new Date().toISOString().split('T')[0]
 
       // Montar payload para API
+      // produto_id = ID interno do Supabase (para FK)
+      // produto.id = id_produto_bling (para API do Bling)
       const itensPayload = sugestoes.map(item => ({
         descricao: item.nome,
         unidade: 'UN',
         valor: item.valor_unitario,
         quantidade: item.quantidade_ajustada,
         aliquotaIPI: 0,
+        produto_id: item.produto_id, // ID interno Supabase para FK
         produto: item.id_produto_bling ? {
-          id: item.id_produto_bling,
+          id: item.id_produto_bling, // id_produto_bling para API Bling
           codigo: item.codigo
         } : undefined
       }))
