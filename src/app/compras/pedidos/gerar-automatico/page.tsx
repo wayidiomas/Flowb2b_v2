@@ -206,6 +206,7 @@ interface PoliticaCompra {
   bonificacao?: number | null
   forma_pagamento_dias?: number[]
   observacao?: string
+  status?: boolean
 }
 
 // Politica aplicavel retornada pela API de calculo (atingiu valor minimo)
@@ -371,14 +372,13 @@ function GerarAutomaticoContent() {
 
         setFornecedor(fornecedorData)
 
-        // Buscar TODAS as politicas de compra do fornecedor
+        // Buscar TODAS as politicas de compra do fornecedor (ativas e inativas)
         const { data: politicasData } = await supabase
           .from('politica_compra')
-          .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque, bonificacao, forma_pagamento_dias, observacao')
+          .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque, bonificacao, forma_pagamento_dias, observacao, status')
           .eq('fornecedor_id', parseInt(fornecedorIdParam))
           .eq('empresa_id', empresaId)
-          .eq('status', true)
-          .order('id', { ascending: false })
+          .order('valor_minimo', { ascending: true })
 
         if (politicasData && politicasData.length > 0) {
           setPoliticas(politicasData)
@@ -400,20 +400,21 @@ function GerarAutomaticoContent() {
     setFornecedor({ id: selected.id, id_bling: selected.id_bling || null, nome: selected.nome, cnpj: selected.cnpj || null })
     setShowFornecedorModal(false)
 
-    // Resetar politicas anteriores
+    // Resetar politicas e sugestoes anteriores
     setPoliticas([])
     setPoliticaSelecionadaId(null)
+    setPoliticasAplicaveis([])
+    setSugestoes([])
 
-    // Buscar TODAS as politicas do fornecedor selecionado
+    // Buscar TODAS as politicas do fornecedor selecionado (ativas e inativas)
     const empresaId = empresa?.id || user?.empresa_id
     if (empresaId) {
       const { data: politicasData } = await supabase
         .from('politica_compra')
-        .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque, bonificacao, forma_pagamento_dias, observacao')
+        .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque, bonificacao, forma_pagamento_dias, observacao, status')
         .eq('fornecedor_id', selected.id)
         .eq('empresa_id', empresaId)
-        .eq('status', true)
-        .order('id', { ascending: false })
+        .order('valor_minimo', { ascending: true })
 
       if (politicasData && politicasData.length > 0) {
         setPoliticas(politicasData)
@@ -1108,6 +1109,7 @@ function GerarAutomaticoContent() {
 
                       {politicasNaoAplicaveis.map((polNaoAplicavel) => {
                         const valorFaltante = (polNaoAplicavel.valor_minimo || 0) - valorTotalAtual
+                        const isInativa = polNaoAplicavel.status === false
                         return (
                           <div
                             key={polNaoAplicavel.id}
@@ -1121,9 +1123,15 @@ function GerarAutomaticoContent() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-2 mb-1">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
-                                    Falta {formatCurrency(valorFaltante > 0 ? valorFaltante : 0)}
-                                  </span>
+                                  {isInativa ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full text-xs">
+                                      Inativa
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs">
+                                      Falta {formatCurrency(valorFaltante > 0 ? valorFaltante : 0)}
+                                    </span>
+                                  )}
                                   {polNaoAplicavel.desconto ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs">
                                       -{polNaoAplicavel.desconto}%
@@ -1142,7 +1150,7 @@ function GerarAutomaticoContent() {
                                 </div>
                               </div>
                               <p className="text-xs text-gray-400">
-                                Adicione mais produtos para atingir esta politica
+                                {isInativa ? 'Politica desativada' : 'Adicione mais produtos para atingir esta politica'}
                               </p>
                             </div>
                           </div>
