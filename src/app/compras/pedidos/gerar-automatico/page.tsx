@@ -174,6 +174,7 @@ interface SugestaoItem {
   id_produto_bling?: number
   codigo: string
   nome: string
+  ean?: string
   estoque_atual: number
   media_vendas_dia: number
   sugestao_quantidade: number
@@ -696,6 +697,32 @@ function GerarAutomaticoContent() {
     }
   }
 
+  // Funcao auxiliar para converter sugestoes da API para SugestaoItem
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapSugestoesAPI = (sugestoesAPI: any[]): SugestaoItem[] => {
+    return sugestoesAPI.map(item => {
+      const itensPorCaixa = item.itens_por_caixa || 1
+      // Calcula quantidade ajustada como multiplo de itens_por_caixa
+      const caixas = Math.ceil(item.quantidade_sugerida / itensPorCaixa)
+      const quantidadeAjustada = caixas * itensPorCaixa
+      return {
+        produto_id: item.produto_id,
+        id_produto_bling: item.id_produto_bling,
+        codigo: item.codigo || '-',
+        nome: item.nome || item.codigo || `Produto ${item.produto_id}`,
+        ean: item.gtin || item.ean || '',
+        estoque_atual: item.estoque_atual || 0,
+        media_vendas_dia: item.media_venda_dia || 0,
+        sugestao_quantidade: item.quantidade_sugerida,
+        quantidade_ajustada: quantidadeAjustada,
+        valor_unitario: item.valor_unitario,
+        valor_total: quantidadeAjustada * item.valor_unitario,
+        itens_por_caixa: itensPorCaixa,
+        caixas: caixas
+      }
+    }).sort((a, b) => b.valor_total - a.valor_total)
+  }
+
   // Calcular sugestoes com politica especifica (usado apos criar politica)
   const calcularSugestoesComPolitica = async (pol: PoliticaCompra) => {
     if (!fornecedor) return
@@ -723,23 +750,8 @@ function GerarAutomaticoContent() {
         return
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sugestoesCalculadas: SugestaoItem[] = data.sugestoes.map((item: any) => ({
-        produto_id: item.produto_id,
-        id_produto_bling: item.id_produto_bling,
-        codigo: item.codigo || '-',
-        nome: item.nome || item.codigo || `Produto ${item.produto_id}`,
-        estoque_atual: item.estoque_atual || 0,
-        media_vendas_dia: item.media_venda_dia || 0,
-        sugestao_quantidade: item.quantidade_sugerida,
-        quantidade_ajustada: item.quantidade_sugerida,
-        valor_unitario: item.valor_unitario,
-        valor_total: item.valor_total,
-        itens_por_caixa: item.itens_por_caixa || 1,
-        caixas: Math.ceil(item.quantidade_sugerida / (item.itens_por_caixa || 1))
-      }))
-
-      sugestoesCalculadas.sort((a, b) => b.valor_total - a.valor_total)
+      // Usa a funcao auxiliar para converter e ajustar quantidades
+      const sugestoesCalculadas = mapSugestoesAPI(data.sugestoes)
       setSugestoes(sugestoesCalculadas)
     } catch (err) {
       console.error('Erro ao calcular sugestoes:', err)
@@ -748,26 +760,6 @@ function GerarAutomaticoContent() {
       setCalculando(false)
     }
   }
-
-  // Funcao auxiliar para converter sugestoes da API para SugestaoItem
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mapSugestoesAPI = (sugestoesAPI: any[]): SugestaoItem[] => {
-    return sugestoesAPI.map(item => ({
-      produto_id: item.produto_id,
-      id_produto_bling: item.id_produto_bling,
-      codigo: item.codigo || '-',
-      nome: item.nome || item.codigo || `Produto ${item.produto_id}`,
-      estoque_atual: item.estoque_atual || 0,
-      media_vendas_dia: item.media_venda_dia || 0,
-      sugestao_quantidade: item.quantidade_sugerida,
-      quantidade_ajustada: item.quantidade_sugerida,
-      valor_unitario: item.valor_unitario,
-      valor_total: item.valor_total,
-      itens_por_caixa: item.itens_por_caixa || 1,
-      caixas: Math.ceil(item.quantidade_sugerida / (item.itens_por_caixa || 1))
-    })).sort((a, b) => b.valor_total - a.valor_total)
-  }
-
   // Quando trocar de politica, atualizar sugestoes com os produtos daquela politica
   useEffect(() => {
     if (politicasAplicaveis.length > 0 && politicaSelecionadaId) {
@@ -1485,8 +1477,10 @@ function GerarAutomaticoContent() {
                 <thead>
                   <tr className="border-b border-[#EFEFEF] bg-[#F9F9F9]">
                     <th className="px-4 py-3 text-left text-sm font-medium text-[#344054]">Codigo</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-[#344054]">EAN</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-[#344054]">Produto</th>
                     <th className="px-4 py-3 text-center text-sm font-medium text-[#344054]">Estoque</th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-[#344054]">Itens/Cx</th>
                     <th className="px-4 py-3 text-center text-sm font-medium text-[#344054]">Media/dia</th>
                     <th className="px-4 py-3 text-center text-sm font-medium text-[#344054]">Sugestao</th>
                     <th className="px-4 py-3 text-center text-sm font-medium text-[#344054]">Qtd</th>
@@ -1499,10 +1493,12 @@ function GerarAutomaticoContent() {
                   {sugestoes.map((item, index) => (
                     <tr key={item.produto_id} className="border-b border-[#EFEFEF] hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-[#344054]">{item.codigo}</td>
+                      <td className="px-4 py-3 text-sm text-[#667085] font-mono text-xs">{item.ean || '-'}</td>
                       <td className="px-4 py-3 text-sm text-[#344054] max-w-[200px] truncate" title={item.nome}>
                         {item.nome}
                       </td>
                       <td className="px-4 py-3 text-sm text-center text-[#667085]">{item.estoque_atual}</td>
+                      <td className="px-4 py-3 text-sm text-center text-[#667085]">{item.itens_por_caixa}</td>
                       <td className="px-4 py-3 text-sm text-center text-[#667085]">{item.media_vendas_dia}</td>
                       <td className="px-4 py-3 text-sm text-center text-[#4684CD] font-medium">
                         {item.sugestao_quantidade}

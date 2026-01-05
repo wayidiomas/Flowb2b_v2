@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
+import { createServerSupabaseClient } from '@/lib/supabase'
 
 // Interface para o produto retornado pela API Python
 interface ProdutoAPI {
@@ -97,6 +98,26 @@ export async function POST(request: NextRequest) {
       // Cada politica tem seus produtos calculados
       const politicasAPI = data as PoliticaAPI[]
 
+      // Coletar todos os produto_ids unicos para buscar gtin
+      const todosProduotIds = new Set<number>()
+      politicasAPI.forEach(pol => {
+        pol.produtos.forEach(p => todosProduotIds.add(p.produto_id))
+      })
+
+      // Buscar gtin dos produtos no Supabase
+      const supabase = createServerSupabaseClient()
+      const { data: produtosGtin } = await supabase
+        .from('produtos')
+        .select('id, gtin')
+        .in('id', Array.from(todosProduotIds))
+        .eq('empresa_id', user.empresaId)
+
+      // Criar mapa de produto_id -> gtin
+      const gtinMap = new Map<number, string>()
+      produtosGtin?.forEach(p => {
+        if (p.gtin) gtinMap.set(p.id, p.gtin)
+      })
+
       // Transformar cada politica para o formato do frontend
       const politicasAplicaveis = politicasAPI.map(pol => {
         const sugestoes = pol.produtos.map((produto: ProdutoAPI) => {
@@ -115,6 +136,7 @@ export async function POST(request: NextRequest) {
             id_produto_bling: produto.id_produto_bling,
             codigo: produto.codigo_do_produto || '-',
             nome: produto.nome_produto || produto.codigo_do_produto || `Produto ${produto.produto_id}`,
+            gtin: gtinMap.get(produto.produto_id) || '',
             estoque_atual: produto.estoque_atual || 0,
             media_venda_dia: Number(mediaVendaDia.toFixed(2)),
             quantidade_sugerida: produto.sugestao_quantidade,
