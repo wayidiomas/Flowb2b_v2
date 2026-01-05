@@ -9,13 +9,16 @@ import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import type { PedidoCompraDetalhes, FornecedorOption } from '@/types/pedido-compra'
 
-// Status config
+// Status config (valores do Bling para pedido de compra)
+// 0: Em aberto (Registrada)
+// 1: Atendido
+// 2: Cancelado
+// 3: Em andamento
 const STATUS_CONFIG: Record<number, { bg: string; text: string; label: string }> = {
-  1: { bg: 'bg-green-100', text: 'text-green-700', label: 'Emitida' },
-  2: { bg: 'bg-red-100', text: 'text-red-700', label: 'Cancelada' },
-  3: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Registrada' },
-  4: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Aguardando Entrega' },
-  5: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Rascunho' },
+  0: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Em Aberto' },
+  1: { bg: 'bg-green-100', text: 'text-green-700', label: 'Atendido' },
+  2: { bg: 'bg-red-100', text: 'text-red-700', label: 'Cancelado' },
+  3: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Em Andamento' },
 }
 
 // Icons
@@ -138,6 +141,8 @@ export default function VisualizarPedidoPage() {
   const [showShareMenu, setShowShareMenu] = useState(false)
   const [fornecedores, setFornecedores] = useState<FornecedorOption[]>([])
   const [loadingFornecedores, setLoadingFornecedores] = useState(false)
+  const [showStatusMenu, setShowStatusMenu] = useState(false)
+  const [alterandoStatus, setAlterandoStatus] = useState(false)
 
   // Buscar detalhes do pedido
   useEffect(() => {
@@ -361,6 +366,37 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
     router.push(`/compras/pedidos/gerar-automatico?fornecedor_id=${fornecedor.id}`)
   }
 
+  // Alterar status do pedido
+  const handleAlterarStatus = async (novaSituacao: number) => {
+    if (!pedido) return
+
+    setAlterandoStatus(true)
+    setShowStatusMenu(false)
+
+    try {
+      const response = await fetch(`/api/pedidos-compra/${pedido.id}/alterar-status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ situacao: novaSituacao }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        // Atualizar o pedido localmente
+        setPedido(prev => prev ? { ...prev, situacao: novaSituacao as 0 | 1 | 2 | 3 } : null)
+        alert(result.message)
+      } else {
+        alert(`Erro: ${result.error || 'Falha ao alterar status'}`)
+      }
+    } catch (err) {
+      console.error('Erro ao alterar status:', err)
+      alert('Erro ao alterar status do pedido')
+    } finally {
+      setAlterandoStatus(false)
+    }
+  }
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -384,7 +420,7 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
     )
   }
 
-  const statusConfig = STATUS_CONFIG[pedido.situacao] || STATUS_CONFIG[3]
+  const statusConfig = STATUS_CONFIG[pedido.situacao] || STATUS_CONFIG[0]
 
   return (
     <DashboardLayout>
@@ -404,9 +440,62 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
               </h1>
               <p className="text-gray-500">{pedido.fornecedor_nome}</p>
             </div>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusConfig.bg} ${statusConfig.text}`}>
-              {statusConfig.label}
-            </span>
+            {/* Dropdown de Status */}
+            <div className="relative">
+              <button
+                onClick={() => setShowStatusMenu(!showStatusMenu)}
+                disabled={alterandoStatus}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${statusConfig.bg} ${statusConfig.text} hover:opacity-80 transition-opacity cursor-pointer flex items-center gap-1`}
+              >
+                {alterandoStatus ? 'Alterando...' : statusConfig.label}
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showStatusMenu && (
+                <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                  <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase border-b">
+                    Alterar Status
+                  </div>
+                  {pedido.situacao !== 0 && (
+                    <button
+                      onClick={() => handleAlterarStatus(0)}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                      Em Aberto
+                    </button>
+                  )}
+                  {pedido.situacao !== 3 && (
+                    <button
+                      onClick={() => handleAlterarStatus(3)}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                      Em Andamento
+                    </button>
+                  )}
+                  {pedido.situacao !== 1 && (
+                    <button
+                      onClick={() => handleAlterarStatus(1)}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      Atendido
+                    </button>
+                  )}
+                  {pedido.situacao !== 2 && (
+                    <button
+                      onClick={() => handleAlterarStatus(2)}
+                      className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                      Cancelar Pedido
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Acoes principais */}

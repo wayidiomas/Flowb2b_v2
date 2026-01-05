@@ -1,21 +1,24 @@
 // Tipos para o modulo de Pedidos de Compra
+// Valores de situacao do Bling para pedido de compra:
+// 0: Em aberto (Registrada)
+// 1: Atendido
+// 2: Cancelado
+// 3: Em andamento
 
-export type SituacaoPedido = 1 | 2 | 3 | 4 | 5
+export type SituacaoPedido = 0 | 1 | 2 | 3
 
 export const SITUACAO_LABELS: Record<SituacaoPedido, string> = {
-  1: 'Emitida',
-  2: 'Cancelada',
-  3: 'Registrada',
-  4: 'Aguardando Entrega',
-  5: 'Rascunho'
+  0: 'Em Aberto',
+  1: 'Atendido',
+  2: 'Cancelado',
+  3: 'Em Andamento'
 }
 
 export const SITUACAO_COLORS: Record<SituacaoPedido, { bg: string; text: string }> = {
+  0: { bg: 'bg-blue-100', text: 'text-blue-700' },
   1: { bg: 'bg-green-100', text: 'text-green-700' },
   2: { bg: 'bg-red-100', text: 'text-red-700' },
-  3: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  4: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  5: { bg: 'bg-gray-100', text: 'text-gray-700' }
+  3: { bg: 'bg-yellow-100', text: 'text-yellow-700' }
 }
 
 // Item retornado pela RPC de listagem

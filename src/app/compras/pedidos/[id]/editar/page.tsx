@@ -100,7 +100,7 @@ export default function EditarPedidoCompraPage() {
   const [totalIcms, setTotalIcms] = useState(0)
   const [transportador, setTransportador] = useState('')
   const [fretePorConta, setFretePorConta] = useState('CIF')
-  const [situacao, setSituacao] = useState<SituacaoPedido>(5)
+  const [situacao, setSituacao] = useState<SituacaoPedido>(0)
   const [itens, setItens] = useState<ItemPedidoCompra[]>([])
   const [parcelas, setParcelas] = useState<ParcelaPedido[]>([])
 

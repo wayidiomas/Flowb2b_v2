@@ -109,7 +109,7 @@ function buildBlingPayload(data: PedidoCompraRequest) {
     data: data.data,
     // Nota: totalProdutos e total sao calculados automaticamente pelo Bling
     fornecedor: { id: data.fornecedor_id_bling },
-    situacao: { valor: 3 }, // Registrada
+    situacao: { valor: 0 }, // Em aberto (Registrada)
     itens: data.itens.map(item => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const itemPayload: Record<string, any> = {
@@ -353,7 +353,7 @@ export async function POST(request: NextRequest) {
       p_numero: numeroPedido,
       p_data: body.data,
       p_data_prevista: body.dataPrevista || null,
-      p_situacao: 3, // Registrada
+      p_situacao: 0, // Em aberto (Registrada)
       p_total_produtos: body.totalProdutos,
       p_total: body.total,
       p_desconto: body.desconto || 0,
