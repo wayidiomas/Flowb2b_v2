@@ -600,6 +600,18 @@ function GerarAutomaticoContent() {
       if (formaSelecionada) {
         newParcelas[index].forma_pagamento_id_bling = formaSelecionada.id_bling || undefined
         newParcelas[index].forma_pagamento_nome = formaSelecionada.descricao
+
+        // Auto-preencher outras parcelas que ainda nao tem forma de pagamento
+        newParcelas.forEach((parcela, i) => {
+          if (i !== index && !parcela.forma_pagamento_id) {
+            newParcelas[i] = {
+              ...parcela,
+              forma_pagamento_id: Number(value),
+              forma_pagamento_id_bling: formaSelecionada.id_bling || undefined,
+              forma_pagamento_nome: formaSelecionada.descricao,
+            }
+          }
+        })
       }
     }
 
