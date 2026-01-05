@@ -601,9 +601,21 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
       </div>
 
       {/* Conteudo do Pedido (Espelho) */}
-      <div ref={printRef} className="space-y-6 print:space-y-4">
+      <div id="print-area" ref={printRef} className="space-y-6 print:space-y-4">
+        {/* Cabecalho para impressao (so aparece no PDF) */}
+        <div className="hidden print:block mb-6 pb-4 border-b-2 border-gray-800">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Pedido de Compra #{pedido.numero}
+          </h1>
+          <p className="text-lg text-gray-700">{pedido.fornecedor_nome}</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Data: {formatDate(pedido.data)}
+            {pedido.data_prevista && ` | Previsão: ${formatDate(pedido.data_prevista)}`}
+          </p>
+        </div>
+
         {/* Cabecalho do Pedido */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 print:border-0 print:shadow-none">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 print:border-0 print:shadow-none print:p-0">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Fornecedor */}
             <div>
@@ -797,9 +809,11 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
       {/* Estilos de impressao */}
       <style jsx global>{`
         @media print {
+          /* Esconder tudo primeiro */
           body * {
             visibility: hidden;
           }
+          /* Mostrar apenas a area de impressao */
           #print-area, #print-area * {
             visibility: visible;
           }
@@ -808,9 +822,38 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
             left: 0;
             top: 0;
             width: 100%;
+            padding: 20px;
           }
+          /* Esconder elementos com classe no-print */
           .no-print {
             display: none !important;
+          }
+          /* Remover backgrounds e sombras */
+          #print-area .bg-white {
+            background: white !important;
+            box-shadow: none !important;
+          }
+          #print-area .rounded-xl {
+            border-radius: 0 !important;
+          }
+          /* Garantir que a tabela apareca */
+          #print-area table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          #print-area th, #print-area td {
+            border: 1px solid #ddd !important;
+            padding: 8px !important;
+          }
+          #print-area th {
+            background-color: #f5f5f5 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          /* Forcar cores na impressao */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
       `}</style>
