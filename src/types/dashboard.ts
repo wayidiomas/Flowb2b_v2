@@ -89,8 +89,12 @@ export interface ProdutoAltaRotatividade {
 // Variação do valor em estoque
 export interface VariacaoEstoque {
   data: string
+  hora: number
   valor_total: number
   quantidade_total: number
+  quantidade_produtos: number
+  produtos_sem_estoque: number
+  produtos_baixo_estoque: number
   variacao_valor: number | null
   variacao_percentual: number | null
 }

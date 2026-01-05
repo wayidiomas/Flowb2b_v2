@@ -867,8 +867,12 @@ function TopProdutosVendidosChart({ data }: { data: TopProdutoVendidoData[] }) {
 // ===== VARIAÇÃO ESTOQUE CHART =====
 interface VariacaoEstoqueData {
   data: string
+  hora: number
   valor_total: number
   quantidade_total: number
+  quantidade_produtos: number
+  produtos_sem_estoque: number
+  produtos_baixo_estoque: number
   variacao_valor: number | null
   variacao_percentual: number | null
 }
@@ -884,8 +888,8 @@ function VariacaoEstoqueChart({ data, intervalo }: { data: VariacaoEstoqueData[]
     // Formatar label baseado no intervalo
     let label: string
     if (intervalo === 'hoje') {
-      // Para hoje, mostrar apenas "Hoje"
-      label = 'Hoje'
+      // Para hoje, mostrar a hora (ex: "10h", "14h")
+      label = `${String(d.hora).padStart(2, '0')}h`
     } else if (intervalo === '7_dias' || intervalo === '30_dias' || intervalo === 'personalizado') {
       // Para intervalos curtos ou personalizado (até 60 dias), mostrar dia e mês
       label = `${String(day).padStart(2, '0')} ${monthNames[month - 1]}`
