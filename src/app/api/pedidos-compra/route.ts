@@ -382,7 +382,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const pedidoId = typeof pedido === 'object' ? pedido?.id : pedido
+    const pedidoId = typeof pedido === 'object' ? pedido?.pedido_id : pedido
 
     return NextResponse.json({
       success: true,
