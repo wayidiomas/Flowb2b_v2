@@ -224,8 +224,12 @@ function NovoPedidoContent() {
   const [produtoSearch, setProdutoSearch] = useState('')
   const [produtosFornecedor, setProdutosFornecedor] = useState<ProdutoFornecedor[]>([])
   const [loadingProdutos, setLoadingProdutos] = useState(false)
-  const [politica, setPolitica] = useState<PoliticaCompra | null>(null)
+  const [politicas, setPoliticas] = useState<PoliticaCompra[]>([])
+  const [politicaSelecionadaId, setPoliticaSelecionadaId] = useState<number | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
+
+  // Politica selecionada (computed)
+  const politica = politicas.find(p => p.id === politicaSelecionadaId) || politicas[0] || null
 
   // Auto-fechar toast apos 6 segundos
   useEffect(() => {
@@ -272,21 +276,23 @@ function NovoPedidoContent() {
           setFornecedorIdBling(fornecedor.id_bling)
         }
 
-        // Buscar politica de compra do fornecedor
-        const { data: politicas } = await supabase
+        // Buscar politicas de compra do fornecedor
+        const { data: politicasData } = await supabase
           .from('politica_compra')
           .select('*')
           .eq('fornecedor_id', fId)
           .eq('empresa_id', empresaId)
           .eq('status', 'ativa')
-          .single()
+          .order('id', { ascending: false })
 
-        if (politicas) {
-          setPolitica(politicas)
+        if (politicasData && politicasData.length > 0) {
+          setPoliticas(politicasData)
+          // Selecionar a primeira politica por padrao
+          setPoliticaSelecionadaId(politicasData[0].id)
           // Se tiver prazo de entrega na politica, calcular data prevista
-          if (politicas.prazo_entrega) {
+          if (politicasData[0].prazo_entrega) {
             const prevista = new Date()
-            prevista.setDate(prevista.getDate() + politicas.prazo_entrega)
+            prevista.setDate(prevista.getDate() + politicasData[0].prazo_entrega)
             setDataPrevista(prevista.toISOString().split('T')[0])
           }
         }
@@ -369,6 +375,71 @@ function NovoPedidoContent() {
       fetchProdutosFornecedor(produtoSearch)
     }
   }, [showProdutoModal, produtoSearch])
+
+  // Auto-gerar parcelas quando politica com forma_pagamento_dias for selecionada
+  useEffect(() => {
+    if (
+      politica?.forma_pagamento_dias &&
+      politica.forma_pagamento_dias.length > 0 &&
+      parcelas.length === 0 &&
+      itens.length > 0
+    ) {
+      // Calcular o valor total com frete para as parcelas
+      const valorComFrete = totalPedido
+      if (valorComFrete <= 0) return
+
+      const dias = politica.forma_pagamento_dias
+      const quantidade = dias.length
+      const valorPorParcela = Number((valorComFrete / quantidade).toFixed(2))
+      const hoje = new Date()
+
+      const novasParcelas: ParcelaPedido[] = dias.map((diasVencimento, i) => {
+        const dataVencimento = new Date(hoje.getTime() + diasVencimento * 24 * 60 * 60 * 1000)
+        // Ultima parcela pega o residual para evitar centavos perdidos
+        const valorParcela = i === quantidade - 1
+          ? Number((valorComFrete - valorPorParcela * (quantidade - 1)).toFixed(2))
+          : valorPorParcela
+        return {
+          valor: valorParcela,
+          data_vencimento: dataVencimento.toISOString().split('T')[0],
+        }
+      })
+      setParcelas(novasParcelas)
+    }
+  }, [politica?.forma_pagamento_dias, politica?.id, itens.length])
+
+  // Funcao para gerar parcelas manualmente usando a politica
+  const handleUsarPolitica = () => {
+    if (!politica?.forma_pagamento_dias || politica.forma_pagamento_dias.length === 0) {
+      showToast('warning', 'Politica sem parcelas', 'Esta politica nao possui dias de pagamento configurados.')
+      return
+    }
+
+    const valorComFrete = totalPedido
+    if (valorComFrete <= 0) {
+      showToast('warning', 'Valor zerado', 'Adicione produtos ao pedido antes de gerar parcelas.')
+      return
+    }
+
+    const dias = politica.forma_pagamento_dias
+    const quantidade = dias.length
+    const valorPorParcela = Number((valorComFrete / quantidade).toFixed(2))
+    const hoje = new Date()
+
+    const novasParcelas: ParcelaPedido[] = dias.map((diasVencimento, i) => {
+      const dataVencimento = new Date(hoje.getTime() + diasVencimento * 24 * 60 * 60 * 1000)
+      const valorParcela = i === quantidade - 1
+        ? Number((valorComFrete - valorPorParcela * (quantidade - 1)).toFixed(2))
+        : valorPorParcela
+      return {
+        valor: valorParcela,
+        data_vencimento: dataVencimento.toISOString().split('T')[0],
+      }
+    })
+    setParcelas(novasParcelas)
+    showToast('success', 'Parcelas geradas', `${quantidade} parcela(s) criada(s) com base na politica de compra.`)
+    setActiveTab('pagamento')
+  }
 
   // Adicionar produto ao pedido
   const handleAddProduto = (produto: ProdutoFornecedor) => {
@@ -891,39 +962,90 @@ function NovoPedidoContent() {
 
               {activeTab === 'politicas' && (
                 <div>
-                  {politica ? (
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h3 className="text-sm font-semibold text-gray-900 mb-3">Politica Aplicada</h3>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-500">Valor minimo:</span>
-                          <span className="ml-2 font-medium">{formatCurrency(politica.valor_minimo || 0)}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Desconto:</span>
-                          <span className="ml-2 font-medium">{politica.desconto || 0}%</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Bonificacao:</span>
-                          <span className="ml-2 font-medium">{politica.bonificacao || 0}%</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Prazo de entrega:</span>
-                          <span className="ml-2 font-medium">{politica.prazo_entrega || 0} dias</span>
-                        </div>
-                        {politica.forma_pagamento_dias && politica.forma_pagamento_dias.length > 0 && (
-                          <div className="col-span-2">
-                            <span className="text-gray-500">Dias de pagamento:</span>
-                            <span className="ml-2 font-medium">{politica.forma_pagamento_dias.join(', ')} dias</span>
+                  {politicas.length > 0 ? (
+                    <div className="space-y-4">
+                      {/* Seletor de politica (se houver multiplas) */}
+                      {politicas.length > 1 && (
+                        <div className="mb-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Selecione a politica:</label>
+                          <div className="space-y-2">
+                            {politicas.map((p) => (
+                              <label
+                                key={p.id}
+                                className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                                  politicaSelecionadaId === p.id
+                                    ? 'border-[#336FB6] bg-blue-50'
+                                    : 'border-gray-200 hover:bg-gray-50'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="politica"
+                                  checked={politicaSelecionadaId === p.id}
+                                  onChange={() => setPoliticaSelecionadaId(p.id)}
+                                  className="w-4 h-4 text-[#336FB6] border-gray-300 focus:ring-[#336FB6]"
+                                />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-gray-900">
+                                    Minimo: {formatCurrency(p.valor_minimo || 0)} | Desconto: {p.desconto || 0}%
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    Prazo: {p.prazo_entrega || 0} dias
+                                    {p.forma_pagamento_dias?.length ? ` | Pagamento: ${p.forma_pagamento_dias.join('/')} dias` : ''}
+                                  </p>
+                                </div>
+                              </label>
+                            ))}
                           </div>
-                        )}
-                        {politica.observacao && (
-                          <div className="col-span-2">
-                            <span className="text-gray-500">Observacao:</span>
-                            <span className="ml-2">{politica.observacao}</span>
+                        </div>
+                      )}
+
+                      {/* Detalhes da politica selecionada */}
+                      {politica && (
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <h3 className="text-sm font-semibold text-gray-900">Politica Selecionada</h3>
+                            {politica.forma_pagamento_dias && politica.forma_pagamento_dias.length > 0 && (
+                              <button
+                                onClick={handleUsarPolitica}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
+                              >
+                                Usar politica
+                              </button>
+                            )}
                           </div>
-                        )}
-                      </div>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="text-gray-500">Valor minimo:</span>
+                              <span className="ml-2 font-medium">{formatCurrency(politica.valor_minimo || 0)}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Desconto:</span>
+                              <span className="ml-2 font-medium">{politica.desconto || 0}%</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Bonificacao:</span>
+                              <span className="ml-2 font-medium">{politica.bonificacao || 0}%</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Prazo de entrega:</span>
+                              <span className="ml-2 font-medium">{politica.prazo_entrega || 0} dias</span>
+                            </div>
+                            {politica.forma_pagamento_dias && politica.forma_pagamento_dias.length > 0 && (
+                              <div className="col-span-2">
+                                <span className="text-gray-500">Dias de pagamento:</span>
+                                <span className="ml-2 font-medium">{politica.forma_pagamento_dias.join(', ')} dias</span>
+                              </div>
+                            )}
+                            {politica.observacao && (
+                              <div className="col-span-2">
+                                <span className="text-gray-500">Observacao:</span>
+                                <span className="ml-2">{politica.observacao}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="text-center py-12 text-gray-500">
