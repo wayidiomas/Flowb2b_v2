@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { FRETE_POR_CONTA_OPTIONS } from '@/types/pedido-compra'
+import { FRETE_POR_CONTA_OPTIONS, calcularTotalPedido } from '@/types/pedido-compra'
 
 // Icons
 function ArrowLeftIcon() {
@@ -486,21 +486,28 @@ function GerarAutomaticoContent() {
       politica.forma_pagamento_dias.length > 0 &&
       parcelas.length === 0
     ) {
-      // Calcular valor total com frete inline
-      const valorTotal = sugestoes.reduce((acc, item) => acc + item.valor_total, 0)
-      const valorComFrete = valorTotal + frete
+      // Calcular valor total com desconto e frete usando logica correta de CIF/FOB
+      const totalProdutos = sugestoes.reduce((acc, item) => acc + item.valor_total, 0)
+      const descPerc = politica?.desconto || 0
+      const descValor = totalProdutos * (descPerc / 100)
+      const valorFinal = calcularTotalPedido({
+        totalProdutos,
+        frete,
+        desconto: descValor,
+        fretePorConta,
+      })
 
-      if (valorComFrete <= 0) return
+      if (valorFinal <= 0) return
 
       const dias = politica.forma_pagamento_dias
       const quantidade = dias.length
-      const valorPorParcela = Number((valorComFrete / quantidade).toFixed(2))
+      const valorPorParcela = Number((valorFinal / quantidade).toFixed(2))
       const hoje = new Date()
 
       const novasParcelas: ParcelaPedido[] = dias.map((diasVencimento, i) => {
         const dataVencimento = new Date(hoje.getTime() + diasVencimento * 24 * 60 * 60 * 1000)
         const valorParcela = i === quantidade - 1
-          ? Number((valorComFrete - valorPorParcela * (quantidade - 1)).toFixed(2))
+          ? Number((valorFinal - valorPorParcela * (quantidade - 1)).toFixed(2))
           : valorPorParcela
 
         return {
@@ -511,7 +518,7 @@ function GerarAutomaticoContent() {
 
       setParcelas(novasParcelas)
     }
-  }, [sugestoes, politica?.forma_pagamento_dias, politica?.id, frete, parcelas.length])
+  }, [sugestoes, politica?.forma_pagamento_dias, politica?.desconto, politica?.id, frete, fretePorConta, parcelas.length])
 
   // Gerar parcelas baseado nos dias da politica de compra
   const handleGerarParcelasPolitica = () => {
@@ -907,6 +914,15 @@ function GerarAutomaticoContent() {
         formaPagamento: p.forma_pagamento_id_bling ? { id: p.forma_pagamento_id_bling } : undefined
       })) : undefined
 
+      // Montar observacoes incluindo bonificacao se existir na politica
+      let observacoesFinais = observacoes || ''
+      if (politica?.bonificacao && politica.bonificacao > 0) {
+        const textoBonificacao = `Bonificacao acordada: ${politica.bonificacao}%`
+        observacoesFinais = observacoesFinais
+          ? `${observacoesFinais}\n${textoBonificacao}`
+          : textoBonificacao
+      }
+
       const payload = {
         fornecedor_id: fornecedor.id,
         fornecedor_id_bling: fornecedor.id_bling,
@@ -914,10 +930,10 @@ function GerarAutomaticoContent() {
         dataPrevista: dataPrevista || undefined,
         totalProdutos: valorTotal,
         total: valorTotalComFrete,
-        desconto: politica?.desconto || 0,
+        desconto: valorDesconto, // Valor em reais (calculado a partir da % da politica)
         frete: frete,
         fretePorConta: fretePorConta,
-        observacoes: observacoes || undefined,
+        observacoes: observacoesFinais || undefined,
         observacoesInternas: observacoesInternas || undefined,
         itens: itensPayload,
         parcelas: parcelasPayload
@@ -973,7 +989,18 @@ function GerarAutomaticoContent() {
   // Calcular totais
   const totalItens = sugestoes.reduce((acc, item) => acc + item.quantidade_ajustada, 0)
   const valorTotal = sugestoes.reduce((acc, item) => acc + item.valor_total, 0)
-  const valorTotalComFrete = valorTotal + frete
+
+  // Aplicar desconto da politica (percentual sobre valor dos produtos)
+  const descontoPolitica = politica?.desconto || 0
+  const valorDesconto = valorTotal * (descontoPolitica / 100)
+
+  // Calcular total final usando a logica correta de CIF/FOB
+  const valorTotalComFrete = calcularTotalPedido({
+    totalProdutos: valorTotal,
+    frete,
+    desconto: valorDesconto,
+    fretePorConta,
+  })
   const totalParcelas = parcelas.reduce((acc, p) => acc + p.valor, 0)
 
   if (loading) {
@@ -1738,6 +1765,12 @@ function GerarAutomaticoContent() {
                   <p className="text-xs text-gray-500">Valor produtos</p>
                   <p className="text-lg font-semibold text-[#667085]">{formatCurrency(valorTotal)}</p>
                 </div>
+                {valorDesconto > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500">Desconto ({descontoPolitica}%)</p>
+                    <p className="text-lg font-semibold text-green-600">-{formatCurrency(valorDesconto)}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-gray-500">Total do pedido</p>
                   <p className="text-lg font-semibold text-[#336FB6]">{formatCurrency(valorTotalComFrete)}</p>

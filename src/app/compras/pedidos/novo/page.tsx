@@ -626,6 +626,15 @@ function NovoPedidoContent() {
         } : undefined
       })) : undefined
 
+      // Montar observacoes incluindo bonificacao se existir na politica
+      let observacoesFinais = observacoes || ''
+      if (politica?.bonificacao && politica.bonificacao > 0) {
+        const textoBonificacao = `Bonificacao acordada: ${politica.bonificacao}%`
+        observacoesFinais = observacoesFinais
+          ? `${observacoesFinais}\n${textoBonificacao}`
+          : textoBonificacao
+      }
+
       const payload = {
         fornecedor_id: fornecedorId,
         fornecedor_id_bling: fornecedorIdBling,
@@ -639,7 +648,7 @@ function NovoPedidoContent() {
         transportador: transportador || undefined,
         fretePorConta: fretePorConta,
         ordemCompra: ordemCompra || undefined,
-        observacoes: observacoes || undefined,
+        observacoes: observacoesFinais || undefined,
         observacoesInternas: observacoesInternas || undefined,
         itens: itensPayload,
         parcelas: parcelasPayload
