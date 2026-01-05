@@ -288,10 +288,33 @@ export async function POST(request: NextRequest) {
 
     console.log('Pedido criado no Bling:', { blingId, numeroPedido })
 
-    // 4. Preparar itens para RPC
+    // 4. Estornar contas automaticamente (Bling cria contas a pagar ao enviar parcelas)
+    // Isso evita que o pedido gere contas a pagar indesejadas
+    try {
+      const estornoResponse = await fetch(`${BLING_CONFIG.apiUrl}/pedidos/compras/${blingId}/estornar-contas`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({}),
+      })
+
+      if (estornoResponse.ok) {
+        console.log('Contas estornadas com sucesso para pedido:', blingId)
+      } else {
+        // Se falhar o estorno, apenas loga - nao impede a criacao do pedido
+        const estornoError = await estornoResponse.text()
+        console.warn('Aviso: Nao foi possivel estornar contas:', estornoError)
+      }
+    } catch (estornoErr) {
+      console.warn('Aviso: Erro ao tentar estornar contas:', estornoErr)
+    }
+
+    // 5. Preparar itens para RPC (JSONB - sem JSON.stringify)
     const itensRPC = body.itens.map(item => ({
       descricao: item.descricao,
-      codigo_fornecedor: item.produto?.codigo || '',
+      codigo_fornecedor: item.codigoFornecedor || item.produto?.codigo || '',
       unidade: item.unidade || 'UN',
       valor: item.valor,
       quantidade: item.quantidade,
@@ -302,7 +325,17 @@ export async function POST(request: NextRequest) {
       } : null,
     }))
 
-    // 5. Salvar no Supabase com bling_id
+    // 5. Preparar parcelas para RPC (se houver)
+    const parcelasRPC = body.parcelas && body.parcelas.length > 0
+      ? body.parcelas.map(p => ({
+          valor: p.valor,
+          data_vencimento: p.dataVencimento,
+          observacao: p.observacao || '',
+          forma_pagamento_id: p.formaPagamento?.id || null,
+        }))
+      : null
+
+    // 6. Salvar no Supabase com bling_id
     const { data: pedido, error } = await supabase.rpc('flowb2b_add_pedido_compra', {
       p_empresa_id: empresaId,
       p_fornecedor_id: body.fornecedor_id,
@@ -324,7 +357,8 @@ export async function POST(request: NextRequest) {
       p_ordem_compra: body.ordemCompra || null,
       p_observacoes: body.observacoes || null,
       p_observacoes_internas: body.observacoesInternas || null,
-      p_itens: JSON.stringify(itensRPC),
+      p_itens: itensRPC,
+      p_parcelas: parcelasRPC,
     })
 
     if (error) {
