@@ -138,13 +138,52 @@ export interface ProdutoFornecedor {
   gtin?: string
 }
 
-// Opcoes de frete por conta
+// Tipo de frete por conta (valores do Bling)
+export type FretePorContaBling = 0 | 1 | 2 | 3 | 4 | 9
+export type FretePorContaLabel = 'CIF' | 'FOB' | 'TERCEIROS' | 'PROPRIO_REMETENTE' | 'PROPRIO_DESTINATARIO' | 'SEM_FRETE'
+
+// Mapeamento de labels para valores do Bling
+export const FRETE_POR_CONTA_MAP: Record<FretePorContaLabel, FretePorContaBling> = {
+  'CIF': 0,                    // Remetente paga (fornecedor entrega)
+  'FOB': 1,                    // Destinatario paga (voce busca/paga frete)
+  'TERCEIROS': 2,              // Terceiros pagam
+  'PROPRIO_REMETENTE': 3,      // Transporte proprio do fornecedor
+  'PROPRIO_DESTINATARIO': 4,   // Transporte proprio seu
+  'SEM_FRETE': 9,              // Sem ocorrencia de transporte
+}
+
+// Opcoes de frete por conta para select
 export const FRETE_POR_CONTA_OPTIONS = [
-  { value: 'CIF', label: 'CIF - Frete por conta do remetente' },
-  { value: 'FOB', label: 'FOB - Frete por conta do destinatario' },
-  { value: 'Terceiros', label: 'Terceiros' },
-  { value: 'Sem transporte', label: 'Sem transporte' },
+  { value: 'CIF', label: 'CIF - Fornecedor entrega (frete incluso)', blingValue: 0 },
+  { value: 'FOB', label: 'FOB - Voce paga o frete', blingValue: 1 },
+  { value: 'TERCEIROS', label: 'Terceiros pagam o frete', blingValue: 2 },
+  { value: 'PROPRIO_REMETENTE', label: 'Transporte proprio do fornecedor', blingValue: 3 },
+  { value: 'PROPRIO_DESTINATARIO', label: 'Transporte proprio seu', blingValue: 4 },
+  { value: 'SEM_FRETE', label: 'Sem transporte / Retira no local', blingValue: 9 },
 ]
+
+// Helper para converter label para valor Bling
+export function getFreteBlingValue(label: string): FretePorContaBling {
+  return FRETE_POR_CONTA_MAP[label as FretePorContaLabel] ?? 0
+}
+
+// Helper para calcular total do pedido no frontend
+// Nota: No Bling o total eh calculado automaticamente
+export function calcularTotalPedido(params: {
+  totalProdutos: number
+  frete?: number
+  desconto?: number
+  fretePorConta?: string
+}): number {
+  const { totalProdutos, frete = 0, desconto = 0, fretePorConta } = params
+
+  // Se CIF ou SEM_FRETE, frete nao soma (ja incluso ou nao existe)
+  // Se FOB, TERCEIROS, PROPRIO_*, frete soma ao total
+  const freteNaoSoma = fretePorConta === 'CIF' || fretePorConta === 'SEM_FRETE'
+  const freteEfetivo = freteNaoSoma ? 0 : frete
+
+  return totalProdutos + freteEfetivo - desconto
+}
 
 // Detalhes do pedido (retornado pela RPC get_pedido_compra_detalhes)
 export interface PedidoCompraDetalhes {

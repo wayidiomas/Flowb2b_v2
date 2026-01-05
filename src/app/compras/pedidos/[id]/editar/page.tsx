@@ -13,8 +13,8 @@ import type {
   ProdutoFornecedor,
   ParcelaPedido,
   SituacaoPedido,
-  SITUACAO_LABELS
 } from '@/types/pedido-compra'
+import { FRETE_POR_CONTA_OPTIONS } from '@/types/pedido-compra'
 
 // Status config
 const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
@@ -73,14 +73,6 @@ function CheckIcon() {
     </svg>
   )
 }
-
-// Frete options
-const FRETE_OPTIONS = [
-  { value: 'CIF', label: 'CIF - Frete por conta do remetente' },
-  { value: 'FOB', label: 'FOB - Frete por conta do destinatario' },
-  { value: 'Terceiros', label: 'Terceiros' },
-  { value: 'Sem transporte', label: 'Sem transporte' },
-]
 
 interface FormaPagamento {
   id: number
@@ -526,7 +518,7 @@ export default function EditarPedidoCompraPage() {
                   onChange={(e) => setFretePorConta(e.target.value)}
                   className="block w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  {FRETE_OPTIONS.map(opt => (
+                  {FRETE_POR_CONTA_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>

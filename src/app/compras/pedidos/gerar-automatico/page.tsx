@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { FRETE_POR_CONTA_OPTIONS } from '@/types/pedido-compra'
 
 // Icons
 function ArrowLeftIcon() {
@@ -243,12 +244,6 @@ interface FormaPagamento {
   id_bling: number | null
   descricao: string
 }
-
-// Opcoes de frete
-const FRETE_OPTIONS = [
-  { value: 'CIF', label: 'CIF - Frete por conta do remetente' },
-  { value: 'FOB', label: 'FOB - Frete por conta do destinatario' },
-]
 
 function GerarAutomaticoContent() {
   const { user, empresa } = useAuth()
@@ -1503,7 +1498,7 @@ function GerarAutomaticoContent() {
                     onChange={(e) => setFretePorConta(e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
                   >
-                    {FRETE_OPTIONS.map(opt => (
+                    {FRETE_POR_CONTA_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>

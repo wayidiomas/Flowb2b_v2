@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
+import { FRETE_POR_CONTA_MAP, FretePorContaLabel } from '@/types/pedido-compra'
 
 // Interface para item do pedido
 interface ItemPedidoRequest {
@@ -177,8 +178,8 @@ function buildBlingPayload(data: PedidoCompraRequest) {
       payload.transporte.transportador = data.transportador
     }
     if (data.fretePorConta) {
-      // FOB = 1 (destinatario), CIF = 0 (remetente)
-      payload.transporte.fretePorConta = data.fretePorConta === 'FOB' ? 1 : 0
+      // Usar mapeamento completo para todos os tipos de frete do Bling
+      payload.transporte.fretePorConta = FRETE_POR_CONTA_MAP[data.fretePorConta as FretePorContaLabel] ?? 0
     }
     if (data.pesoBruto) {
       payload.transporte.pesoBruto = data.pesoBruto
