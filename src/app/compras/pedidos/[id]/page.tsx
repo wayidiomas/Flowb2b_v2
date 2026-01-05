@@ -143,6 +143,9 @@ export default function VisualizarPedidoPage() {
   const [loadingFornecedores, setLoadingFornecedores] = useState(false)
   const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [alterandoStatus, setAlterandoStatus] = useState(false)
+  const [showTelefoneModal, setShowTelefoneModal] = useState(false)
+  const [telefoneInput, setTelefoneInput] = useState('')
+  const [salvandoTelefone, setSalvandoTelefone] = useState(false)
 
   // Buscar detalhes do pedido
   useEffect(() => {
@@ -275,32 +278,96 @@ export default function VisualizarPedidoPage() {
   }
 
   // Compartilhar WhatsApp
-  const handleShareWhatsApp = () => {
+  const handleShareWhatsApp = async () => {
+    if (!pedido || !user?.empresa_id) return
+
+    setShowShareMenu(false)
+
+    try {
+      // Buscar telefone do fornecedor
+      const { data: fornecedor, error } = await supabase
+        .from('fornecedores')
+        .select('telefone, celular')
+        .eq('id', pedido.fornecedor_id)
+        .eq('empresa_id', user.empresa_id)
+        .single()
+
+      if (error) {
+        console.error('Erro ao buscar fornecedor:', error)
+        alert('Erro ao buscar dados do fornecedor')
+        return
+      }
+
+      // Verificar se tem telefone ou celular
+      const telefone = fornecedor?.celular || fornecedor?.telefone
+
+      if (!telefone) {
+        // Abrir modal para cadastrar telefone
+        setTelefoneInput('')
+        setShowTelefoneModal(true)
+        return
+      }
+
+      // Enviar via WhatsApp com link publico
+      enviarWhatsAppComLink(telefone)
+    } catch (err) {
+      console.error('Erro ao compartilhar:', err)
+      alert('Erro ao compartilhar via WhatsApp')
+    }
+  }
+
+  // Funcao auxiliar para enviar WhatsApp com link publico
+  const enviarWhatsAppComLink = (telefone: string) => {
     if (!pedido) return
 
-    const itensTexto = pedido.itens.map(item =>
-      `- ${item.descricao}: ${item.quantidade} ${item.unidade} x ${formatCurrency(item.valor)} = ${formatCurrency(item.quantidade * item.valor)}`
-    ).join('\n')
+    // Limpar telefone (remover caracteres especiais)
+    const telefoneLimpo = telefone.replace(/\D/g, '')
+
+    // Adicionar codigo do Brasil se nao tiver
+    const telefoneFormatado = telefoneLimpo.startsWith('55')
+      ? telefoneLimpo
+      : `55${telefoneLimpo}`
+
+    // URL publica do pedido
+    const urlPublica = `${window.location.origin}/publico/pedido/${pedido.id}`
 
     const texto = `*Pedido de Compra #${pedido.numero}*
-Fornecedor: ${pedido.fornecedor_nome}
-Data: ${formatDate(pedido.data)}
-${pedido.data_prevista ? `Previsao: ${formatDate(pedido.data_prevista)}` : ''}
 
-*Itens:*
-${itensTexto}
+Ola! Segue o pedido de compra para sua analise.
 
-*Resumo:*
-Produtos: ${formatCurrency(pedido.total_produtos)}
-${pedido.frete ? `Frete: ${formatCurrency(pedido.frete)}` : ''}
-${pedido.desconto ? `Desconto: ${formatCurrency(pedido.desconto)}` : ''}
 *Total: ${formatCurrency(pedido.total)}*
 
-${pedido.observacoes ? `Obs: ${pedido.observacoes}` : ''}`
+Acesse o link abaixo para visualizar todos os detalhes e exportar em PDF, Excel ou CSV:
 
-    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`
+${urlPublica}`
+
+    const url = `https://wa.me/${telefoneFormatado}?text=${encodeURIComponent(texto)}`
     window.open(url, '_blank')
-    setShowShareMenu(false)
+  }
+
+  // Salvar telefone do fornecedor
+  const handleSalvarTelefone = async () => {
+    if (!pedido || !user?.empresa_id || !telefoneInput.trim()) return
+
+    setSalvandoTelefone(true)
+    try {
+      const { error } = await supabase
+        .from('fornecedores')
+        .update({ celular: telefoneInput.trim() })
+        .eq('id', pedido.fornecedor_id)
+        .eq('empresa_id', user.empresa_id)
+
+      if (error) throw error
+
+      // Fechar modal e enviar WhatsApp
+      setShowTelefoneModal(false)
+      enviarWhatsAppComLink(telefoneInput.trim())
+    } catch (err) {
+      console.error('Erro ao salvar telefone:', err)
+      alert('Erro ao salvar telefone')
+    } finally {
+      setSalvandoTelefone(false)
+    }
   }
 
   // Compartilhar Email
@@ -805,6 +872,56 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
         fornecedores={fornecedores}
         loading={loadingFornecedores}
       />
+
+      {/* Modal Cadastrar Telefone */}
+      {showTelefoneModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Cadastrar Telefone
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                O fornecedor <strong>{pedido?.fornecedor_nome}</strong> nao possui telefone cadastrado.
+              </p>
+            </div>
+
+            <div className="px-6 py-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Telefone/WhatsApp
+              </label>
+              <input
+                type="tel"
+                value={telefoneInput}
+                onChange={(e) => setTelefoneInput(e.target.value)}
+                placeholder="(11) 99999-9999"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6] outline-none transition-colors"
+                autoFocus
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Digite o numero com DDD. Ex: (11) 99999-9999
+              </p>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowTelefoneModal(false)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSalvarTelefone}
+                disabled={salvandoTelefone || !telefoneInput.trim()}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <WhatsAppIcon />
+                {salvandoTelefone ? 'Salvando...' : 'Salvar e Enviar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Estilos de impressao */}
       <style jsx global>{`
