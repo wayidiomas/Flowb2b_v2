@@ -998,6 +998,33 @@ function GerarAutomaticoContent() {
   })
   const totalParcelas = parcelas.reduce((acc, p) => acc + p.valor, 0)
 
+  // Recalcular parcelas quando o total do pedido mudar (frete, desconto, etc)
+  // Mantendo as datas de vencimento, apenas atualizando os valores
+  useEffect(() => {
+    if (parcelas.length > 0 && valorTotalComFrete > 0) {
+      const totalAtualParcelas = parcelas.reduce((acc, p) => acc + p.valor, 0)
+      const diferenca = Math.abs(totalAtualParcelas - valorTotalComFrete)
+
+      // Se a diferenca for maior que 1 centavo, recalcular
+      if (diferenca > 0.01) {
+        const quantidade = parcelas.length
+        const valorPorParcela = Number((valorTotalComFrete / quantidade).toFixed(2))
+
+        const parcelasAtualizadas = parcelas.map((parcela, i) => {
+          const valorParcela = i === quantidade - 1
+            ? Number((valorTotalComFrete - valorPorParcela * (quantidade - 1)).toFixed(2))
+            : valorPorParcela
+          return {
+            ...parcela,
+            valor: valorParcela,
+          }
+        })
+        setParcelas(parcelasAtualizadas)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valorTotalComFrete])
+
   if (loading) {
     return (
       <DashboardLayout>
