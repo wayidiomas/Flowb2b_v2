@@ -477,6 +477,42 @@ function GerarAutomaticoContent() {
     }
   }, [sugestoes.length, formasPagamento.length, politica?.prazo_entrega])
 
+  // Auto-gerar parcelas quando politica com forma_pagamento_dias estiver disponivel
+  useEffect(() => {
+    // Só gerar se tiver sugestões, política com dias de pagamento e ainda não tiver parcelas
+    if (
+      sugestoes.length > 0 &&
+      politica?.forma_pagamento_dias &&
+      politica.forma_pagamento_dias.length > 0 &&
+      parcelas.length === 0
+    ) {
+      // Calcular valor total com frete inline
+      const valorTotal = sugestoes.reduce((acc, item) => acc + item.valor_total, 0)
+      const valorComFrete = valorTotal + frete
+
+      if (valorComFrete <= 0) return
+
+      const dias = politica.forma_pagamento_dias
+      const quantidade = dias.length
+      const valorPorParcela = Number((valorComFrete / quantidade).toFixed(2))
+      const hoje = new Date()
+
+      const novasParcelas: ParcelaPedido[] = dias.map((diasVencimento, i) => {
+        const dataVencimento = new Date(hoje.getTime() + diasVencimento * 24 * 60 * 60 * 1000)
+        const valorParcela = i === quantidade - 1
+          ? Number((valorComFrete - valorPorParcela * (quantidade - 1)).toFixed(2))
+          : valorPorParcela
+
+        return {
+          valor: valorParcela,
+          data_vencimento: dataVencimento.toISOString().split('T')[0],
+        }
+      })
+
+      setParcelas(novasParcelas)
+    }
+  }, [sugestoes, politica?.forma_pagamento_dias, politica?.id, frete, parcelas.length])
+
   // Gerar parcelas baseado nos dias da politica de compra
   const handleGerarParcelasPolitica = () => {
     if (!politica?.forma_pagamento_dias || politica.forma_pagamento_dias.length === 0) return
