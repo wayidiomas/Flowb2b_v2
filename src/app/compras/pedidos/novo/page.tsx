@@ -530,7 +530,38 @@ function NovoPedidoContent() {
   }, 0)
 
   const descontoValor = totalProdutos * (desconto / 100)
-  const totalPedido = totalProdutos - descontoValor + frete + totalIcms
+  // Se CIF ou SEM_FRETE, frete nao soma ao total (ja incluso ou nao existe)
+  // Se FOB, TERCEIROS, PROPRIO_*, frete soma ao total
+  const freteNaoSoma = fretePorConta === 'CIF' || fretePorConta === 'SEM_FRETE'
+  const freteEfetivo = freteNaoSoma ? 0 : frete
+  const totalPedido = totalProdutos - descontoValor + freteEfetivo + totalIcms
+
+  // Recalcular parcelas quando o total do pedido mudar (frete, desconto, etc)
+  // Mantendo as datas de vencimento, apenas atualizando os valores
+  useEffect(() => {
+    if (parcelas.length > 0 && totalPedido > 0) {
+      const totalAtualParcelas = parcelas.reduce((acc, p) => acc + p.valor, 0)
+      const diferenca = Math.abs(totalAtualParcelas - totalPedido)
+
+      // Se a diferenca for maior que 1 centavo, recalcular
+      if (diferenca > 0.01) {
+        const quantidade = parcelas.length
+        const valorPorParcela = Number((totalPedido / quantidade).toFixed(2))
+
+        const parcelasAtualizadas = parcelas.map((parcela, i) => {
+          const valorParcela = i === quantidade - 1
+            ? Number((totalPedido - valorPorParcela * (quantidade - 1)).toFixed(2))
+            : valorPorParcela
+          return {
+            ...parcela,
+            valor: valorParcela,
+          }
+        })
+        setParcelas(parcelasAtualizadas)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalPedido])
 
   const totalItens = itens.length
   const somaQuantidades = itens.reduce((acc, item) => acc + item.quantidade, 0)
