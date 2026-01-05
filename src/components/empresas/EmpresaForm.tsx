@@ -322,6 +322,19 @@ export function EmpresaForm({ initialData, isEditing = false, colaboradores = []
 
         if (error) throw error
 
+        // Vincular usuario a empresa (cria users_empresas + atualiza JWT)
+        const vincularResponse = await fetch('/api/empresas/vincular', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ empresaId: newEmpresa.id }),
+        })
+
+        if (!vincularResponse.ok) {
+          const vincularError = await vincularResponse.json()
+          console.error('Erro ao vincular usuario:', vincularError)
+          // Continua mesmo com erro - empresa foi criada
+        }
+
         // Mostrar modal para conectar Bling
         setCreatedEmpresaId(newEmpresa.id)
         setCreatedEmpresaNome(formData.nome_fantasia || formData.razao_social)
