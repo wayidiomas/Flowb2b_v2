@@ -171,7 +171,12 @@ function buildBlingPayload(data: PedidoCompraRequest) {
   // Transporte
   if (data.frete || data.transportador || data.fretePorConta) {
     payload.transporte = {}
-    if (data.frete) {
+
+    // Se CIF ou SEM_FRETE, o frete NAO deve ser enviado ao Bling
+    // pois ja esta incluso no preco ou nao existe transporte
+    const freteNaoSoma = data.fretePorConta === 'CIF' || data.fretePorConta === 'SEM_FRETE'
+
+    if (data.frete && !freteNaoSoma) {
       payload.transporte.frete = data.frete
     }
     if (data.transportador) {
