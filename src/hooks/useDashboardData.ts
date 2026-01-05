@@ -29,8 +29,11 @@ interface UseDashboardDataReturn {
   variacaoEstoque: VariacaoEstoque[]
   fornecedoresMaisVendas: FornecedorMaisVendas[]
 
-  // Estado
-  loading: boolean
+  // Estado - loading individual por grupo
+  loading: boolean // loading geral (inicial)
+  loadingBase: boolean // metrics, fornecedores, curvaA, atividade, alta rotatividade
+  loadingIntervalo: boolean // pedidosPeriodo, fornecedoresMaisVendas
+  loadingEstoque: boolean // variacaoEstoque
   error: string | null
 
   // Ações
@@ -58,7 +61,13 @@ export function useDashboardData(): UseDashboardDataReturn {
   const [produtosAltaRotatividade, setProdutosAltaRotatividade] = useState<ProdutoAltaRotatividade[]>([])
   const [variacaoEstoque, setVariacaoEstoque] = useState<VariacaoEstoque[]>([])
   const [fornecedoresMaisVendas, setFornecedoresMaisVendas] = useState<FornecedorMaisVendas[]>([])
-  const [loading, setLoading] = useState(true)
+
+  // Loading states individuais
+  const [loadingBase, setLoadingBase] = useState(true)
+  const [loadingIntervalo, setLoadingIntervalo] = useState(true)
+  const [loadingEstoque, setLoadingEstoque] = useState(true)
+  const [initialLoad, setInitialLoad] = useState(true)
+
   const [error, setError] = useState<string | null>(null)
   const [intervalo, setIntervalo] = useState<IntervaloGrafico>('12_meses')
   const [intervaloEstoque, setIntervaloEstoque] = useState<IntervaloEstoque>('4_meses')
@@ -71,31 +80,25 @@ export function useDashboardData(): UseDashboardDataReturn {
     setDataFimEstoque(fim)
   }
 
-  const fetchData = useCallback(async () => {
-    console.log('[Dashboard] empresaId:', empresaId)
-
+  // ============================================
+  // GRUPO 1: Dados base (apenas empresaId)
+  // metrics, fornecedores, produtosCurvaA, atividadeRecente, produtosAltaRotatividade
+  // ============================================
+  const fetchBaseData = useCallback(async () => {
     if (!empresaId) {
-      console.log('[Dashboard] No empresaId, skipping fetch')
-      setLoading(false)
+      setLoadingBase(false)
       return
     }
 
     try {
-      setLoading(true)
-      setError(null)
-      console.log('[Dashboard] Fetching data for empresa:', empresaId)
+      setLoadingBase(true)
 
-      // Buscar todos os dados em paralelo
       const [
         metricsRes,
         fornecedoresRes,
         produtosRes,
-        pedidosRes,
         atividadeRes,
-        topVendidosRes,
         altaRotatividadeRes,
-        variacaoEstoqueRes,
-        fornecedoresMaisVendasRes,
       ] = await Promise.all([
         // 1. Métricas principais
         supabase.rpc('get_dashboard_metrics', {
@@ -114,59 +117,19 @@ export function useDashboardData(): UseDashboardDataReturn {
           p_empresa_id: empresaId,
         }),
 
-        // 4. Pedidos por período (gráfico de barras vertical)
-        supabase.rpc('get_pedidos_compra_por_periodo', {
-          p_empresa_id: empresaId,
-          p_user_bling: false,
-          p_intervalo: intervalo,
-        }),
-
-        // 5. Atividade recente (RPC que busca 2 de cada tipo)
+        // 4. Atividade recente (RPC que busca 2 de cada tipo)
         supabase.rpc('get_atividade_recente', {
           p_empresa_id: empresaId,
           p_limit_per_type: 2,
         }),
 
-        // 6. Top produtos vendidos por período
-        supabase.rpc('get_top_produtos_vendidos', {
-          p_empresa_id: empresaId,
-          p_intervalo: intervalo,
-          p_limit: 10,
-        }),
-
-        // 7. Produtos de alta rotatividade (buscar mais para filtro/paginação)
+        // 5. Produtos de alta rotatividade
         supabase.rpc('get_produtos_alta_rotatividade', {
           p_empresa_id: empresaId,
           p_dias: 90,
           p_limit: 100,
         }),
-
-        // 8. Variação do valor em estoque (usa intervalo próprio)
-        supabase.rpc('get_variacao_valor_estoque', {
-          p_empresa_id: empresaId,
-          p_intervalo: intervaloEstoque,
-          p_data_inicio: intervaloEstoque === 'personalizado' ? dataInicioEstoque : null,
-          p_data_fim: intervaloEstoque === 'personalizado' ? dataFimEstoque : null,
-        }),
-
-        // 9. Fornecedores que mais vendem
-        supabase.rpc('get_fornecedores_mais_vendas', {
-          p_empresa_id: empresaId,
-          p_intervalo: intervalo,
-          p_limit: 5,
-        }),
       ])
-
-      console.log('[Dashboard] Responses:', {
-        metrics: metricsRes,
-        fornecedores: fornecedoresRes,
-        produtos: produtosRes,
-        pedidos: pedidosRes,
-        atividade: atividadeRes,
-        topVendidos: topVendidosRes,
-        altaRotatividade: altaRotatividadeRes,
-        variacaoEstoque: variacaoEstoqueRes,
-      })
 
       // Processar métricas
       if (metricsRes.data) {
@@ -183,13 +146,7 @@ export function useDashboardData(): UseDashboardDataReturn {
         setProdutosCurvaA(produtosRes.data as ProdutoCurvaA[])
       }
 
-      // Processar pedidos por período (inverter ordem para cronológico)
-      if (pedidosRes.data) {
-        const pedidos = (pedidosRes.data as PedidoPeriodo[]).reverse()
-        setPedidosPeriodo(pedidos)
-      }
-
-      // Processar atividade recente (já vem formatado da RPC)
+      // Processar atividade recente
       if (atividadeRes.data) {
         interface AtividadeRPC {
           tipo: string
@@ -208,19 +165,77 @@ export function useDashboardData(): UseDashboardDataReturn {
         setAtividadeRecente(atividades)
       }
 
-      // Processar top produtos vendidos
-      if (topVendidosRes.data) {
-        setTopProdutosVendidos(topVendidosRes.data as TopProdutoVendido[])
-      }
-
       // Processar produtos de alta rotatividade
       if (altaRotatividadeRes.data) {
         setProdutosAltaRotatividade(altaRotatividadeRes.data as ProdutoAltaRotatividade[])
       }
 
-      // Processar variação do estoque
-      if (variacaoEstoqueRes.data) {
-        setVariacaoEstoque(variacaoEstoqueRes.data as VariacaoEstoque[])
+      // Verificar erros
+      const errors = [metricsRes.error, fornecedoresRes.error, produtosRes.error, atividadeRes.error]
+        .filter(Boolean)
+        .map((e) => e?.message)
+        .join(', ')
+
+      if (errors) {
+        console.error('Erros ao buscar dados base:', errors)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar dados base do dashboard')
+      console.error('Erro no dashboard (base):', err)
+    } finally {
+      setLoadingBase(false)
+    }
+  }, [empresaId])
+
+  // ============================================
+  // GRUPO 2: Dados com filtro de intervalo
+  // pedidosPeriodo, topProdutosVendidos, fornecedoresMaisVendas
+  // ============================================
+  const fetchIntervaloData = useCallback(async () => {
+    if (!empresaId) {
+      setLoadingIntervalo(false)
+      return
+    }
+
+    try {
+      setLoadingIntervalo(true)
+
+      const [
+        pedidosRes,
+        topVendidosRes,
+        fornecedoresMaisVendasRes,
+      ] = await Promise.all([
+        // Pedidos por período (gráfico de barras vertical)
+        supabase.rpc('get_pedidos_compra_por_periodo', {
+          p_empresa_id: empresaId,
+          p_user_bling: false,
+          p_intervalo: intervalo,
+        }),
+
+        // Top produtos vendidos por período
+        supabase.rpc('get_top_produtos_vendidos', {
+          p_empresa_id: empresaId,
+          p_intervalo: intervalo,
+          p_limit: 10,
+        }),
+
+        // Fornecedores que mais vendem
+        supabase.rpc('get_fornecedores_mais_vendas', {
+          p_empresa_id: empresaId,
+          p_intervalo: intervalo,
+          p_limit: 5,
+        }),
+      ])
+
+      // Processar pedidos por período (inverter ordem para cronológico)
+      if (pedidosRes.data) {
+        const pedidos = (pedidosRes.data as PedidoPeriodo[]).reverse()
+        setPedidosPeriodo(pedidos)
+      }
+
+      // Processar top produtos vendidos
+      if (topVendidosRes.data) {
+        setTopProdutosVendidos(topVendidosRes.data as TopProdutoVendido[])
       }
 
       // Processar fornecedores que mais vendem
@@ -229,26 +244,90 @@ export function useDashboardData(): UseDashboardDataReturn {
       }
 
       // Verificar erros
-      const errors = [metricsRes.error, fornecedoresRes.error, produtosRes.error, pedidosRes.error]
+      const errors = [pedidosRes.error, topVendidosRes.error, fornecedoresMaisVendasRes.error]
         .filter(Boolean)
         .map((e) => e?.message)
         .join(', ')
 
       if (errors) {
-        console.error('Erros ao buscar dados:', errors)
+        console.error('Erros ao buscar dados de intervalo:', errors)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar dados do dashboard')
-      console.error('Erro no dashboard:', err)
+      console.error('Erro no dashboard (intervalo):', err)
     } finally {
-      setLoading(false)
+      setLoadingIntervalo(false)
     }
-  }, [empresaId, intervalo, intervaloEstoque, dataInicioEstoque, dataFimEstoque])
+  }, [empresaId, intervalo])
 
-  // Buscar dados quando empresaId ou intervalo mudar
+  // ============================================
+  // GRUPO 3: Dados com filtro de estoque
+  // variacaoEstoque
+  // ============================================
+  const fetchEstoqueData = useCallback(async () => {
+    if (!empresaId) {
+      setLoadingEstoque(false)
+      return
+    }
+
+    try {
+      setLoadingEstoque(true)
+
+      const variacaoEstoqueRes = await supabase.rpc('get_variacao_valor_estoque', {
+        p_empresa_id: empresaId,
+        p_intervalo: intervaloEstoque,
+        p_data_inicio: intervaloEstoque === 'personalizado' ? dataInicioEstoque : null,
+        p_data_fim: intervaloEstoque === 'personalizado' ? dataFimEstoque : null,
+      })
+
+      // Processar variação do estoque
+      if (variacaoEstoqueRes.data) {
+        setVariacaoEstoque(variacaoEstoqueRes.data as VariacaoEstoque[])
+      }
+
+      if (variacaoEstoqueRes.error) {
+        console.error('Erro ao buscar variação de estoque:', variacaoEstoqueRes.error.message)
+      }
+    } catch (err) {
+      console.error('Erro no dashboard (estoque):', err)
+    } finally {
+      setLoadingEstoque(false)
+    }
+  }, [empresaId, intervaloEstoque, dataInicioEstoque, dataFimEstoque])
+
+  // Função de refetch completo (para uso manual)
+  const refetch = useCallback(async () => {
+    setError(null)
+    await Promise.all([
+      fetchBaseData(),
+      fetchIntervaloData(),
+      fetchEstoqueData(),
+    ])
+  }, [fetchBaseData, fetchIntervaloData, fetchEstoqueData])
+
+  // Effect para dados base (apenas empresaId muda)
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    fetchBaseData()
+  }, [fetchBaseData])
+
+  // Effect para dados de intervalo
+  useEffect(() => {
+    fetchIntervaloData()
+  }, [fetchIntervaloData])
+
+  // Effect para dados de estoque
+  useEffect(() => {
+    fetchEstoqueData()
+  }, [fetchEstoqueData])
+
+  // Marcar initial load como completo quando todos terminarem
+  useEffect(() => {
+    if (!loadingBase && !loadingIntervalo && !loadingEstoque && initialLoad) {
+      setInitialLoad(false)
+    }
+  }, [loadingBase, loadingIntervalo, loadingEstoque, initialLoad])
+
+  // Loading geral é true apenas no carregamento inicial
+  const loading = initialLoad && (loadingBase || loadingIntervalo || loadingEstoque)
 
   return {
     metrics,
@@ -261,8 +340,11 @@ export function useDashboardData(): UseDashboardDataReturn {
     variacaoEstoque,
     fornecedoresMaisVendas,
     loading,
+    loadingBase,
+    loadingIntervalo,
+    loadingEstoque,
     error,
-    refetch: fetchData,
+    refetch,
     setIntervalo,
     intervalo,
     setIntervaloEstoque,

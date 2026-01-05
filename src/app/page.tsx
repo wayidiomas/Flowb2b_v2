@@ -74,6 +74,8 @@ export default function Home() {
     variacaoEstoque,
     fornecedoresMaisVendas,
     loading,
+    loadingIntervalo,
+    loadingEstoque,
     intervalo,
     setIntervalo,
     intervaloEstoque,
@@ -197,7 +199,17 @@ export default function Home() {
             />
           </div>
         </div>
-        {pedidosPeriodo.length > 0 ? (
+        {loadingIntervalo ? (
+          <div className="h-64 flex items-end justify-between gap-2 pt-4">
+            {[65, 80, 45, 70, 55, 90, 75, 60, 85, 50, 72, 68].map((height, i) => (
+              <Skeleton
+                key={i}
+                className="flex-1 rounded-t"
+                style={{ height: `${height}%` }}
+              />
+            ))}
+          </div>
+        ) : pedidosPeriodo.length > 0 ? (
           <PurchasesBarChart data={pedidosPeriodo} intervalo={intervalo} />
         ) : (
           <EmptyState message="Nenhum pedido no periodo" />
@@ -214,7 +226,16 @@ export default function Home() {
               {intervalo === '7_dias' ? 'Última semana' : intervalo === '30_dias' ? 'Último mês' : 'Último ano'}
             </span>
           </div>
-          {fornecedoresMaisVendas.length > 0 ? (
+          {loadingIntervalo ? (
+            <div className="h-64 flex flex-col justify-center gap-3 py-4">
+              {[85, 70, 55, 45, 35].map((width, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-6 rounded" style={{ width: `${width}%` }} />
+                </div>
+              ))}
+            </div>
+          ) : fornecedoresMaisVendas.length > 0 ? (
             <FornecedoresMaisVendasChart data={fornecedoresMaisVendas} />
           ) : (
             <EmptyState message="Nenhum fornecedor no período" />
@@ -280,7 +301,20 @@ export default function Home() {
               </div>
             )}
           </div>
-          {variacaoEstoque.length > 0 ? (
+          {loadingEstoque ? (
+            <div className="h-64 relative">
+              <Skeleton className="absolute inset-0 rounded" style={{ opacity: 0.3 }} />
+              <div className="absolute bottom-0 left-0 right-0 h-48 flex items-end justify-between gap-1 px-2">
+                {[35, 45, 55, 50, 65, 60, 70, 75, 68, 80].map((height, i) => (
+                  <Skeleton
+                    key={i}
+                    className="flex-1 rounded-t"
+                    style={{ height: `${height}%` }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : variacaoEstoque.length > 0 ? (
             <VariacaoEstoqueChart data={variacaoEstoque} intervalo={intervaloEstoque} />
           ) : (
             <EmptyState message="Sem histórico de estoque" />
