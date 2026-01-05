@@ -102,6 +102,14 @@ function CheckIcon() {
   )
 }
 
+function LinkIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+    </svg>
+  )
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -400,6 +408,28 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
     setShowShareMenu(false)
   }
 
+  // Copiar link publico
+  const handleCopyLink = async () => {
+    if (!pedido) return
+
+    const urlPublica = `${window.location.origin}/publico/pedido/${pedido.id}`
+
+    try {
+      await navigator.clipboard.writeText(urlPublica)
+      alert('Link copiado para a area de transferencia!')
+    } catch {
+      // Fallback para navegadores antigos
+      const textArea = document.createElement('textarea')
+      textArea.value = urlPublica
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      alert('Link copiado para a area de transferencia!')
+    }
+    setShowShareMenu(false)
+  }
+
   // Carregar fornecedores para o modal
   const loadFornecedores = async () => {
     if (!user?.empresa_id) return
@@ -641,6 +671,13 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
                   >
                     <EmailIcon />
                     Email
+                  </button>
+                  <button
+                    onClick={handleCopyLink}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <LinkIcon />
+                    Copiar Link
                   </button>
                 </div>
               )}
