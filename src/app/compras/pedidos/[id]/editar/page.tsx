@@ -119,17 +119,11 @@ export default function EditarPedidoCompraPage() {
   // Carregar dados do pedido
   useEffect(() => {
     const fetchPedido = async () => {
-      if (!pedidoId || !user?.id) {
-        setLoading(false)
-        return
-      }
+      // Aguardar user carregar antes de prosseguir
+      if (!user?.empresa_id || !pedidoId) return
 
       try {
-        const empresaId = empresa?.id || user?.empresa_id
-        if (!empresaId) {
-          setLoading(false)
-          return
-        }
+        const empresaId = user.empresa_id
 
         // Buscar detalhes do pedido usando RPC
         const { data: pedido, error: pError } = await supabase.rpc('flowb2b_get_pedido_compra_detalhes', {
@@ -214,16 +208,15 @@ export default function EditarPedidoCompraPage() {
     }
 
     fetchPedido()
-  }, [pedidoId, user?.id, user?.empresa_id, empresa?.id])
+  }, [pedidoId, user?.empresa_id])
 
   // Buscar produtos do fornecedor
   const fetchProdutosFornecedor = async (search: string = '') => {
-    if (!fornecedorId || !user?.id) return
+    if (!fornecedorId || !user?.empresa_id) return
 
     setLoadingProdutos(true)
     try {
-      const empresaId = empresa?.id || user?.empresa_id
-      if (!empresaId) return
+      const empresaId = user.empresa_id
 
       let query = supabase
         .from('fornecedores_produtos')
@@ -365,7 +358,7 @@ export default function EditarPedidoCompraPage() {
 
     setSaving(true)
     try {
-      const empresaId = empresa?.id || user?.empresa_id
+      const empresaId = user?.empresa_id
       if (!empresaId) throw new Error('Empresa nao identificada')
 
       const itensPayload = itens.map(item => ({

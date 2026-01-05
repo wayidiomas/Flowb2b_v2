@@ -930,6 +930,7 @@ function GerarAutomaticoContent() {
         fretePorConta: fretePorConta,
         observacoes: observacoesFinais || undefined,
         observacoesInternas: observacoesInternas || undefined,
+        politicaId: politicaSelecionadaId || undefined, // ID da politica selecionada
         itens: itensPayload,
         parcelas: parcelasPayload
       }
@@ -961,7 +962,7 @@ function GerarAutomaticoContent() {
 
       // Aguardar um pouco para o usuario ver a mensagem antes de redirecionar
       setTimeout(() => {
-        router.push(`/compras/pedidos/${result.id}/editar`)
+        router.push(`/compras/pedidos/${result.id}`)
       }, 2000)
 
     } catch (err) {

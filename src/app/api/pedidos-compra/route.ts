@@ -48,6 +48,7 @@ interface PedidoCompraRequest {
   totalIpi?: number
   pesoBruto?: number
   volumes?: number
+  politicaId?: number  // ID da politica de compra selecionada
   itens: ItemPedidoRequest[]
   parcelas?: ParcelaRequest[]
 }
@@ -366,6 +367,7 @@ export async function POST(request: NextRequest) {
       p_ordem_compra: body.ordemCompra || null,
       p_observacoes: body.observacoes || null,
       p_observacoes_internas: body.observacoesInternas || null,
+      p_politica_compra_id: body.politicaId || null,
       p_itens: itensRPC,
       p_parcelas: parcelasRPC,
     })
