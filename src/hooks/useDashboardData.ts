@@ -39,6 +39,10 @@ interface UseDashboardDataReturn {
   intervalo: IntervaloGrafico
   setIntervaloEstoque: (intervalo: IntervaloEstoque) => void
   intervaloEstoque: IntervaloEstoque
+  // Datas personalizadas para variação de estoque
+  dataInicioEstoque: string | null
+  dataFimEstoque: string | null
+  setDatasEstoque: (inicio: string | null, fim: string | null) => void
 }
 
 export function useDashboardData(): UseDashboardDataReturn {
@@ -58,6 +62,14 @@ export function useDashboardData(): UseDashboardDataReturn {
   const [error, setError] = useState<string | null>(null)
   const [intervalo, setIntervalo] = useState<IntervaloGrafico>('12_meses')
   const [intervaloEstoque, setIntervaloEstoque] = useState<IntervaloEstoque>('4_meses')
+  const [dataInicioEstoque, setDataInicioEstoque] = useState<string | null>(null)
+  const [dataFimEstoque, setDataFimEstoque] = useState<string | null>(null)
+
+  // Setter para datas personalizadas
+  const setDatasEstoque = (inicio: string | null, fim: string | null) => {
+    setDataInicioEstoque(inicio)
+    setDataFimEstoque(fim)
+  }
 
   const fetchData = useCallback(async () => {
     console.log('[Dashboard] empresaId:', empresaId)
@@ -133,6 +145,8 @@ export function useDashboardData(): UseDashboardDataReturn {
         supabase.rpc('get_variacao_valor_estoque', {
           p_empresa_id: empresaId,
           p_intervalo: intervaloEstoque,
+          p_data_inicio: intervaloEstoque === 'personalizado' ? dataInicioEstoque : null,
+          p_data_fim: intervaloEstoque === 'personalizado' ? dataFimEstoque : null,
         }),
 
         // 9. Fornecedores que mais vendem
@@ -229,7 +243,7 @@ export function useDashboardData(): UseDashboardDataReturn {
     } finally {
       setLoading(false)
     }
-  }, [empresaId, intervalo, intervaloEstoque])
+  }, [empresaId, intervalo, intervaloEstoque, dataInicioEstoque, dataFimEstoque])
 
   // Buscar dados quando empresaId ou intervalo mudar
   useEffect(() => {
@@ -253,6 +267,9 @@ export function useDashboardData(): UseDashboardDataReturn {
     intervalo,
     setIntervaloEstoque,
     intervaloEstoque,
+    dataInicioEstoque,
+    dataFimEstoque,
+    setDatasEstoque,
   }
 }
 

@@ -78,6 +78,9 @@ export default function Home() {
     setIntervalo,
     intervaloEstoque,
     setIntervaloEstoque,
+    dataInicioEstoque,
+    dataFimEstoque,
+    setDatasEstoque,
   } = useDashboardData()
 
   const { data: produtosCurva, loading: loadingCurva } = useProdutosCurva(curvaSelecionada)
@@ -220,32 +223,62 @@ export default function Home() {
 
         {/* Variação do Valor em Estoque */}
         <Card padding="md">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900">Variação do Valor em Estoque</h3>
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Variação do Valor em Estoque</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={intervaloEstoque}
+                  onChange={(e) => {
+                    const novoIntervalo = e.target.value as typeof intervaloEstoque
+                    setIntervaloEstoque(novoIntervalo)
+                    // Limpar datas personalizadas se mudar para outro intervalo
+                    if (novoIntervalo !== 'personalizado') {
+                      setDatasEstoque(null, null)
+                    }
+                  }}
+                  className="text-xs bg-gray-100 border-0 rounded-full px-3 py-1.5 text-gray-600 focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="hoje">Hoje</option>
+                  <option value="7_dias">Semana</option>
+                  <option value="30_dias">Mês</option>
+                  <option value="4_meses">4 Meses</option>
+                  <option value="12_meses">Ano</option>
+                  <option value="personalizado">Personalizado</option>
+                </select>
+                {variacaoEstoque.length > 0 && (
+                  <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                    (variacaoEstoque[variacaoEstoque.length - 1]?.variacao_percentual || 0) >= 0
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-red-100 text-red-700'
+                  }`}>
+                    {(variacaoEstoque[variacaoEstoque.length - 1]?.variacao_percentual || 0) >= 0 ? '+' : ''}
+                    {variacaoEstoque[variacaoEstoque.length - 1]?.variacao_percentual?.toFixed(1) || 0}%
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={intervaloEstoque}
-                onChange={(e) => setIntervaloEstoque(e.target.value as typeof intervaloEstoque)}
-                className="text-xs bg-gray-100 border-0 rounded-full px-3 py-1.5 text-gray-600 focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="7_dias">Semana</option>
-                <option value="30_dias">Mês</option>
-                <option value="4_meses">4 Meses</option>
-                <option value="12_meses">Ano</option>
-              </select>
-              {variacaoEstoque.length > 0 && (
-                <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                  (variacaoEstoque[variacaoEstoque.length - 1]?.variacao_percentual || 0) >= 0
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-700'
-                }`}>
-                  {(variacaoEstoque[variacaoEstoque.length - 1]?.variacao_percentual || 0) >= 0 ? '+' : ''}
-                  {variacaoEstoque[variacaoEstoque.length - 1]?.variacao_percentual?.toFixed(1) || 0}%
-                </span>
-              )}
-            </div>
+            {/* Seletor de datas personalizado */}
+            {intervaloEstoque === 'personalizado' && (
+              <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg">
+                <label className="text-xs text-gray-500">De:</label>
+                <input
+                  type="date"
+                  value={dataInicioEstoque || ''}
+                  onChange={(e) => setDatasEstoque(e.target.value, dataFimEstoque)}
+                  className="text-xs bg-white border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+                <label className="text-xs text-gray-500">Até:</label>
+                <input
+                  type="date"
+                  value={dataFimEstoque || ''}
+                  onChange={(e) => setDatasEstoque(dataInicioEstoque, e.target.value)}
+                  className="text-xs bg-white border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+            )}
           </div>
           {variacaoEstoque.length > 0 ? (
             <VariacaoEstoqueChart data={variacaoEstoque} intervalo={intervaloEstoque} />
@@ -810,15 +843,22 @@ function VariacaoEstoqueChart({ data, intervalo }: { data: VariacaoEstoqueData[]
   const chartData = data.map((d) => {
     // Garantir que temos uma string de data válida
     const dateStr = typeof d.data === 'string' ? d.data : new Date(d.data).toISOString().split('T')[0]
-    // Extrair ano e mês diretamente da string para evitar problemas de timezone
-    const [year, month] = dateStr.split('-').map(Number)
+    // Extrair ano, mês e dia diretamente da string para evitar problemas de timezone
+    const [year, month, day] = dateStr.split('-').map(Number)
     const monthNames = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
-    const dayPart = dateStr.split('-')[2]
 
-    // Para intervalos de mês/ano, mostrar mês e ano
-    const label = intervalo === '7_dias' || intervalo === '30_dias'
-      ? `${dayPart} ${monthNames[month - 1]}`
-      : `${monthNames[month - 1]} ${String(year).slice(-2)}`
+    // Formatar label baseado no intervalo
+    let label: string
+    if (intervalo === 'hoje') {
+      // Para hoje, mostrar apenas "Hoje"
+      label = 'Hoje'
+    } else if (intervalo === '7_dias' || intervalo === '30_dias' || intervalo === 'personalizado') {
+      // Para intervalos curtos ou personalizado (até 60 dias), mostrar dia e mês
+      label = `${String(day).padStart(2, '0')} ${monthNames[month - 1]}`
+    } else {
+      // Para intervalos longos (4_meses, 12_meses), mostrar mês e ano
+      label = `${monthNames[month - 1]} ${String(year).slice(-2)}`
+    }
 
     return {
       data: label,

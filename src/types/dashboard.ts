@@ -49,7 +49,7 @@ export interface AtividadeRecente {
 }
 
 export type IntervaloGrafico = '7_dias' | '30_dias' | '12_meses'
-export type IntervaloEstoque = '7_dias' | '30_dias' | '4_meses' | '12_meses'
+export type IntervaloEstoque = 'hoje' | '7_dias' | '30_dias' | '4_meses' | '12_meses' | 'personalizado'
 
 // Fornecedores que mais vendem
 export interface FornecedorMaisVendas {
