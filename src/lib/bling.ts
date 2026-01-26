@@ -13,6 +13,7 @@ export function getBlingAuthUrl(state: string): string {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: BLING_CONFIG.clientId,
+    redirect_uri: BLING_CONFIG.redirectUri,
     state,
   })
 
