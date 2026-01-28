@@ -37,6 +37,7 @@ export async function exchangeCodeForTokens(code: string): Promise<BlingTokenRes
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code,
+      redirect_uri: BLING_CONFIG.redirectUri,
     }),
   })
 
