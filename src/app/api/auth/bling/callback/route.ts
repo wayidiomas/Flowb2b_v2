@@ -170,25 +170,30 @@ export async function GET(request: NextRequest) {
         }).catch((err) => {
           console.error('[Bling Callback] Erro ao disparar first-time sync:', err)
         })
-      } else {
-        // Com produtos = daily sync (incremental)
-        console.log(`[Bling Callback] Update mode: ${produtosCount} produtos, disparando daily sync para empresa ${empresaId}`)
-        fetch(`${FLOWB2BAPI_URL}/api/sync/daily`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            empresa_id: empresaId,
-            accessToken: tokens.access_token,
-            refresh_token: tokens.refresh_token,
-          }),
-        }).catch((err) => {
-          console.error('[Bling Callback] Erro ao disparar daily sync:', err)
-        })
+
+        // Redirecionar para página de sync status (aguarde a sincronização)
+        return NextResponse.redirect(
+          new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=Tokens atualizados! Sincronização iniciada.`, APP_URL)
+        )
       }
 
-      // Redirecionar para página de sync status (independente do tipo)
+      // Com produtos = daily sync (incremental, roda em background)
+      console.log(`[Bling Callback] Update mode: ${produtosCount} produtos, disparando daily sync para empresa ${empresaId}`)
+      fetch(`${FLOWB2BAPI_URL}/api/sync/daily`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          accessToken: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+        }),
+      }).catch((err) => {
+        console.error('[Bling Callback] Erro ao disparar daily sync:', err)
+      })
+
+      // Daily sync roda em background, voltar para edição da empresa
       return NextResponse.redirect(
-        new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=Tokens atualizados! Sincronização iniciada.`, APP_URL)
+        new URL(`/cadastros/empresas/${empresaId}/editar?success=Tokens atualizados! Sincronização diária iniciada em background.`, APP_URL)
       )
     }
 
