@@ -16,21 +16,21 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Bling OAuth error:', error)
       return NextResponse.redirect(
-        new URL(`/dashboard?error=Autorização negada: ${error}`, request.url)
+        new URL(`/dashboard?error=Autorização negada: ${error}`, APP_URL)
       )
     }
 
     // Verificar se código foi recebido
     if (!code) {
       return NextResponse.redirect(
-        new URL('/dashboard?error=Código de autorização não recebido', request.url)
+        new URL('/dashboard?error=Código de autorização não recebido', APP_URL)
       )
     }
 
     // Decodificar e validar state
     if (!state) {
       return NextResponse.redirect(
-        new URL('/dashboard?error=State inválido', request.url)
+        new URL('/dashboard?error=State inválido', APP_URL)
       )
     }
 
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       stateData = JSON.parse(Buffer.from(state, 'base64url').toString())
     } catch {
       return NextResponse.redirect(
-        new URL('/dashboard?error=State corrompido', request.url)
+        new URL('/dashboard?error=State corrompido', APP_URL)
       )
     }
 
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     const stateAge = Date.now() - stateData.timestamp
     if (stateAge > 10 * 60 * 1000) {
       return NextResponse.redirect(
-        new URL('/dashboard?error=Sessão expirada, tente novamente', request.url)
+        new URL('/dashboard?error=Sessão expirada, tente novamente', APP_URL)
       )
     }
 
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     const user = await getCurrentUser()
     if (!user || user.userId !== stateData.userId) {
       return NextResponse.redirect(
-        new URL('/login?error=Sessão inválida', request.url)
+        new URL('/login?error=Sessão inválida', APP_URL)
       )
     }
 
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     // Se ainda não tem empresa, redirecionar para onboarding
     if (!empresaId) {
       return NextResponse.redirect(
-        new URL('/onboarding?step=empresa&bling_connected=pending', request.url)
+        new URL('/onboarding?step=empresa&bling_connected=pending', APP_URL)
       )
     }
 
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
     if (upsertError) {
       console.error('Error saving Bling tokens:', upsertError)
       return NextResponse.redirect(
-        new URL('/dashboard?error=Erro ao salvar credenciais', request.url)
+        new URL('/dashboard?error=Erro ao salvar credenciais', APP_URL)
       )
     }
 
@@ -132,19 +132,19 @@ export async function GET(request: NextRequest) {
 
       // Redirecionar para página de sync status
       return NextResponse.redirect(
-        new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=Bling conectado! Sincronização iniciada.`, request.url)
+        new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=Bling conectado! Sincronização iniciada.`, APP_URL)
       )
     }
 
     // Mode update: tokens atualizados, redirecionar de volta para edição da empresa
     console.log(`[Bling Callback] Tokens atualizados para empresa ${empresaId}`)
     return NextResponse.redirect(
-      new URL(`/cadastros/empresas/${empresaId}/editar?success=Tokens do Bling atualizados com sucesso!`, request.url)
+      new URL(`/cadastros/empresas/${empresaId}/editar?success=Tokens do Bling atualizados com sucesso!`, APP_URL)
     )
   } catch (error) {
     console.error('Bling callback error:', error)
     return NextResponse.redirect(
-      new URL('/dashboard?error=Erro ao processar autorização', request.url)
+      new URL('/dashboard?error=Erro ao processar autorização', APP_URL)
     )
   }
 }
