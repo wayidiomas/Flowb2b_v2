@@ -146,8 +146,54 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Mode update: tokens atualizados, redirecionar de volta para edição da empresa
-    console.log(`[Bling Callback] Tokens atualizados para empresa ${empresaId}`)
+    // Mode update: verificar se precisa sincronizar
+    if (FLOWB2BAPI_URL) {
+      // Contar produtos da empresa para decidir tipo de sync
+      const { count } = await supabase
+        .from('produtos')
+        .select('*', { count: 'exact', head: true })
+        .eq('empresa_id', empresaId)
+
+      const produtosCount = count ?? 0
+
+      if (produtosCount === 0) {
+        // Sem produtos = first-time sync (importação completa)
+        console.log(`[Bling Callback] Update mode: 0 produtos, disparando first-time sync para empresa ${empresaId}`)
+        fetch(`${FLOWB2BAPI_URL}/api/sync/first-time`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empresa_id: empresaId,
+            accessToken: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+          }),
+        }).catch((err) => {
+          console.error('[Bling Callback] Erro ao disparar first-time sync:', err)
+        })
+      } else {
+        // Com produtos = daily sync (incremental)
+        console.log(`[Bling Callback] Update mode: ${produtosCount} produtos, disparando daily sync para empresa ${empresaId}`)
+        fetch(`${FLOWB2BAPI_URL}/api/sync/daily`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empresa_id: empresaId,
+            accessToken: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+          }),
+        }).catch((err) => {
+          console.error('[Bling Callback] Erro ao disparar daily sync:', err)
+        })
+      }
+
+      // Redirecionar para página de sync status (independente do tipo)
+      return NextResponse.redirect(
+        new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=Tokens atualizados! Sincronização iniciada.`, APP_URL)
+      )
+    }
+
+    // Fallback: se FLOWB2BAPI_URL não existe, redirecionar para edição
+    console.log(`[Bling Callback] FLOWB2BAPI_URL não configurada, tokens atualizados para empresa ${empresaId}`)
     return NextResponse.redirect(
       new URL(`/cadastros/empresas/${empresaId}/editar?success=Tokens do Bling atualizados com sucesso!`, APP_URL)
     )
