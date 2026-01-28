@@ -65,13 +65,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Verificar se é atualização de tokens (mode=update)
+    const mode = searchParams.get('mode') === 'update' ? 'update' : 'connect'
+
     // Gerar state com userId para validar no callback
-    // State contém: { userId, empresaId, timestamp, random }
+    // State contém: { userId, empresaId, timestamp, random, mode }
     const stateData = {
       userId: user.userId,
       empresaId: empresaId,
       timestamp: Date.now(),
       random: crypto.randomUUID(),
+      mode,
     }
 
     // Codificar state em base64

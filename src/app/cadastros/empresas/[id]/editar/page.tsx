@@ -2,18 +2,28 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { EmpresaForm, EmpresaFormData } from '@/components/empresas/EmpresaForm'
 import { supabase } from '@/lib/supabase'
 
 export default function EditarEmpresaPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const empresaId = params.id as string
+  const successMessage = searchParams.get('success')
   const [empresa, setEmpresa] = useState<Partial<EmpresaFormData> | null>(null)
   const [conectadaBling, setConectadaBling] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showSuccess, setShowSuccess] = useState(!!successMessage)
+
+  useEffect(() => {
+    if (showSuccess) {
+      const timer = setTimeout(() => setShowSuccess(false), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [showSuccess])
 
   useEffect(() => {
     async function fetchEmpresa() {
@@ -103,6 +113,16 @@ export default function EditarEmpresaPage() {
           <span className="font-medium text-gray-900">Editar Empresa</span>
         </nav>
       </div>
+
+      {/* Mensagem de sucesso */}
+      {showSuccess && successMessage && (
+        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
+          <svg className="w-5 h-5 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <p className="text-green-800 font-medium text-sm">{successMessage}</p>
+        </div>
+      )}
 
       <EmpresaForm initialData={empresa} isEditing conectadaBling={conectadaBling} />
     </DashboardLayout>

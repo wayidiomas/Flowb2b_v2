@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    let stateData: { userId: string; empresaId: number | null; timestamp: number }
+    let stateData: { userId: string; empresaId: number | null; timestamp: number; mode?: string }
 
     try {
       stateData = JSON.parse(Buffer.from(state, 'base64url').toString())
@@ -117,19 +117,29 @@ export async function GET(request: NextRequest) {
       })
       .eq('id', empresaId)
 
-    // Disparar sync first-time em background (fire and forget)
-    console.log(`[Bling Callback] Disparando sync first-time para empresa ${empresaId}`)
-    fetch(`${APP_URL}/api/sync/first-time`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ empresa_id: empresaId }),
-    }).catch((err) => {
-      console.error('[Bling Callback] Erro ao disparar sync:', err)
-    })
+    const isUpdate = stateData.mode === 'update'
 
-    // Redirecionar para página de sync status
+    if (!isUpdate) {
+      // Disparar sync first-time em background (fire and forget) — apenas para conexão nova
+      console.log(`[Bling Callback] Disparando sync first-time para empresa ${empresaId}`)
+      fetch(`${APP_URL}/api/sync/first-time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresa_id: empresaId }),
+      }).catch((err) => {
+        console.error('[Bling Callback] Erro ao disparar sync:', err)
+      })
+
+      // Redirecionar para página de sync status
+      return NextResponse.redirect(
+        new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=Bling conectado! Sincronização iniciada.`, request.url)
+      )
+    }
+
+    // Mode update: tokens atualizados, redirecionar de volta para edição da empresa
+    console.log(`[Bling Callback] Tokens atualizados para empresa ${empresaId}`)
     return NextResponse.redirect(
-      new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=Bling conectado! Sincronização iniciada.`, request.url)
+      new URL(`/cadastros/empresas/${empresaId}/editar?success=Tokens do Bling atualizados com sucesso!`, request.url)
     )
   } catch (error) {
     console.error('Bling callback error:', error)
