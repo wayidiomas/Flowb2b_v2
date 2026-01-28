@@ -2,7 +2,6 @@
 export const BLING_CONFIG = {
   clientId: process.env.BLING_CLIENT_ID!,
   clientSecret: process.env.BLING_CLIENT_SECRET!,
-  redirectUri: process.env.BLING_REDIRECT_URI!,
   authUrl: 'https://www.bling.com.br/Api/v3/oauth/authorize',
   tokenUrl: 'https://www.bling.com.br/Api/v3/oauth/token',
   apiUrl: process.env.BLING_API_URL || 'https://api.bling.com.br/Api/v3',
@@ -13,7 +12,6 @@ export function getBlingAuthUrl(state: string): string {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: BLING_CONFIG.clientId,
-    redirect_uri: BLING_CONFIG.redirectUri,
     state,
   })
 
@@ -37,7 +35,6 @@ export async function exchangeCodeForTokens(code: string): Promise<BlingTokenRes
     body: new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: BLING_CONFIG.redirectUri,
     }),
   })
 
