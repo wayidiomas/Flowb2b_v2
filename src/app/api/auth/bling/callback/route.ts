@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { exchangeCodeForTokens, getBlingBasicAuth } from '@/lib/bling'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+const FLOWB2BAPI_URL = process.env.FLOWB2BAPI_URL
 
 export async function GET(request: NextRequest) {
   try {
@@ -120,15 +121,24 @@ export async function GET(request: NextRequest) {
     const isUpdate = stateData.mode === 'update'
 
     if (!isUpdate) {
-      // Disparar sync first-time em background (fire and forget) — apenas para conexão nova
-      console.log(`[Bling Callback] Disparando sync first-time para empresa ${empresaId}`)
-      fetch(`${APP_URL}/api/sync/first-time`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresa_id: empresaId }),
-      }).catch((err) => {
-        console.error('[Bling Callback] Erro ao disparar sync:', err)
-      })
+      // Disparar sync first-time direto na flowB2BAPI (fire and forget)
+      // Não usa a rota interna /api/sync/first-time porque fetch server-side não envia cookies
+      if (FLOWB2BAPI_URL) {
+        console.log(`[Bling Callback] Disparando sync first-time para empresa ${empresaId}`)
+        fetch(`${FLOWB2BAPI_URL}/api/sync/first-time`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empresa_id: empresaId,
+            accessToken: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+          }),
+        }).catch((err) => {
+          console.error('[Bling Callback] Erro ao disparar sync:', err)
+        })
+      } else {
+        console.error('[Bling Callback] FLOWB2BAPI_URL nao configurada, sync nao disparado')
+      }
 
       // Redirecionar para página de sync status
       return NextResponse.redirect(
