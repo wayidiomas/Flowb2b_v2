@@ -14,6 +14,15 @@ export interface TrialStatus {
   hasActiveSubscription: boolean
 }
 
+// Interface para empresa vinculada ao usuario
+export interface EmpresaVinculada {
+  id: number
+  razao_social: string
+  nome_fantasia: string | null
+  cnpj: string | null
+  role: string
+}
+
 interface AuthContextType {
   user: User | null
   empresa: {
@@ -22,8 +31,11 @@ interface AuthContextType {
     nome_fantasia: string
     cnpj: string
   } | null
+  empresas: EmpresaVinculada[]
   trialStatus: TrialStatus | null
   loading: boolean
+  switchEmpresa: (empresaId: number) => Promise<void>
+  switchingEmpresa: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
@@ -34,8 +46,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [empresa, setEmpresa] = useState<AuthContextType['empresa']>(null)
+  const [empresas, setEmpresas] = useState<EmpresaVinculada[]>([])
   const [trialStatus, setTrialStatus] = useState<TrialStatus | null>(null)
   const [loading, setLoading] = useState(true)
+  const [switchingEmpresa, setSwitchingEmpresa] = useState(false)
   const router = useRouter()
 
   const refreshUser = async () => {
@@ -49,21 +63,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (data.success) {
           setUser(data.user)
           setEmpresa(data.user.empresa)
+          setEmpresas(data.user.empresas || [])
           setTrialStatus(data.trialStatus || null)
         } else {
           setUser(null)
           setEmpresa(null)
+          setEmpresas([])
           setTrialStatus(null)
         }
       } else {
         setUser(null)
         setEmpresa(null)
+        setEmpresas([])
         setTrialStatus(null)
       }
     } catch (error) {
       console.error('Error refreshing user:', error)
       setUser(null)
       setEmpresa(null)
+      setEmpresas([])
       setTrialStatus(null)
     }
   }
@@ -98,11 +116,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const switchEmpresa = async (empresaId: number) => {
+    setSwitchingEmpresa(true)
+    try {
+      const response = await fetch('/api/empresas/vincular', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresaId }),
+      })
+
+      if (response.ok) {
+        await refreshUser()
+      }
+    } catch (error) {
+      console.error('Erro ao trocar empresa:', error)
+    } finally {
+      setSwitchingEmpresa(false)
+    }
+  }
+
   const logout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
       setUser(null)
       setEmpresa(null)
+      setEmpresas([])
       router.push('/login')
     } catch (error) {
       console.error('Logout error:', error)
@@ -110,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, empresa, trialStatus, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, empresa, empresas, trialStatus, loading, switchEmpresa, switchingEmpresa, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

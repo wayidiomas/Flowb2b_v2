@@ -136,27 +136,26 @@ export default function MinhasEmpresasPage() {
     }
 
     try {
-      // O usuario tem empresa_id diretamente na tabela users
-      // Buscar a empresa vinculada ao usuario
-      const empresaId = empresa?.id || user?.empresa_id
+      // Buscar todas as empresas vinculadas ao usuario via users_empresas
+      const { data: vinculos, error: vinculosError } = await supabase
+        .from('users_empresas')
+        .select('empresa_id')
+        .eq('user_id', user.id)
+        .eq('ativo', true)
 
-      if (empresaId) {
-        // Buscar a empresa do usuario
+      if (vinculosError) {
+        console.error('Erro ao buscar vinculos:', vinculosError)
+        setLoading(false)
+        return
+      }
+
+      const empresaIds = vinculos?.map(v => v.empresa_id) || []
+
+      if (empresaIds.length > 0) {
         const { data, error } = await supabase
           .from('empresas')
           .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade, cnpj')
-          .eq('id', empresaId)
-
-        if (error) {
-          console.error('Erro ao buscar empresa:', error)
-        } else if (data) {
-          setEmpresas(data)
-        }
-      } else {
-        // Fallback: buscar todas as empresas disponiveis
-        const { data, error } = await supabase
-          .from('empresas')
-          .select('id, razao_social, nome_fantasia, endereco_resumido, numero_colaboradores, ativo, unidade, cnpj')
+          .in('id', empresaIds)
           .order('razao_social')
 
         if (error) {
@@ -164,6 +163,8 @@ export default function MinhasEmpresasPage() {
         } else if (data) {
           setEmpresas(data)
         }
+      } else {
+        setEmpresas([])
       }
     } catch (err) {
       console.error('Erro:', err)
@@ -174,7 +175,7 @@ export default function MinhasEmpresasPage() {
 
   useEffect(() => {
     fetchEmpresas()
-  }, [user?.id, user?.empresa_id, empresa?.id])
+  }, [user?.id])
 
   // Filtrar empresas por termo de busca, CNPJ e status
   const filteredEmpresas = empresas.filter((emp) => {
