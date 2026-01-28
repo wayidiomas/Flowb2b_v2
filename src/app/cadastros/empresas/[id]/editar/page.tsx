@@ -11,6 +11,7 @@ export default function EditarEmpresaPage() {
   const params = useParams()
   const empresaId = params.id as string
   const [empresa, setEmpresa] = useState<Partial<EmpresaFormData> | null>(null)
+  const [conectadaBling, setConectadaBling] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,6 +29,7 @@ export default function EditarEmpresaPage() {
         if (fetchError) throw fetchError
 
         if (data) {
+          setConectadaBling(!!data.conectadabling)
           setEmpresa({
             id: data.id,
             razao_social: data.razao_social || '',
@@ -102,7 +104,7 @@ export default function EditarEmpresaPage() {
         </nav>
       </div>
 
-      <EmpresaForm initialData={empresa} isEditing />
+      <EmpresaForm initialData={empresa} isEditing conectadaBling={conectadaBling} />
     </DashboardLayout>
   )
 }

@@ -106,6 +106,7 @@ interface Colaborador {
 interface EmpresaFormProps {
   initialData?: Partial<EmpresaFormData>
   isEditing?: boolean
+  conectadaBling?: boolean
   colaboradores?: Colaborador[]
   onAddColaborador?: () => void
 }
@@ -119,7 +120,7 @@ const funcionariosOptions = ['1-10', '11-50', '51-200', '201-500', '500+']
 
 type TabType = 'contato' | 'endereco' | 'logotipo' | 'colaboradores'
 
-export function EmpresaForm({ initialData, isEditing = false, colaboradores = [], onAddColaborador }: EmpresaFormProps) {
+export function EmpresaForm({ initialData, isEditing = false, conectadaBling = false, colaboradores = [], onAddColaborador }: EmpresaFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -384,6 +385,17 @@ export function EmpresaForm({ initialData, isEditing = false, colaboradores = []
               </p>
             </div>
             <div className="flex items-center gap-3">
+              {isEditing && !conectadaBling && initialData?.id && (
+                <a
+                  href={`/api/auth/bling/connect?empresaId=${initialData.id}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.813a4.5 4.5 0 00-1.242-7.244l4.5-4.5a4.5 4.5 0 016.364 6.364l-1.757 1.757" />
+                  </svg>
+                  Conectar com Bling
+                </a>
+              )}
               <Link
                 href="/cadastros/empresas"
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-600 hover:bg-gray-700 rounded-lg transition-colors"
