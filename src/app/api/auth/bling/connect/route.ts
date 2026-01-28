@@ -68,14 +68,18 @@ export async function GET(request: NextRequest) {
     // Verificar se é atualização de tokens (mode=update)
     const mode = searchParams.get('mode') === 'update' ? 'update' : 'connect'
 
+    // Verificar se é reautorização após revoke (revoke=true)
+    const isRevoke = searchParams.get('revoke') === 'true'
+
     // Gerar state com userId para validar no callback
-    // State contém: { userId, empresaId, timestamp, random, mode }
+    // State contém: { userId, empresaId, timestamp, random, mode, revoke }
     const stateData = {
       userId: user.userId,
       empresaId: empresaId,
       timestamp: Date.now(),
       random: crypto.randomUUID(),
       mode,
+      revoke: isRevoke,
     }
 
     // Codificar state em base64

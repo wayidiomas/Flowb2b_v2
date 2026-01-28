@@ -25,26 +25,33 @@ export async function GET() {
     // Buscar tokens do Bling
     const { data: tokens } = await supabase
       .from('bling_tokens')
-      .select('expires_at, updated_at')
+      .select('expires_at, updated_at, is_revoke')
       .eq('empresa_id', user.empresaId)
       .single()
 
     if (!tokens) {
       return NextResponse.json({
         connected: false,
+        isRevoked: false,
         message: 'Bling não conectado',
       })
     }
 
     const expiresAt = new Date(tokens.expires_at)
     const isExpired = expiresAt < new Date()
+    const isRevoked = tokens.is_revoke === true
 
     return NextResponse.json({
-      connected: !isExpired,
+      connected: !isExpired && !isRevoked,
       expiresAt: tokens.expires_at,
       updatedAt: tokens.updated_at,
       isExpired,
-      message: isExpired ? 'Token expirado' : 'Bling conectado',
+      isRevoked,
+      message: isRevoked
+        ? 'Reautorização necessária'
+        : isExpired
+          ? 'Token expirado'
+          : 'Bling conectado',
     })
   } catch (error) {
     console.error('Bling status error:', error)

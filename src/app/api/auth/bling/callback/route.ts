@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    let stateData: { userId: string; empresaId: number | null; timestamp: number; mode?: string }
+    let stateData: { userId: string; empresaId: number | null; timestamp: number; mode?: string; revoke?: boolean }
 
     try {
       stateData = JSON.parse(Buffer.from(state, 'base64url').toString())
@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
           expires_at: expiresAt.toISOString(),
           Auth_Basic: getBlingBasicAuth(),
           updated_at: new Date().toISOString(),
+          is_revoke: false, // Reset flag ao reautorizar
         },
         {
           onConflict: 'empresa_id',
@@ -119,12 +120,14 @@ export async function GET(request: NextRequest) {
       .eq('id', empresaId)
 
     const isUpdate = stateData.mode === 'update'
+    const isRevoke = stateData.revoke === true
 
-    if (!isUpdate) {
+    // Se é revoke ou nova conexão, sempre fazer first-time sync
+    if (!isUpdate || isRevoke) {
       // Disparar sync first-time direto na flowB2BAPI (fire and forget)
       // Não usa a rota interna /api/sync/first-time porque fetch server-side não envia cookies
       if (FLOWB2BAPI_URL) {
-        console.log(`[Bling Callback] Disparando sync first-time para empresa ${empresaId}`)
+        console.log(`[Bling Callback] ${isRevoke ? 'Revoke mode' : 'Connect mode'}: disparando sync first-time para empresa ${empresaId}`)
         fetch(`${FLOWB2BAPI_URL}/api/sync/first-time`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -141,12 +144,15 @@ export async function GET(request: NextRequest) {
       }
 
       // Redirecionar para página de sync status
+      const successMsg = isRevoke
+        ? 'Bling reautorizado! Sincronização completa iniciada.'
+        : 'Bling conectado! Sincronização iniciada.'
       return NextResponse.redirect(
-        new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=Bling conectado! Sincronização iniciada.`, APP_URL)
+        new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=${encodeURIComponent(successMsg)}`, APP_URL)
       )
     }
 
-    // Mode update: verificar se precisa sincronizar
+    // Mode update (sem revoke): verificar se precisa sincronizar
     if (FLOWB2BAPI_URL) {
       // Contar produtos da empresa para decidir tipo de sync
       const { count } = await supabase
