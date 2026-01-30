@@ -112,7 +112,17 @@ export async function GET(request: NextRequest) {
 
     const isUpdate = stateData.mode === 'update'
     const isRevoke = stateData.revoke === true
-    const willFirstTimeSync = !isUpdate || isRevoke
+
+    // Consultar sync_status atual do banco para decisão robusta
+    // Se sync_status != 'completed', forçar first-time sync independente dos params
+    const { data: empresaData } = await supabase
+      .from('empresas')
+      .select('sync_status')
+      .eq('id', empresaId)
+      .single()
+
+    const syncNotCompleted = empresaData?.sync_status !== 'completed'
+    const willFirstTimeSync = !isUpdate || isRevoke || syncNotCompleted
 
     // Atualizar flag na empresa (sync_status = 'syncing' se vai rodar first-time)
     await supabase
@@ -124,12 +134,13 @@ export async function GET(request: NextRequest) {
       })
       .eq('id', empresaId)
 
-    // Se é revoke ou nova conexão, sempre fazer first-time sync
+    // Se é revoke, nova conexão, ou sync_status não está completed, fazer first-time sync
     if (willFirstTimeSync) {
       // Disparar sync first-time direto na flowB2BAPI (fire and forget)
       // Não usa a rota interna /api/sync/first-time porque fetch server-side não envia cookies
       if (FLOWB2BAPI_URL) {
-        console.log(`[Bling Callback] ${isRevoke ? 'Revoke mode' : 'Connect mode'}: disparando sync first-time para empresa ${empresaId}`)
+        const reason = isRevoke ? 'Revoke mode' : syncNotCompleted ? `sync_status=${empresaData?.sync_status}` : 'Connect mode'
+        console.log(`[Bling Callback] ${reason}: disparando sync first-time para empresa ${empresaId}`)
         fetch(`${FLOWB2BAPI_URL}/api/sync/first-time`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -148,7 +159,9 @@ export async function GET(request: NextRequest) {
       // Redirecionar para página de sync status
       const successMsg = isRevoke
         ? 'Bling reautorizado! Sincronização completa iniciada.'
-        : 'Bling conectado! Sincronização iniciada.'
+        : syncNotCompleted
+          ? 'Sincronização iniciada para completar a importação.'
+          : 'Bling conectado! Sincronização iniciada.'
       return NextResponse.redirect(
         new URL(`/configuracoes/sync?empresa_id=${empresaId}&success=${encodeURIComponent(successMsg)}`, APP_URL)
       )
