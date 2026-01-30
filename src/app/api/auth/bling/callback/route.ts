@@ -110,20 +110,22 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Atualizar flag na empresa
+    const isUpdate = stateData.mode === 'update'
+    const isRevoke = stateData.revoke === true
+    const willFirstTimeSync = !isUpdate || isRevoke
+
+    // Atualizar flag na empresa (sync_status = 'syncing' se vai rodar first-time)
     await supabase
       .from('empresas')
       .update({
         conectadabling: true,
         dataexpirabling: expiresAt.toISOString(),
+        ...(willFirstTimeSync && { sync_status: 'syncing' }),
       })
       .eq('id', empresaId)
 
-    const isUpdate = stateData.mode === 'update'
-    const isRevoke = stateData.revoke === true
-
     // Se é revoke ou nova conexão, sempre fazer first-time sync
-    if (!isUpdate || isRevoke) {
+    if (willFirstTimeSync) {
       // Disparar sync first-time direto na flowB2BAPI (fire and forget)
       // Não usa a rota interna /api/sync/first-time porque fetch server-side não envia cookies
       if (FLOWB2BAPI_URL) {
@@ -165,6 +167,13 @@ export async function GET(request: NextRequest) {
       if (produtosCount === 0) {
         // Sem produtos = first-time sync (importação completa)
         console.log(`[Bling Callback] Update mode: 0 produtos, disparando first-time sync para empresa ${empresaId}`)
+
+        // Marcar empresa como syncing antes de disparar first-time
+        await supabase
+          .from('empresas')
+          .update({ sync_status: 'syncing' })
+          .eq('id', empresaId)
+
         fetch(`${FLOWB2BAPI_URL}/api/sync/first-time`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
