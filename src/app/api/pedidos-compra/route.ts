@@ -341,6 +341,7 @@ export async function POST(request: NextRequest) {
 
     // 4. Estornar contas automaticamente (Bling cria contas a pagar ao enviar parcelas)
     // Isso evita que o pedido gere contas a pagar indesejadas
+    let estornoWarning: string | null = null
     try {
       const estornoResponse = await fetch(`${BLING_CONFIG.apiUrl}/pedidos/compras/${blingId}/estornar-contas`, {
         method: 'POST',
@@ -354,12 +355,13 @@ export async function POST(request: NextRequest) {
       if (estornoResponse.ok) {
         console.log('Contas estornadas com sucesso para pedido:', blingId)
       } else {
-        // Se falhar o estorno, apenas loga - nao impede a criacao do pedido
         const estornoError = await estornoResponse.text()
         console.warn('Aviso: Nao foi possivel estornar contas:', estornoError)
+        estornoWarning = 'Nao foi possivel estornar contas a pagar automaticamente. Verifique no Bling.'
       }
     } catch (estornoErr) {
       console.warn('Aviso: Erro ao tentar estornar contas:', estornoErr)
+      estornoWarning = 'Nao foi possivel estornar contas a pagar automaticamente. Verifique no Bling.'
     }
 
     // 5. Preparar itens para RPC (JSONB - sem JSON.stringify)
@@ -419,9 +421,14 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Erro ao salvar no Supabase:', error)
       // Pedido ja foi criado no Bling, retornar warning
+      const warnings = [
+        'Pedido criado no Bling mas houve erro ao salvar localmente.',
+        estornoWarning,
+      ].filter(Boolean).join(' ')
+
       return NextResponse.json({
         success: true,
-        warning: 'Pedido criado no Bling mas houve erro ao salvar localmente',
+        warning: warnings,
         bling_id: blingId,
         numero: numeroPedido,
         supabase_error: error.message,
@@ -429,6 +436,17 @@ export async function POST(request: NextRequest) {
     }
 
     const pedidoId = typeof pedido === 'object' ? pedido?.pedido_id : pedido
+
+    // Se teve warning de estorno, retornar como warning (yellow alert)
+    if (estornoWarning) {
+      return NextResponse.json({
+        success: true,
+        warning: estornoWarning,
+        id: pedidoId,
+        bling_id: blingId,
+        numero: numeroPedido,
+      })
+    }
 
     return NextResponse.json({
       success: true,

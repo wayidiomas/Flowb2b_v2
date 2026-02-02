@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { FornecedorSelectModal } from '@/components/pedido-compra/FornecedorSelectModal'
 import { useAuth } from '@/contexts/AuthContext'
@@ -136,7 +136,9 @@ const FRETE_LABELS: Record<string, string> = {
 export default function VisualizarPedidoPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const pedidoId = params.id as string
+  const avisoEstorno = searchParams.get('aviso') === 'estorno'
   const { user } = useAuth()
   const printRef = useRef<HTMLDivElement>(null)
 
@@ -521,6 +523,21 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
 
   return (
     <DashboardLayout>
+      {/* Aviso de estorno (quando redirecionado apos criacao do pedido) */}
+      {avisoEstorno && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <div>
+            <p className="text-sm font-medium text-amber-800">Contas a pagar</p>
+            <p className="text-sm text-amber-700">
+              Nao foi possivel estornar as contas a pagar automaticamente. Verifique no Bling se necessario.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header com acoes */}
       <div className="mb-6">
         <div className="flex items-center justify-between">

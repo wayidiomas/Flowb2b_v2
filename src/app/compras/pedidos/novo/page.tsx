@@ -701,19 +701,15 @@ function NovoPedidoContent() {
         return
       }
 
-      // Verificar se houve warning (pedido criado no Bling mas erro local)
-      if (result.warning) {
-        showToast('warning', 'Pedido criado com ressalvas',
-          `Pedido #${result.numero || result.bling_id} criado no Bling.\n\n${result.warning}`)
-      } else {
-        showToast('success', 'Pedido criado com sucesso!',
-          `Pedido #${result.numero || result.id} foi registrado no Bling e salvo localmente.`)
-      }
+      showToast('success', 'Pedido criado com sucesso!',
+        `Pedido #${result.numero || result.id} foi registrado no Bling e salvo localmente.`)
 
-      // Aguardar um pouco para o usuario ver a mensagem antes de redirecionar
+      // Redirecionar para espelho do pedido (com aviso se houve warning de estorno)
+      const targetId = result.id || result.bling_id
+      const queryParam = result.warning ? '?aviso=estorno' : ''
       setTimeout(() => {
-        router.push('/compras/pedidos')
-      }, 2000)
+        router.push(`/compras/pedidos/${targetId}${queryParam}`)
+      }, 1500)
 
     } catch (err) {
       console.error('Erro ao salvar pedido:', err)
