@@ -88,6 +88,8 @@ export default function EditarPedidoCompraPage() {
 
   // Form state
   const [fornecedorId, setFornecedorId] = useState<number | null>(null)
+  const [fornecedorIdBling, setFornecedorIdBling] = useState<number | null>(null)
+  const [blingId, setBlingId] = useState<number | null>(null)
   const [fornecedorNome, setFornecedorNome] = useState('')
   const [numeroPedido, setNumeroPedido] = useState('')
   const [dataPedido, setDataPedido] = useState('')
@@ -135,6 +137,8 @@ export default function EditarPedidoCompraPage() {
         if (pedido && pedido.length > 0) {
           const p = pedido[0]
           setFornecedorId(p.fornecedor_id)
+          setFornecedorIdBling(p.fornecedor_id_bling || null)
+          setBlingId(p.bling_id || null)
           setFornecedorNome(p.fornecedor_nome || '')
           setNumeroPedido(p.numero || '')
           setDataPedido(p.data ? p.data.split('T')[0] : '')
@@ -154,6 +158,7 @@ export default function EditarPedidoCompraPage() {
             const itensFormatados: ItemPedidoCompra[] = p.itens.map((item: any) => ({
               id: item.id,
               produto_id: item.produto_id,
+              id_produto_bling: item.id_produto_bling || undefined,
               descricao: item.descricao || '',
               codigo_produto: item.codigo_produto || '',
               codigo_fornecedor: item.codigo_fornecedor || '',
@@ -251,7 +256,7 @@ export default function EditarPedidoCompraPage() {
         .select(`
           produto_id,
           valor_de_compra,
-          produtos!inner(id, codigo, nome, unidade, estoque_atual, gtin)
+          produtos!inner(id, id_produto_bling, codigo, nome, unidade, estoque_atual, gtin)
         `)
         .eq('fornecedor_id', fornecedorId)
         .eq('empresa_id', empresaId)
@@ -267,6 +272,7 @@ export default function EditarPedidoCompraPage() {
       if (data) {
         const formatted: ProdutoFornecedor[] = data.map((item: any) => ({
           produto_id: item.produto_id,
+          id_produto_bling: item.produtos.id_produto_bling,
           codigo: item.produtos.codigo || '',
           nome: item.produtos.nome || '',
           unidade: item.produtos.unidade || 'UN',
@@ -298,6 +304,7 @@ export default function EditarPedidoCompraPage() {
 
     const novoItem: ItemPedidoCompra = {
       produto_id: produto.produto_id,
+      id_produto_bling: produto.id_produto_bling,
       descricao: produto.nome,
       codigo_produto: produto.codigo,
       unidade: produto.unidade,
@@ -377,52 +384,123 @@ export default function EditarPedidoCompraPage() {
     }).format(valor)
   }
 
-  // Salvar pedido
+  // Salvar pedido (PUT com sync Bling)
   const handleSave = async () => {
-    if (!fornecedorId || itens.length === 0) {
+    // Validacao: Fornecedor
+    if (!fornecedorId) {
+      alert('Selecione um fornecedor para salvar o pedido.')
+      return
+    }
+
+    // Validacao: Pelo menos um produto
+    if (itens.length === 0) {
       alert('Adicione pelo menos um produto ao pedido.')
       return
     }
 
+    // Validacao: Pedido sincronizado com Bling
+    if (!blingId) {
+      alert('Este pedido nao possui vinculo com o Bling. Nao e possivel editar.')
+      return
+    }
+
+    // Validacao: Fornecedor sincronizado com Bling
+    if (!fornecedorIdBling) {
+      alert('Este fornecedor nao esta sincronizado com o Bling. Va em Cadastros > Fornecedores e sincronize o fornecedor primeiro.')
+      return
+    }
+
+    // Validacao: Quantidades e valores validos
+    const itensInvalidos = itens.filter(item => item.quantidade <= 0 || item.valor <= 0)
+    if (itensInvalidos.length > 0) {
+      alert('Existem produtos com quantidade ou valor zerado/negativo. Corrija antes de continuar.')
+      return
+    }
+
+    // Validacao: Parcelas
+    if (parcelas.length > 0) {
+      const parcelasInvalidas = parcelas.filter(p => p.valor <= 0 || !p.data_vencimento)
+      if (parcelasInvalidas.length > 0) {
+        alert('Existem parcelas com valor zerado ou sem data de vencimento.')
+        return
+      }
+    }
+
+    // Aviso: Produtos sem Bling ID
+    const produtosSemBling = itens.filter(item => !item.id_produto_bling)
+    if (produtosSemBling.length > 0) {
+      const nomes = produtosSemBling.map(p => p.descricao).slice(0, 3).join(', ')
+      const mais = produtosSemBling.length > 3 ? ` e mais ${produtosSemBling.length - 3}` : ''
+      console.warn(`${produtosSemBling.length} produto(s) sem ID Bling: ${nomes}${mais}`)
+    }
+
     setSaving(true)
     try {
-      const empresaId = user?.empresa_id
-      if (!empresaId) throw new Error('Empresa nao identificada')
-
+      // Montar payload de itens com Bling IDs
       const itensPayload = itens.map(item => ({
-        id: item.id,
         descricao: item.descricao,
-        codigo_fornecedor: item.codigo_produto,
+        codigoFornecedor: item.codigo_fornecedor || item.codigo_produto || undefined,
         unidade: item.unidade,
         valor: item.valor,
         quantidade: item.quantidade,
         aliquotaIPI: item.aliquota_ipi,
-        produto: item.produto_id ? { id: item.produto_id, codigo: item.codigo_produto } : null
+        produto_id: item.produto_id || undefined,
+        produto: item.id_produto_bling ? {
+          id: item.id_produto_bling,
+          codigo: item.codigo_produto
+        } : undefined
       }))
 
-      const { data, error } = await supabase.rpc('flowb2b_edit_pedido_compra', {
-        p_pedido_id: parseInt(pedidoId),
-        p_empresa_id: empresaId,
-        p_fornecedor_id: fornecedorId,
-        p_data: dataPedido,
-        p_data_prevista: dataPrevista || null,
-        p_situacao: situacao,
-        p_total_produtos: totalProdutos,
-        p_total: totalPedido,
-        p_desconto: desconto,
-        p_frete: frete,
-        p_total_icms: totalIcms,
-        p_transportador: transportador || null,
-        p_frete_por_conta: fretePorConta,
-        p_politica_compra_id: politicaSelecionada,
-        p_observacoes: observacoes || null,
-        p_observacoes_internas: observacoesInternas || null,
-        p_itens: JSON.stringify(itensPayload)
+      // Montar parcelas com forma de pagamento Bling ID
+      const parcelasPayload = parcelas.length > 0 ? parcelas.map(p => ({
+        valor: p.valor,
+        dataVencimento: p.data_vencimento,
+        observacao: p.observacao || '',
+        formaPagamento: p.forma_pagamento_id_bling ? {
+          id: p.forma_pagamento_id_bling
+        } : undefined
+      })) : undefined
+
+      const payload = {
+        fornecedor_id: fornecedorId,
+        fornecedor_id_bling: fornecedorIdBling,
+        data: dataPedido,
+        dataPrevista: dataPrevista || undefined,
+        totalProdutos: totalProdutos,
+        total: totalPedido,
+        desconto: desconto,
+        frete: frete,
+        totalIcms: totalIcms,
+        transportador: transportador || undefined,
+        fretePorConta: fretePorConta,
+        observacoes: observacoes || undefined,
+        observacoesInternas: observacoesInternas || undefined,
+        situacao: situacao,
+        politicaId: politicaSelecionada || undefined,
+        itens: itensPayload,
+        parcelas: parcelasPayload
+      }
+
+      // Chamar PUT API que integra com Bling
+      const response = await fetch(`/api/pedidos-compra/${pedidoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       })
 
-      if (error) throw error
+      const result = await response.json()
 
-      router.push('/compras/pedidos')
+      if (!response.ok) {
+        const errorMessage = result.error || 'Erro desconhecido ao atualizar pedido'
+        alert(`Erro ao atualizar pedido: ${errorMessage}`)
+        return
+      }
+
+      if (result.warning) {
+        alert(`Pedido atualizado com aviso: ${result.warning}`)
+      }
+
+      router.push(`/compras/pedidos/${pedidoId}`)
     } catch (err) {
       console.error('Erro ao salvar pedido:', err)
       alert('Erro ao salvar pedido. Tente novamente.')
