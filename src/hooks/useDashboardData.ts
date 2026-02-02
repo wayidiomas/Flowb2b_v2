@@ -93,6 +93,9 @@ export function useDashboardData(): UseDashboardDataReturn {
     try {
       setLoadingBase(true)
 
+      // Recalcula curvas ABC antes de buscar dados que dependem delas
+      await supabase.rpc('calcular_abc', { p_empresa_id: empresaId })
+
       const [
         metricsRes,
         fornecedoresRes,
