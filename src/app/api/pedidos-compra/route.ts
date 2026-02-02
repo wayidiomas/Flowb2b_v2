@@ -102,6 +102,23 @@ async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeo
   return tokens.access_token
 }
 
+// Funcao para obter o proximo numero de pedido de compra
+async function getNextNumeroPedido(empresaId: number, supabase: ReturnType<typeof createServerSupabaseClient>): Promise<number> {
+  const { data, error } = await supabase
+    .from('pedidos_compra')
+    .select('numero')
+    .eq('empresa_id', empresaId)
+    .order('numero', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error || !data) {
+    return 1
+  }
+
+  return (parseInt(data.numero, 10) || 0) + 1
+}
+
 // Funcao para montar o payload do Bling
 function buildBlingPayload(data: PedidoCompraRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -252,12 +269,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. Montar payload do Bling
+    // 2. Montar payload do Bling (sem numeroPedido inicialmente)
     const blingPayload = buildBlingPayload(body)
     console.log('Payload Bling:', JSON.stringify(blingPayload, null, 2))
 
     // 3. POST para Bling
-    const blingResponse = await fetch(`${BLING_CONFIG.apiUrl}/pedidos/compras`, {
+    let blingResponse = await fetch(`${BLING_CONFIG.apiUrl}/pedidos/compras`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -266,27 +283,54 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(blingPayload),
     })
 
+    // 3.1 Se Bling exigir numeroPedido (numeracao manual), retry com numero
     if (!blingResponse.ok) {
       const errorText = await blingResponse.text()
-      console.error('Erro Bling API:', blingResponse.status, errorText)
+      let needsNumero = false
 
-      // Tentar extrair mensagem de erro
-      let errorMessage = 'Erro ao criar pedido no Bling'
       try {
         const errorJson = JSON.parse(errorText)
-        if (errorJson.error?.message) {
-          errorMessage = errorJson.error.message
-        } else if (errorJson.error?.description) {
-          errorMessage = errorJson.error.description
-        }
-      } catch {
-        errorMessage = errorText || 'Erro desconhecido do Bling'
+        const fields = errorJson.error?.fields || []
+        needsNumero = fields.some((f: { element?: string }) => f.element === 'numeroPedido')
+      } catch { /* ignore parse error */ }
+
+      if (needsNumero) {
+        console.log('Bling exige numeroPedido, buscando proximo numero...')
+        const nextNumero = await getNextNumeroPedido(empresaId, supabase)
+        const retryPayload = { ...blingPayload, numeroPedido: nextNumero }
+        console.log('Retry com numeroPedido:', nextNumero)
+
+        blingResponse = await fetch(`${BLING_CONFIG.apiUrl}/pedidos/compras`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(retryPayload),
+        })
       }
 
-      return NextResponse.json(
-        { error: errorMessage, details: errorText },
-        { status: 400 }
-      )
+      if (!blingResponse.ok) {
+        const retryErrorText = needsNumero ? await blingResponse.text() : errorText
+        console.error('Erro Bling API:', blingResponse.status, retryErrorText)
+
+        let errorMessage = 'Erro ao criar pedido no Bling'
+        try {
+          const errorJson = JSON.parse(retryErrorText)
+          if (errorJson.error?.message) {
+            errorMessage = errorJson.error.message
+          } else if (errorJson.error?.description) {
+            errorMessage = errorJson.error.description
+          }
+        } catch {
+          errorMessage = retryErrorText || 'Erro desconhecido do Bling'
+        }
+
+        return NextResponse.json(
+          { error: errorMessage, details: retryErrorText },
+          { status: 400 }
+        )
+      }
     }
 
     const blingData: BlingPedidoCompraResponse = await blingResponse.json()

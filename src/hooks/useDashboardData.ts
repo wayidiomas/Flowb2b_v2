@@ -366,29 +366,40 @@ export function useProdutosCurva(curva?: 'A' | 'B' | 'C') {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!empresaId) return
+    if (!empresaId) {
+      setLoading(false)
+      return
+    }
 
     const fetchProdutos = async () => {
       setLoading(true)
 
-      let query = supabase
-        .from('view_produtos_curva')
-        .select('produto_id, produto_nome, numero_vendas, curva, quantidade_em_estoque, condicao_de_ruptura')
-        .eq('empresa_id', empresaId)
-        .order('numero_vendas', { ascending: false })
-        .limit(50)
+      try {
+        let query = supabase
+          .from('view_produtos_curva')
+          .select('produto_id, produto_nome, numero_vendas, curva, quantidade_em_estoque, condicao_de_ruptura')
+          .eq('empresa_id', empresaId)
+          .order('numero_vendas', { ascending: false })
+          .limit(50)
 
-      if (curva) {
-        query = query.eq('curva', curva)
+        if (curva) {
+          query = query.eq('curva', curva)
+        }
+
+        const { data: produtos, error } = await query
+
+        if (error) {
+          console.error('Erro ao buscar produtos por curva:', error.message)
+        }
+
+        if (produtos) {
+          setData(produtos as ProdutoCurvaA[])
+        }
+      } catch (err) {
+        console.error('Erro inesperado ao buscar produtos por curva:', err)
+      } finally {
+        setLoading(false)
       }
-
-      const { data: produtos } = await query
-
-      if (produtos) {
-        setData(produtos as ProdutoCurvaA[])
-      }
-
-      setLoading(false)
     }
 
     fetchProdutos()
