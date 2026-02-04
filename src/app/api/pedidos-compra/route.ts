@@ -4,6 +4,41 @@ import { getCurrentUser } from '@/lib/auth'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 import { FRETE_POR_CONTA_MAP, FretePorContaLabel } from '@/types/pedido-compra'
 
+// Helper: retry fetch com delay para erros transientes do Bling
+async function fetchBlingWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 1,
+  delayMs = 3000
+): Promise<Response> {
+  let lastResponse = await fetch(url, options)
+
+  for (let attempt = 0; attempt < maxRetries && !lastResponse.ok; attempt++) {
+    // Ler body para verificar se e erro transiente
+    const errorText = await lastResponse.text()
+    const isTransient = lastResponse.status === 400 && (
+      errorText.includes('n\\u00e3o existe') ||
+      errorText.includes('não existe') ||
+      errorText.includes('nao existe')
+    )
+
+    if (!isTransient) {
+      // Retornar response com body recarregado (nao e transiente, nao faz retry)
+      return new Response(errorText, {
+        status: lastResponse.status,
+        statusText: lastResponse.statusText,
+        headers: lastResponse.headers,
+      })
+    }
+
+    console.log(`Bling retornou erro transiente, retry ${attempt + 1}/${maxRetries} em ${delayMs}ms...`)
+    await new Promise(resolve => setTimeout(resolve, delayMs))
+    lastResponse = await fetch(url, options)
+  }
+
+  return lastResponse
+}
+
 // Interface para item do pedido
 interface ItemPedidoRequest {
   descricao: string
@@ -144,7 +179,7 @@ function buildBlingPayload(data: PedidoCompraRequest) {
 
       if (item.produto?.id) {
         itemPayload.produto = {
-          id: item.produto.id,
+          id: Number(item.produto.id),
         }
         if (item.produto.codigo) {
           itemPayload.produto.codigo = item.produto.codigo
@@ -273,8 +308,8 @@ export async function POST(request: NextRequest) {
     const blingPayload = buildBlingPayload(body)
     console.log('Payload Bling:', JSON.stringify(blingPayload, null, 2))
 
-    // 3. POST para Bling
-    let blingResponse = await fetch(`${BLING_CONFIG.apiUrl}/pedidos/compras`, {
+    // 3. POST para Bling (com retry para erros transientes)
+    let blingResponse = await fetchBlingWithRetry(`${BLING_CONFIG.apiUrl}/pedidos/compras`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

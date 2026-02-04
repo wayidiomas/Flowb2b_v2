@@ -181,8 +181,18 @@ function parseBlingError(errorMessage: string, details?: string): string {
     try {
       const parsed = JSON.parse(details)
       if (parsed.error?.fields) {
-        const fields = Object.keys(parsed.error.fields).join(', ')
-        return `Campos com problema: ${fields}. Verifique os dados informados.`
+        const fields = parsed.error.fields
+        // Bling retorna fields como array: [{msg, element}, ...]
+        if (Array.isArray(fields)) {
+          const msgs = fields.map((f: { msg?: string; element?: string }) => f.msg || f.element).filter(Boolean)
+          const unique = [...new Set(msgs)]
+          if (unique.length > 0) {
+            return unique.join('\n')
+          }
+        } else {
+          const fieldNames = Object.keys(fields).join(', ')
+          return `Campos com problema: ${fieldNames}. Verifique os dados informados.`
+        }
       }
     } catch {
       // Ignorar erro de parse
