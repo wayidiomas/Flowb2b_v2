@@ -8,7 +8,7 @@ const JWT_SECRET = new TextEncoder().encode(
 
 const COOKIE_NAME = 'flowb2b-auth-token'
 
-// Rotas públicas (não precisam de autenticação)
+// Rotas publicas (nao precisam de autenticacao)
 const publicRoutes = [
   '/login',
   '/register',
@@ -17,9 +17,12 @@ const publicRoutes = [
   '/check-email',
   '/termos-de-uso',
   '/politica-privacidade',
+  '/fornecedor/login',
+  '/fornecedor/registro',
+  '/publico',
 ]
 
-// Rotas de API públicas
+// Rotas de API publicas
 const publicApiRoutes = [
   '/api/auth/login',
   '/api/auth/register',
@@ -29,6 +32,8 @@ const publicApiRoutes = [
   '/api/auth/magic-link',
   '/api/auth/verify-magic-link',
   '/api/auth/verify-email',
+  '/api/auth/fornecedor/login',
+  '/api/auth/fornecedor/registro',
 ]
 
 export async function middleware(request: NextRequest) {
@@ -57,21 +62,47 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value
 
   if (!token) {
-    // Redirecionar para login se não estiver autenticado
-    const loginUrl = new URL('/login', request.url)
+    // Redirecionar para login apropriado se nao estiver autenticado
+    const isFornecedorRoute = pathname.startsWith('/fornecedor') || pathname.startsWith('/api/fornecedor')
+    const loginPath = isFornecedorRoute ? '/fornecedor/login' : '/login'
+    const loginUrl = new URL(loginPath, request.url)
     loginUrl.searchParams.set('redirect', pathname)
     return NextResponse.redirect(loginUrl)
   }
 
   try {
-    // Verificar se o token é válido
+    // Verificar se o token e valido
     const { payload } = await jwtVerify(token, JWT_SECRET)
 
-    // Adicionar informações do usuário nos headers para uso nas API routes
+    const userTipo = String(payload.tipo || 'lojista')
+
+    // Protecao por tipo de usuario
+    const isFornecedorRoute = pathname.startsWith('/fornecedor') || pathname.startsWith('/api/fornecedor')
+    const isLojistaRoute = pathname.startsWith('/compras') || pathname.startsWith('/dashboard') ||
+      pathname.startsWith('/estoque') || pathname.startsWith('/vendas') ||
+      pathname.startsWith('/configuracoes') || pathname.startsWith('/api/pedidos-compra') ||
+      pathname.startsWith('/api/produtos') || pathname.startsWith('/api/fornecedores') ||
+      pathname.startsWith('/api/dashboard') || pathname.startsWith('/api/auth/bling')
+
+    // Fornecedor tentando acessar rota de lojista
+    if (userTipo === 'fornecedor' && isLojistaRoute) {
+      return NextResponse.redirect(new URL('/fornecedor/dashboard', request.url))
+    }
+
+    // Lojista tentando acessar rota de fornecedor (exceto APIs de sugestoes)
+    if (userTipo === 'lojista' && isFornecedorRoute) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+
+    // Adicionar informacoes do usuario nos headers para uso nas API routes
     const requestHeaders = new Headers(request.headers)
     requestHeaders.set('x-user-id', String(payload.userId))
     requestHeaders.set('x-empresa-id', String(payload.empresaId))
     requestHeaders.set('x-user-role', String(payload.role))
+    requestHeaders.set('x-user-tipo', userTipo)
+    if (payload.cnpj) {
+      requestHeaders.set('x-user-cnpj', String(payload.cnpj))
+    }
 
     return NextResponse.next({
       request: {
@@ -79,8 +110,9 @@ export async function middleware(request: NextRequest) {
       },
     })
   } catch {
-    // Token inválido - redirecionar para login
-    const response = NextResponse.redirect(new URL('/login', request.url))
+    // Token invalido - redirecionar para login
+    const loginPath = pathname.startsWith('/fornecedor') ? '/fornecedor/login' : '/login'
+    const response = NextResponse.redirect(new URL(loginPath, request.url))
     response.cookies.delete(COOKIE_NAME)
     return response
   }

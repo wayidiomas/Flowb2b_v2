@@ -188,6 +188,38 @@ export function calcularTotalPedido(params: {
   return totalProdutos + freteEfetivo - desconto
 }
 
+// Status interno do pedido (fluxo fornecedor)
+export type StatusInterno = 'rascunho' | 'enviado_fornecedor' | 'sugestao_pendente' | 'aceito' | 'rejeitado' | 'finalizado'
+
+export const STATUS_INTERNO_CONFIG: Record<StatusInterno, { bg: string; text: string; label: string }> = {
+  rascunho: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Rascunho' },
+  enviado_fornecedor: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Enviado ao Fornecedor' },
+  sugestao_pendente: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Sugestao Pendente' },
+  aceito: { bg: 'bg-green-100', text: 'text-green-700', label: 'Aceito' },
+  rejeitado: { bg: 'bg-red-100', text: 'text-red-700', label: 'Rejeitado' },
+  finalizado: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Finalizado' },
+}
+
+// Sugestao do fornecedor
+export interface SugestaoFornecedor {
+  id: number
+  status: 'pendente' | 'aceita' | 'rejeitada'
+  observacao_fornecedor?: string
+  observacao_lojista?: string
+  created_at: string
+  users_fornecedor?: { nome: string; email: string }
+}
+
+export interface SugestaoItem {
+  id: number
+  item_pedido_compra_id: number
+  produto_id?: number
+  quantidade_sugerida: number
+  desconto_percentual: number
+  bonificacao_percentual: number
+  validade?: string
+}
+
 // Detalhes do pedido (retornado pela RPC get_pedido_compra_detalhes)
 export interface PedidoCompraDetalhes {
   id: number
@@ -197,6 +229,7 @@ export interface PedidoCompraDetalhes {
   fornecedor_id: number
   fornecedor_nome: string
   situacao: SituacaoPedido
+  status_interno?: StatusInterno
   total_produtos: number
   total: number
   desconto: number

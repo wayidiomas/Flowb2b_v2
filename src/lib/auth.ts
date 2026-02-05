@@ -77,6 +77,9 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     email: payload.email,
     nome: '', // Precisa buscar do banco se necessário
     role: payload.role,
+    tipo: payload.tipo || 'lojista',
+    cnpj: payload.cnpj,
+    fornecedorUserId: payload.fornecedorUserId,
   }
 }
 

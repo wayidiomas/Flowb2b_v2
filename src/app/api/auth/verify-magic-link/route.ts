@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
       empresaId: user.empresa_id || null,
       email: user.email,
       role: user.role || 'user',
+      tipo: 'lojista',
     })
 
     // Definir cookie

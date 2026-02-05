@@ -9,7 +9,8 @@ import { SidebarAcoes } from '@/components/pedido-compra/SidebarAcoes'
 import { FornecedorSelectModal } from '@/components/pedido-compra/FornecedorSelectModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
-import type { PedidoCompraListItem, FornecedorOption, SITUACAO_LABELS, SITUACAO_COLORS } from '@/types/pedido-compra'
+import type { PedidoCompraListItem, FornecedorOption, SITUACAO_LABELS, SITUACAO_COLORS, StatusInterno } from '@/types/pedido-compra'
+import { STATUS_INTERNO_CONFIG } from '@/types/pedido-compra'
 
 // Status config
 const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
@@ -146,6 +147,9 @@ export default function PedidoCompraPage() {
 
   // Resumo
   const [resumo, setResumo] = useState({ qtd: 0, valorTotal: 0 })
+
+  // Status interno dos pedidos (mapa pedido_id -> status_interno)
+  const [statusInternoMap, setStatusInternoMap] = useState<Record<number, StatusInterno>>({})
 
   const filterDropdownRef = useRef<HTMLDivElement>(null)
   const itemsPerPage = 10
@@ -337,6 +341,23 @@ export default function PedidoCompraPage() {
         })
 
         setPedidos(filteredData)
+
+        // Buscar status_interno dos pedidos retornados
+        const pedidoIds = filteredData.map(p => p.pedido_id)
+        if (pedidoIds.length > 0) {
+          const { data: statusData } = await supabase
+            .from('pedidos_compra')
+            .select('id, status_interno')
+            .in('id', pedidoIds)
+
+          if (statusData) {
+            const map: Record<number, StatusInterno> = {}
+            statusData.forEach(s => {
+              if (s.status_interno) map[s.id] = s.status_interno as StatusInterno
+            })
+            setStatusInternoMap(map)
+          }
+        }
       } else {
         setPedidos([])
       }
@@ -798,9 +819,16 @@ export default function PedidoCompraPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${statusConfig.bg} ${statusConfig.text}`}>
-                              {statusConfig.label}
-                            </span>
+                            <div className="flex flex-col gap-1">
+                              <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${statusConfig.bg} ${statusConfig.text} w-fit`}>
+                                {statusConfig.label}
+                              </span>
+                              {statusInternoMap[pedido.pedido_id] && statusInternoMap[pedido.pedido_id] !== 'rascunho' && (
+                                <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full w-fit ${STATUS_INTERNO_CONFIG[statusInternoMap[pedido.pedido_id]].bg} ${STATUS_INTERNO_CONFIG[statusInternoMap[pedido.pedido_id]].text}`}>
+                                  {STATUS_INTERNO_CONFIG[statusInternoMap[pedido.pedido_id]].label}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-center gap-1">

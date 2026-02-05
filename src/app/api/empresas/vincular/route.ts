@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
       empresaId: empresaId,
       email: currentUser.email,
       role: currentUser.role,
+      tipo: 'lojista',
     })
 
     // Atualizar cookie com novo token

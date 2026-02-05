@@ -5,9 +5,11 @@ import Link from 'next/link'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { FornecedorSelectModal } from '@/components/pedido-compra/FornecedorSelectModal'
+import { PedidoTimeline } from '@/components/pedido/PedidoTimeline'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
-import type { PedidoCompraDetalhes, FornecedorOption } from '@/types/pedido-compra'
+import type { PedidoCompraDetalhes, FornecedorOption, SugestaoFornecedor, SugestaoItem, StatusInterno } from '@/types/pedido-compra'
+import { STATUS_INTERNO_CONFIG } from '@/types/pedido-compra'
 
 // Status config (valores do Bling para pedido de compra)
 // 0: Em aberto (Registrada)
@@ -157,6 +159,14 @@ export default function VisualizarPedidoPage() {
   const [telefoneInput, setTelefoneInput] = useState('')
   const [salvandoTelefone, setSalvandoTelefone] = useState(false)
 
+  // Status interno e sugestoes do fornecedor
+  const [statusInterno, setStatusInterno] = useState<StatusInterno>('rascunho')
+  const [sugestoes, setSugestoes] = useState<SugestaoFornecedor[]>([])
+  const [sugestaoItens, setSugestaoItens] = useState<SugestaoItem[] | null>(null)
+  const [enviandoFornecedor, setEnviandoFornecedor] = useState(false)
+  const [processandoSugestao, setProcessandoSugestao] = useState(false)
+  const [observacaoResposta, setObservacaoResposta] = useState('')
+
   // Buscar detalhes do pedido
   useEffect(() => {
     async function fetchPedido() {
@@ -184,6 +194,113 @@ export default function VisualizarPedidoPage() {
 
     fetchPedido()
   }, [pedidoId, user?.empresa_id])
+
+  // Buscar status_interno e sugestoes
+  useEffect(() => {
+    async function fetchStatusEsugestoes() {
+      if (!user?.empresa_id || !pedidoId) return
+
+      try {
+        // Buscar status_interno do pedido
+        const { data: pedidoData } = await supabase
+          .from('pedidos_compra')
+          .select('status_interno')
+          .eq('id', parseInt(pedidoId))
+          .eq('empresa_id', user.empresa_id)
+          .single()
+
+        if (pedidoData?.status_interno) {
+          setStatusInterno(pedidoData.status_interno as StatusInterno)
+        }
+
+        // Buscar sugestoes se status permite
+        if (pedidoData?.status_interno && pedidoData.status_interno !== 'rascunho') {
+          const res = await fetch(`/api/pedidos-compra/${pedidoId}/sugestoes`)
+          if (res.ok) {
+            const data = await res.json()
+            setSugestoes(data.sugestoes || [])
+            setSugestaoItens(data.sugestaoItens || null)
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao buscar status/sugestoes:', err)
+      }
+    }
+
+    fetchStatusEsugestoes()
+  }, [pedidoId, user?.empresa_id])
+
+  // Enviar pedido ao fornecedor
+  const handleEnviarFornecedor = async () => {
+    if (!pedido) return
+
+    setEnviandoFornecedor(true)
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedido.id}/enviar-fornecedor`, {
+        method: 'POST',
+      })
+
+      if (res.ok) {
+        setStatusInterno('enviado_fornecedor')
+        alert('Pedido enviado ao fornecedor com sucesso!')
+      } else {
+        const error = await res.json()
+        alert(`Erro: ${error.error || 'Falha ao enviar'}`)
+      }
+    } catch (err) {
+      console.error('Erro ao enviar ao fornecedor:', err)
+      alert('Erro ao enviar pedido ao fornecedor')
+    } finally {
+      setEnviandoFornecedor(false)
+    }
+  }
+
+  // Aceitar ou rejeitar sugestao
+  const handleProcessarSugestao = async (action: 'aceitar' | 'rejeitar') => {
+    if (!pedido) return
+
+    const pendente = sugestoes.find(s => s.status === 'pendente')
+    if (!pendente) return
+
+    if (action === 'rejeitar' && !observacaoResposta.trim()) {
+      if (!confirm('Deseja rejeitar sem informar um motivo?')) return
+    }
+
+    setProcessandoSugestao(true)
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedido.id}/sugestoes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          sugestao_id: pendente.id,
+          observacao: observacaoResposta.trim() || undefined,
+        }),
+      })
+
+      if (res.ok) {
+        setStatusInterno(action === 'aceitar' ? 'aceito' : 'rejeitado')
+        setSugestoes(prev => prev.map(s =>
+          s.id === pendente.id ? { ...s, status: action === 'aceitar' ? 'aceita' : 'rejeitada' } : s
+        ))
+        setObservacaoResposta('')
+        alert(action === 'aceitar' ? 'Sugestao aceita com sucesso!' : 'Sugestao rejeitada.')
+
+        // Recarregar pedido se aceito (quantidades mudam)
+        if (action === 'aceitar') {
+          window.location.reload()
+        }
+      } else {
+        const error = await res.json()
+        alert(`Erro: ${error.error || 'Falha ao processar'}`)
+      }
+    } catch (err) {
+      console.error('Erro ao processar sugestao:', err)
+      alert('Erro ao processar sugestao')
+    } finally {
+      setProcessandoSugestao(false)
+    }
+  }
 
   // Lancar conta no Bling
   const handleLancarConta = async () => {
@@ -610,10 +727,31 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
                 </div>
               )}
             </div>
+
+            {/* Status interno (fornecedor) */}
+            {statusInterno && statusInterno !== 'rascunho' && (
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${STATUS_INTERNO_CONFIG[statusInterno].bg} ${STATUS_INTERNO_CONFIG[statusInterno].text}`}>
+                {STATUS_INTERNO_CONFIG[statusInterno].label}
+              </span>
+            )}
           </div>
 
           {/* Acoes principais */}
           <div className="flex items-center gap-2">
+            {/* Botao Enviar ao Fornecedor */}
+            {statusInterno === 'rascunho' && (
+              <button
+                onClick={handleEnviarFornecedor}
+                disabled={enviandoFornecedor}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#336FB6] hover:bg-[#2660A5] text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+                {enviandoFornecedor ? 'Enviando...' : 'Enviar ao Fornecedor'}
+              </button>
+            )}
+
             {/* Botao Lancar Conta */}
             <button
               onClick={handleLancarConta}
@@ -770,6 +908,153 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
           </div>
         </div>
 
+        {/* Secao Sugestao do Fornecedor */}
+        {statusInterno === 'sugestao_pendente' && sugestaoItens && sugestaoItens.length > 0 && (
+          <div className="bg-white rounded-xl border-2 border-amber-300 overflow-hidden print:hidden">
+            <div className="px-6 py-4 border-b border-amber-200 bg-amber-50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+                <div>
+                  <h3 className="text-lg font-semibold text-amber-800">Sugestao do Fornecedor</h3>
+                  {sugestoes.find(s => s.status === 'pendente') && (
+                    <p className="text-sm text-amber-600">
+                      Enviada por {sugestoes.find(s => s.status === 'pendente')?.users_fornecedor?.nome || 'Fornecedor'}
+                      {sugestoes.find(s => s.status === 'pendente')?.observacao_fornecedor && (
+                        <span> — &quot;{sugestoes.find(s => s.status === 'pendente')?.observacao_fornecedor}&quot;</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Tabela comparativa */}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-amber-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produto</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qtd Original</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-amber-700 uppercase">Qtd Sugerida</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-amber-700 uppercase">Desconto %</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-amber-700 uppercase">Bonif. %</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-amber-700 uppercase">Validade</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {sugestaoItens.map((sItem) => {
+                    const itemOriginal = pedido.itens.find(i => i.id === sItem.item_pedido_compra_id)
+                    const qtdMudou = itemOriginal && Number(sItem.quantidade_sugerida) !== Number(itemOriginal.quantidade)
+                    return (
+                      <tr key={sItem.id} className="hover:bg-amber-50/50">
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {itemOriginal?.descricao || `Item #${sItem.item_pedido_compra_id}`}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500 text-right">
+                          {itemOriginal?.quantidade || '-'}
+                        </td>
+                        <td className={`px-4 py-3 text-sm text-right font-medium ${qtdMudou ? 'text-amber-700' : 'text-gray-900'}`}>
+                          {sItem.quantidade_sugerida}
+                          {qtdMudou && (
+                            <span className="ml-1 text-xs text-amber-600">
+                              ({Number(sItem.quantidade_sugerida) > Number(itemOriginal?.quantidade || 0) ? '+' : ''}{Number(sItem.quantidade_sugerida) - Number(itemOriginal?.quantidade || 0)})
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right">
+                          {sItem.desconto_percentual > 0 ? (
+                            <span className="text-green-600 font-medium">{sItem.desconto_percentual}%</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right">
+                          {sItem.bonificacao_percentual > 0 ? (
+                            <span className="text-blue-600 font-medium">{sItem.bonificacao_percentual}%</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-center">
+                          {sItem.validade ? formatDate(sItem.validade) : <span className="text-gray-400">-</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Acoes de aceitar/rejeitar */}
+            <div className="px-6 py-4 border-t border-amber-200 bg-amber-50/50">
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Observacao (opcional)
+                </label>
+                <textarea
+                  value={observacaoResposta}
+                  onChange={(e) => setObservacaoResposta(e.target.value)}
+                  placeholder="Adicione uma observacao sobre a sugestao..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
+                  rows={2}
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handleProcessarSugestao('aceitar')}
+                  disabled={processandoSugestao}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  <CheckIcon />
+                  {processandoSugestao ? 'Processando...' : 'Aceitar Sugestao'}
+                </button>
+                <button
+                  onClick={() => handleProcessarSugestao('rejeitar')}
+                  disabled={processandoSugestao}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-white border border-red-300 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {processandoSugestao ? 'Processando...' : 'Rejeitar Sugestao'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Historico de sugestoes (quando ja processadas) */}
+        {sugestoes.length > 0 && statusInterno !== 'sugestao_pendente' && statusInterno !== 'rascunho' && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden print:hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-lg font-semibold text-gray-900">Historico de Sugestoes</h3>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {sugestoes.map((s) => (
+                <div key={s.id} className="px-6 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      {s.users_fornecedor?.nome || 'Fornecedor'}
+                    </p>
+                    {s.observacao_fornecedor && (
+                      <p className="text-sm text-gray-500">&quot;{s.observacao_fornecedor}&quot;</p>
+                    )}
+                    <p className="text-xs text-gray-400">
+                      {new Date(s.created_at).toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                  <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                    s.status === 'aceita' ? 'bg-green-100 text-green-700' :
+                    s.status === 'rejeitada' ? 'bg-red-100 text-red-700' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>
+                    {s.status === 'aceita' ? 'Aceita' : s.status === 'rejeitada' ? 'Rejeitada' : 'Pendente'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Tabela de Itens */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden print:border print:border-gray-300">
           <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
@@ -893,6 +1178,11 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
             </div>
           </div>
         </div>
+
+        {/* Timeline */}
+        {statusInterno !== 'rascunho' && (
+          <PedidoTimeline pedidoCompraId={parseInt(pedidoId)} className="print:hidden" />
+        )}
 
         {/* Observacoes */}
         {(pedido.observacoes || pedido.observacoes_internas) && (

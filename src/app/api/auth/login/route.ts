@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
       empresaId: user.empresa_id,
       email: user.email,
       role: user.role,
+      tipo: 'lojista',
     })
 
     // Definir cookie
