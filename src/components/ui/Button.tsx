@@ -1,6 +1,6 @@
 import { forwardRef, ButtonHTMLAttributes, ReactNode } from 'react'
 
-type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'link'
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'link' | 'success' | 'danger'
 type ButtonSize = 'sm' | 'md' | 'lg' | 'xl'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -44,6 +44,18 @@ const variantStyles: Record<ButtonVariant, string> = {
     focus:ring-secondary-500
     disabled:text-secondary-300
     p-0 h-auto shadow-none
+  `,
+  success: `
+    bg-emerald-500 text-white
+    hover:bg-emerald-600
+    focus:ring-emerald-500
+    disabled:bg-emerald-300
+  `,
+  danger: `
+    bg-red-500 text-white
+    hover:bg-red-600
+    focus:ring-red-500
+    disabled:bg-red-300
   `,
 }
 
