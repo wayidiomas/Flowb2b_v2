@@ -114,6 +114,7 @@ export function FornecedorSelectModal({
 
   // Filter and sort fornecedores
   const filteredAndSortedFornecedores = fornecedores
+    .filter(f => f.nome) // Remover fornecedores sem nome
     .filter(f =>
       f.nome.toLowerCase().includes(search.toLowerCase()) ||
       (f.cnpj && f.cnpj.includes(search))

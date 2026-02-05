@@ -11,6 +11,14 @@ interface SugestaoItemRequest {
   validade: string | null
 }
 
+interface CondicoesComerciais {
+  valor_minimo_pedido?: number
+  desconto_geral?: number
+  bonificacao_geral?: number
+  prazo_entrega_dias?: number
+  validade_proposta?: string
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -23,7 +31,15 @@ export async function POST(
 
     const { id: pedidoId } = await params
     const body = await request.json()
-    const { itens, observacao }: { itens: SugestaoItemRequest[]; observacao?: string } = body
+    const {
+      itens,
+      observacao,
+      condicoes_comerciais,
+    }: {
+      itens: SugestaoItemRequest[]
+      observacao?: string
+      condicoes_comerciais?: CondicoesComerciais
+    } = body
 
     if (!itens || itens.length === 0) {
       return NextResponse.json({ error: 'Itens da sugestao sao obrigatorios' }, { status: 400 })
@@ -63,7 +79,7 @@ export async function POST(
       )
     }
 
-    // Criar sugestao
+    // Criar sugestao com condicoes comerciais
     const { data: sugestao, error: sugestaoError } = await supabase
       .from('sugestoes_fornecedor')
       .insert({
@@ -72,6 +88,13 @@ export async function POST(
         empresa_id: pedido.empresa_id,
         status: 'pendente',
         observacao_fornecedor: observacao || null,
+        autor_tipo: 'fornecedor',
+        // Condicoes comerciais
+        valor_minimo_pedido: condicoes_comerciais?.valor_minimo_pedido || null,
+        desconto_geral: condicoes_comerciais?.desconto_geral || 0,
+        bonificacao_geral: condicoes_comerciais?.bonificacao_geral || 0,
+        prazo_entrega_dias: condicoes_comerciais?.prazo_entrega_dias || null,
+        validade_proposta: condicoes_comerciais?.validade_proposta || null,
       })
       .select()
       .single()

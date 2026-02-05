@@ -3,9 +3,18 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { AuthLayout } from '@/components/auth'
-import { Card, CardContent, Button, Input } from '@/components/ui'
+import { FornecedorAuthLayout } from '@/components/auth'
+import { Card, CardContent, Input } from '@/components/ui'
 import { useFornecedorAuth } from '@/contexts/FornecedorAuthContext'
+
+// Icone de caixa/pacote para fornecedor
+function PackageIcon() {
+  return (
+    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+    </svg>
+  )
+}
 
 function FornecedorLoginForm() {
   const [email, setEmail] = useState('')
@@ -36,27 +45,25 @@ function FornecedorLoginForm() {
   }
 
   return (
-    <AuthLayout description="Portal do Fornecedor FlowB2B. Acompanhe seus pedidos, envie sugestoes e gerencie suas vendas B2B.">
+    <FornecedorAuthLayout>
       <Card shadow="lg" rounded="xl" className="w-full max-w-[420px]">
         <CardContent className="p-8">
-          {/* Header */}
+          {/* Header com icone amber */}
           <div className="text-center mb-6">
-            <div className="inline-flex items-center gap-2 mb-4">
-              <span className="text-xs bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full font-medium">
-                Portal do Fornecedor
-              </span>
+            <div className="mx-auto w-14 h-14 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-amber-500/25">
+              <PackageIcon />
             </div>
-            <h1 className="text-2xl font-semibold text-primary-700">
+            <h1 className="text-2xl font-semibold text-gray-800">
               Acesse sua conta
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Entre com suas credenciais de fornecedor
+              Entre com suas credenciais
             </p>
           </div>
 
           {/* Error message */}
           {error && (
-            <div className="bg-error-500/10 text-error-600 px-3 py-2 rounded-lg text-sm mb-4">
+            <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm mb-4 border border-red-100">
               {error}
             </div>
           )}
@@ -103,52 +110,69 @@ function FornecedorLoginForm() {
               />
             </div>
 
-            <Button
+            {/* Botao com gradiente amber/orange */}
+            <button
               type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={loading}
+              disabled={loading}
+              className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl shadow-lg shadow-amber-500/25 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Entrar
-            </Button>
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Entrando...
+                </>
+              ) : (
+                'Entrar'
+              )}
+            </button>
           </form>
 
           {/* Register link */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
               Nao tem conta?{' '}
-              <Link href="/fornecedor/registro" className="text-primary-600 hover:text-primary-700 font-medium">
+              <Link
+                href={redirect !== '/fornecedor/dashboard' ? `/fornecedor/registro?redirect=${encodeURIComponent(redirect)}` : '/fornecedor/registro'}
+                className="text-amber-600 hover:text-amber-700 font-semibold"
+              >
                 Cadastre-se
               </Link>
             </p>
           </div>
 
-          {/* Lojista link */}
-          <div className="mt-3 text-center">
-            <Link href="/login" className="text-xs text-gray-400 hover:text-gray-600">
+          {/* Divider */}
+          <div className="mt-5 pt-5 border-t border-gray-100">
+            <Link
+              href="/login"
+              className="block text-center text-sm text-gray-400 hover:text-gray-600 transition-colors"
+            >
               Sou lojista
             </Link>
           </div>
         </CardContent>
       </Card>
-    </AuthLayout>
+    </FornecedorAuthLayout>
+  )
+}
+
+// Fallback com cores amber
+function LoginFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600">
+      <div className="flex flex-col items-center gap-3">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white" />
+        <p className="text-sm text-white/90 font-medium">Carregando...</p>
+      </div>
+    </div>
   )
 }
 
 export default function FornecedorLoginPage() {
   return (
-    <Suspense fallback={
-      <AuthLayout description="Portal do Fornecedor FlowB2B.">
-        <Card shadow="lg" rounded="xl" className="w-full max-w-[420px]">
-          <CardContent className="p-8">
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </AuthLayout>
-    }>
+    <Suspense fallback={<LoginFallback />}>
       <FornecedorLoginForm />
     </Suspense>
   )

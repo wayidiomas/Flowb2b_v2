@@ -331,7 +331,6 @@ function GerarAutomaticoContent() {
         .select('id, id_bling, nome, cnpj')
         .eq('empresa_id', empresaId)
         .order('nome', { ascending: true })
-        .limit(100)
 
       if (error) throw error
       setFornecedores(data || [])
@@ -683,7 +682,7 @@ function GerarAutomaticoContent() {
           desconto: politicaForm.desconto || 0,
           status: true,
         })
-        .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque')
+        .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque, bonificacao, forma_pagamento_dias, observacao, status')
         .single()
 
       if (insertError) throw insertError

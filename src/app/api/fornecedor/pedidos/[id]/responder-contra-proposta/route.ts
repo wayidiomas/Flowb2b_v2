@@ -64,75 +64,14 @@ async function syncBlingStatus(blingId: number, situacao: number, accessToken: s
   }
 }
 
-// GET - Listar sugestoes de um pedido (para o lojista)
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const user = await getCurrentUser()
-    if (!user || !user.empresaId) {
-      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
-    }
-
-    const { id: pedidoId } = await params
-    const supabase = createServerSupabaseClient()
-
-    // Verificar que o pedido pertence a empresa do lojista
-    const { data: pedido } = await supabase
-      .from('pedidos_compra')
-      .select('id, status_interno')
-      .eq('id', pedidoId)
-      .eq('empresa_id', user.empresaId)
-      .single()
-
-    if (!pedido) {
-      return NextResponse.json({ error: 'Pedido nao encontrado' }, { status: 404 })
-    }
-
-    // Buscar sugestoes com itens e condicoes comerciais
-    const { data: sugestoes } = await supabase
-      .from('sugestoes_fornecedor')
-      .select(`
-        id, status, observacao_fornecedor, observacao_lojista, created_at,
-        valor_minimo_pedido, desconto_geral, bonificacao_geral,
-        prazo_entrega_dias, validade_proposta, autor_tipo,
-        users_fornecedor!inner(nome, email)
-      `)
-      .eq('pedido_compra_id', pedidoId)
-      .order('created_at', { ascending: false })
-
-    // Para a sugestao mais recente pendente, buscar itens
-    const pendente = (sugestoes || []).find(s => s.status === 'pendente')
-    let sugestaoItens = null
-    if (pendente) {
-      const { data: itens } = await supabase
-        .from('sugestoes_fornecedor_itens')
-        .select('*')
-        .eq('sugestao_id', pendente.id)
-
-      sugestaoItens = itens
-    }
-
-    return NextResponse.json({
-      sugestoes: sugestoes || [],
-      sugestaoItens,
-      statusInterno: pedido.status_interno,
-    })
-  } catch (error) {
-    console.error('Erro ao listar sugestoes:', error)
-    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
-  }
-}
-
-// POST - Aceitar ou rejeitar sugestao
+// POST - Fornecedor aceita ou rejeita contra-proposta do lojista
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser()
-    if (!user || !user.empresaId) {
+    if (!user || user.tipo !== 'fornecedor' || !user.cnpj) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
@@ -146,40 +85,59 @@ export async function POST(
 
     const supabase = createServerSupabaseClient()
 
-    // Verificar pedido pertence a empresa
+    // Verificar que o pedido pertence a um fornecedor com o CNPJ do usuario
+    const { data: fornecedores } = await supabase
+      .from('fornecedores')
+      .select('id, empresa_id')
+      .eq('cnpj', user.cnpj)
+
+    if (!fornecedores || fornecedores.length === 0) {
+      return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
+    }
+
+    const fornecedorIds = fornecedores.map(f => f.id)
+
+    // Verificar pedido
     const { data: pedido } = await supabase
       .from('pedidos_compra')
-      .select('id, status_interno, bling_id, situacao')
+      .select('id, status_interno, bling_id, situacao, empresa_id')
       .eq('id', pedidoId)
-      .eq('empresa_id', user.empresaId)
+      .in('fornecedor_id', fornecedorIds)
       .single()
 
     if (!pedido) {
       return NextResponse.json({ error: 'Pedido nao encontrado' }, { status: 404 })
     }
 
-    const empresaId = user.empresaId
-
-    // Verificar sugestao existe e esta pendente COM condicoes comerciais
+    // Verificar sugestao existe, eh contra-proposta (autor_tipo=lojista) e esta pendente
     const { data: sugestao } = await supabase
       .from('sugestoes_fornecedor')
-      .select('id, status, valor_minimo_pedido, desconto_geral, bonificacao_geral')
+      .select('id, status, autor_tipo')
       .eq('id', sugestao_id)
       .eq('pedido_compra_id', pedidoId)
       .single()
 
-    if (!sugestao || sugestao.status !== 'pendente') {
-      return NextResponse.json({ error: 'Sugestao nao encontrada ou ja processada' }, { status: 400 })
+    if (!sugestao || sugestao.status !== 'pendente' || sugestao.autor_tipo !== 'lojista') {
+      return NextResponse.json({ error: 'Contra-proposta nao encontrada ou ja processada' }, { status: 400 })
     }
 
+    // Buscar nome do usuario fornecedor
+    const { data: fornecedorUser } = await supabase
+      .from('users_fornecedor')
+      .select('nome')
+      .eq('id', user.fornecedorUserId)
+      .single()
+
+    const autorNome = fornecedorUser?.nome || user.email
+
     if (action === 'aceitar') {
-      // Buscar itens da sugestao COM desconto e bonificacao
+      // Buscar itens da contra-proposta
       const { data: sugestaoItens } = await supabase
         .from('sugestoes_fornecedor_itens')
         .select('*')
         .eq('sugestao_id', sugestao_id)
 
-      // Aplicar sugestao: atualizar itens do pedido COM desconto e bonificacao
+      // Aplicar contra-proposta: atualizar itens do pedido
       if (sugestaoItens && sugestaoItens.length > 0) {
         // Primeiro, buscar os itens atuais para calcular valores
         const { data: itensAtuais } = await supabase
@@ -189,16 +147,13 @@ export async function POST(
 
         const itensMap = new Map((itensAtuais || []).map(i => [i.id, i]))
 
-        // Atualizar cada item com quantidade, desconto aplicado e bonificacao
+        // Atualizar cada item
         for (const sItem of sugestaoItens) {
           if (sItem.item_pedido_compra_id) {
             const itemAtual = itensMap.get(sItem.item_pedido_compra_id)
             if (itemAtual) {
-              // Calcular valor com desconto
               const descontoItem = sItem.desconto_percentual || 0
               const valorComDesconto = itemAtual.valor * (1 - descontoItem / 100)
-
-              // Calcular quantidade bonificada (gratis)
               const bonifItem = sItem.bonificacao_percentual || 0
               const qtdBonificacao = Math.floor(sItem.quantidade_sugerida * bonifItem / 100)
 
@@ -214,50 +169,33 @@ export async function POST(
           }
         }
 
-        // Recalcular total do pedido COM DESCONTO APLICADO
+        // Recalcular total
         const { data: itensAtualizados } = await supabase
           .from('itens_pedido_compra')
           .select('id, valor, quantidade, valor_unitario_final')
           .eq('pedido_compra_id', pedidoId)
 
-        // Calcular total usando valor_unitario_final quando disponivel
-        let novoTotalProdutos = (itensAtualizados || []).reduce((sum, item) => {
-          // Usar valor_unitario_final se existir (desconto aplicado), senao valor original
+        const novoTotal = (itensAtualizados || []).reduce((sum, item) => {
           const valorEfetivo = item.valor_unitario_final ?? item.valor
           return sum + valorEfetivo * item.quantidade
         }, 0)
 
-        // Aplicar desconto geral se atingir valor minimo
-        let descontoGeralAplicado = 0
-        const valorMinimo = sugestao.valor_minimo_pedido || 0
-        const descontoGeral = sugestao.desconto_geral || 0
-
-        if (valorMinimo > 0 && novoTotalProdutos >= valorMinimo && descontoGeral > 0) {
-          descontoGeralAplicado = novoTotalProdutos * (descontoGeral / 100)
-          novoTotalProdutos = novoTotalProdutos - descontoGeralAplicado
-        }
-
         // Preparar dados de atualizacao
         const updateData: Record<string, unknown> = {
-          total_produtos: novoTotalProdutos,
-          total: novoTotalProdutos,
+          total_produtos: novoTotal,
+          total: novoTotal,
           status_interno: 'aceito',
         }
 
         // Sincronizar com Bling - mudar para "Em Andamento" (3)
         let blingSyncSuccess = false
-        let blingSyncError = ''
-
         if (pedido.bling_id && pedido.situacao !== 1 && pedido.situacao !== 2) {
-          const accessToken = await getBlingAccessToken(empresaId, supabase)
+          const accessToken = await getBlingAccessToken(pedido.empresa_id, supabase)
           if (accessToken) {
             const syncResult = await syncBlingStatus(pedido.bling_id, 3, accessToken)
             blingSyncSuccess = syncResult.success
-            if (!syncResult.success) {
-              blingSyncError = syncResult.error || ''
-              console.error('Erro ao sincronizar com Bling:', syncResult.error)
-            } else {
-              updateData.situacao = 3 // Em Andamento
+            if (syncResult.success) {
+              updateData.situacao = 3
             }
           }
         }
@@ -272,56 +210,43 @@ export async function POST(
           .from('pedido_timeline')
           .insert({
             pedido_compra_id: parseInt(pedidoId),
-            evento: 'sugestao_aceita',
+            evento: 'contra_proposta_aceita',
             descricao: observacao
-              ? `Sugestao aceita pelo lojista: "${observacao}"${blingSyncSuccess ? ' (Bling: Em Andamento)' : ''}`
-              : `Sugestao do fornecedor foi aceita${blingSyncSuccess ? ' (Bling: Em Andamento)' : ''}`,
-            autor_tipo: 'lojista',
-            autor_nome: user.email,
+              ? `Fornecedor aceitou contra-proposta: "${observacao}"${blingSyncSuccess ? ' (Bling: Em Andamento)' : ''}`
+              : `Fornecedor aceitou a contra-proposta do lojista${blingSyncSuccess ? ' (Bling: Em Andamento)' : ''}`,
+            autor_tipo: 'fornecedor',
+            autor_nome: autorNome,
           })
-
-        // Se houve erro no Bling, registrar na timeline
-        if (blingSyncError) {
-          await supabase
-            .from('pedido_timeline')
-            .insert({
-              pedido_compra_id: parseInt(pedidoId),
-              evento: 'erro_sync_bling',
-              descricao: `Falha ao sincronizar status com Bling: ${blingSyncError}`,
-              autor_tipo: 'sistema',
-              autor_nome: 'FlowB2B',
-            })
-        }
       }
 
-      // Marcar sugestao como aceita
+      // Marcar contra-proposta como aceita
       await supabase
         .from('sugestoes_fornecedor')
         .update({
           status: 'aceita',
-          observacao_lojista: observacao || null,
+          observacao_fornecedor: observacao || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', sugestao_id)
 
-      return NextResponse.json({ success: true, message: 'Sugestao aceita com sucesso' })
+      return NextResponse.json({ success: true, message: 'Contra-proposta aceita com sucesso' })
     }
 
     if (action === 'rejeitar') {
-      // Marcar sugestao como rejeitada
+      // Marcar contra-proposta como rejeitada
       await supabase
         .from('sugestoes_fornecedor')
         .update({
           status: 'rejeitada',
-          observacao_lojista: observacao || null,
+          observacao_fornecedor: observacao || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', sugestao_id)
 
-      // Atualizar status do pedido
+      // Voltar status para enviado_fornecedor para permitir nova negociacao
       await supabase
         .from('pedidos_compra')
-        .update({ status_interno: 'rejeitado' })
+        .update({ status_interno: 'enviado_fornecedor' })
         .eq('id', pedidoId)
 
       // Timeline
@@ -329,20 +254,20 @@ export async function POST(
         .from('pedido_timeline')
         .insert({
           pedido_compra_id: parseInt(pedidoId),
-          evento: 'sugestao_rejeitada',
+          evento: 'contra_proposta_rejeitada',
           descricao: observacao
-            ? `Sugestao rejeitada: "${observacao}"`
-            : 'Sugestao do fornecedor foi rejeitada',
-          autor_tipo: 'lojista',
-          autor_nome: user.email,
+            ? `Fornecedor rejeitou contra-proposta: "${observacao}"`
+            : 'Fornecedor rejeitou a contra-proposta do lojista',
+          autor_tipo: 'fornecedor',
+          autor_nome: autorNome,
         })
 
-      return NextResponse.json({ success: true, message: 'Sugestao rejeitada' })
+      return NextResponse.json({ success: true, message: 'Contra-proposta rejeitada' })
     }
 
     return NextResponse.json({ error: 'Acao invalida' }, { status: 400 })
   } catch (error) {
-    console.error('Erro ao processar sugestao:', error)
+    console.error('Erro ao processar contra-proposta:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

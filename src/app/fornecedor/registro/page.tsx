@@ -1,12 +1,21 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { AuthLayout } from '@/components/auth'
-import { Card, CardContent, Button, Input } from '@/components/ui'
+import { FornecedorAuthLayout } from '@/components/auth'
+import { Card, CardContent, Input } from '@/components/ui'
 
-export default function FornecedorRegistroPage() {
+// Icone de usuario/adicionar
+function UserPlusIcon() {
+  return (
+    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+    </svg>
+  )
+}
+
+function FornecedorRegistroForm() {
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -17,6 +26,9 @@ export default function FornecedorRegistroPage() {
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const redirect = searchParams.get('redirect') || '/fornecedor/dashboard'
 
   // Formatar CNPJ enquanto digita
   const handleCnpjChange = (value: string) => {
@@ -38,9 +50,11 @@ export default function FornecedorRegistroPage() {
   const handleTelefoneChange = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 11)
     let formatted = digits
-    if (digits.length > 6) {
+    if (digits.length > 7) {
+      // Formato completo com hifen: (XX) XXXXX-XXXX
       formatted = `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
     } else if (digits.length > 2) {
+      // Formato parcial sem hifen: (XX) XXXXX
       formatted = `(${digits.slice(0, 2)}) ${digits.slice(2)}`
     }
     setTelefone(formatted)
@@ -62,7 +76,10 @@ export default function FornecedorRegistroPage() {
 
       if (data.success) {
         setSuccess(data.message || 'Conta criada com sucesso!')
-        setTimeout(() => router.push('/fornecedor/login'), 2000)
+        const loginUrl = redirect !== '/fornecedor/dashboard'
+          ? `/fornecedor/login?redirect=${encodeURIComponent(redirect)}`
+          : '/fornecedor/login'
+        setTimeout(() => router.push(loginUrl), 2000)
       } else {
         setError(data.error || 'Erro ao criar conta')
       }
@@ -74,17 +91,15 @@ export default function FornecedorRegistroPage() {
   }
 
   return (
-    <AuthLayout description="Cadastre-se como fornecedor FlowB2B e acompanhe seus pedidos de compra em tempo real.">
+    <FornecedorAuthLayout description="Cadastre-se como fornecedor e acompanhe seus pedidos de compra em tempo real.">
       <Card shadow="lg" rounded="xl" className="w-full max-w-[420px]">
         <CardContent className="p-8">
-          {/* Header */}
+          {/* Header com icone amber */}
           <div className="text-center mb-6">
-            <div className="inline-flex items-center gap-2 mb-4">
-              <span className="text-xs bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full font-medium">
-                Portal do Fornecedor
-              </span>
+            <div className="mx-auto w-14 h-14 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-amber-500/25">
+              <UserPlusIcon />
             </div>
-            <h1 className="text-2xl font-semibold text-primary-700">
+            <h1 className="text-2xl font-semibold text-gray-800">
               Criar conta
             </h1>
             <p className="text-sm text-gray-500 mt-1">
@@ -94,12 +109,12 @@ export default function FornecedorRegistroPage() {
 
           {/* Messages */}
           {error && (
-            <div className="bg-error-500/10 text-error-600 px-3 py-2 rounded-lg text-sm mb-4">
+            <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm mb-4 border border-red-100">
               {error}
             </div>
           )}
           {success && (
-            <div className="bg-success-500/10 text-success-600 px-3 py-2 rounded-lg text-sm mb-4">
+            <div className="bg-green-50 text-green-600 px-3 py-2 rounded-lg text-sm mb-4 border border-green-100">
               {success}
             </div>
           )}
@@ -172,28 +187,70 @@ export default function FornecedorRegistroPage() {
               }
             />
 
-            <Button
+            {/* Botao com gradiente amber/orange */}
+            <button
               type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={loading}
+              disabled={loading}
+              className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl shadow-lg shadow-amber-500/25 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Criar conta
-            </Button>
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Criando conta...
+                </>
+              ) : (
+                'Criar conta'
+              )}
+            </button>
           </form>
 
           {/* Login link */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
               Ja tem conta?{' '}
-              <Link href="/fornecedor/login" className="text-primary-600 hover:text-primary-700 font-medium">
+              <Link
+                href={redirect !== '/fornecedor/dashboard' ? `/fornecedor/login?redirect=${encodeURIComponent(redirect)}` : '/fornecedor/login'}
+                className="text-amber-600 hover:text-amber-700 font-semibold"
+              >
                 Faca login
               </Link>
             </p>
           </div>
+
+          {/* Divider */}
+          <div className="mt-5 pt-5 border-t border-gray-100">
+            <Link
+              href="/login"
+              className="block text-center text-sm text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Sou lojista
+            </Link>
+          </div>
         </CardContent>
       </Card>
-    </AuthLayout>
+    </FornecedorAuthLayout>
+  )
+}
+
+// Fallback com cores amber
+function RegistroFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600">
+      <div className="flex flex-col items-center gap-3">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white" />
+        <p className="text-sm text-white/90 font-medium">Carregando...</p>
+      </div>
+    </div>
+  )
+}
+
+export default function FornecedorRegistroPage() {
+  return (
+    <Suspense fallback={<RegistroFallback />}>
+      <FornecedorRegistroForm />
+    </Suspense>
   )
 }

@@ -123,7 +123,7 @@ export default function Home() {
       {/* Principais Metricas */}
       <Card className="mb-6" padding="md">
         <h2 className="text-base font-semibold text-gray-900 mb-4">Principais Metricas</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 2xl:gap-8">
           <MetricCard
             label="Compras totais"
             sublabel="Pedidos emitidos"
@@ -153,7 +153,7 @@ export default function Home() {
       </Card>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 2xl:gap-8 mb-6">
         {/* Principais Fornecedores - Pie Chart */}
         <Card padding="md">
           <h3 className="text-base font-semibold text-gray-900 mb-4">Principais fornecedores</h3>
@@ -217,7 +217,7 @@ export default function Home() {
       </Card>
 
       {/* Nova Row: Fornecedores Mais Vendas + Variação Estoque */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 2xl:gap-8 mb-6">
         {/* Fornecedores que Mais Vendem */}
         <Card padding="md">
           <div className="flex items-center justify-between mb-4">
@@ -338,7 +338,7 @@ export default function Home() {
       </Card>
 
       {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 2xl:gap-8">
         {/* Acoes Rapidas */}
         <Card padding="md">
           <h3 className="text-base font-semibold text-gray-900 mb-4">Acoes Rapidas</h3>

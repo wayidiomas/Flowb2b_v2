@@ -112,7 +112,7 @@ export function SidebarAcoes({ resumo, onNovoPedido, onGerarAutomatico, onImprim
 
   // Estado expandido - sidebar completa
   return (
-    <div className="w-[280px] flex-shrink-0 transition-all duration-300 ease-in-out">
+    <div className="w-[280px] 2xl:w-[320px] flex-shrink-0 transition-all duration-300 ease-in-out">
       <div className="bg-white rounded-[20px] overflow-hidden flex flex-col shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)]">
         {/* Header */}
         <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-tl-[20px] rounded-bl-[20px] px-[19px] py-[18px]">

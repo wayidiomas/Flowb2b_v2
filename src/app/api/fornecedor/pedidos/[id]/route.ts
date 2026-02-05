@@ -52,10 +52,10 @@ export async function GET(
       .eq('id', pedido.empresa_id)
       .single()
 
-    // Buscar sugestoes existentes
+    // Buscar sugestoes existentes (incluindo autor_tipo para identificar contra-propostas)
     const { data: sugestoes } = await supabase
       .from('sugestoes_fornecedor')
-      .select('id, status, observacao_fornecedor, observacao_lojista, created_at')
+      .select('id, status, observacao_fornecedor, observacao_lojista, created_at, autor_tipo, valor_minimo_pedido, desconto_geral, bonificacao_geral, prazo_entrega_dias, validade_proposta')
       .eq('pedido_compra_id', id)
       .order('created_at', { ascending: false })
 

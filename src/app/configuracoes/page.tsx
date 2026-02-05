@@ -700,9 +700,9 @@ export default function ConfiguracoesPage() {
     <DashboardLayout>
       <PageHeader title="Configuracoes" />
 
-      <div className="flex gap-6">
+      <div className="flex gap-6 2xl:gap-8">
         {/* Sidebar */}
-        <div className="w-64 shrink-0">
+        <div className="w-64 2xl:w-72 shrink-0">
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             {/* Secao Minha Conta */}
             <div className="p-4 border-b border-gray-200">

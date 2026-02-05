@@ -36,6 +36,11 @@ const publicApiRoutes = [
   '/api/auth/fornecedor/registro',
 ]
 
+// Padroes de API publicas (com regex)
+const publicApiPatterns = [
+  /^\/api\/pedidos-compra\/\d+\/publico$/,  // /api/pedidos-compra/123/publico
+]
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -46,6 +51,11 @@ export async function middleware(request: NextRequest) {
 
   // Permitir rotas de API públicas
   if (publicApiRoutes.some(route => pathname.startsWith(route))) {
+    return NextResponse.next()
+  }
+
+  // Permitir rotas de API publicas por padrao (regex)
+  if (publicApiPatterns.some(pattern => pattern.test(pathname))) {
     return NextResponse.next()
   }
 

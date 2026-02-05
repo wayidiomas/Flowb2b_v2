@@ -37,8 +37,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="min-h-screen bg-gray-100">
       <MainHeader />
-      <main className="p-6">
-        <div className="max-w-[1400px] mx-auto">
+      <main className="p-4 md:p-6 2xl:px-8 3xl:px-12">
+        <div className="max-w-[1800px] 2xl:max-w-[2200px] 3xl:max-w-none mx-auto">
           {children}
         </div>
       </main>

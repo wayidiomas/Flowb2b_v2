@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import { FornecedorConviteModal } from '@/components/fornecedor/FornecedorConviteModal'
 
 interface ItemPedido {
   codigo_produto?: string
@@ -60,6 +61,22 @@ function PrintIcon() {
   )
 }
 
+function ChatBubbleIcon() {
+  return (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+    </svg>
+  )
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+    </svg>
+  )
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -91,6 +108,27 @@ export default function PedidoPublicoPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showExportMenu, setShowExportMenu] = useState(false)
+  const [showConviteModal, setShowConviteModal] = useState(false)
+
+  // Abrir modal de convite apos 3 segundos
+  useEffect(() => {
+    if (pedido && !loading) {
+      const timer = setTimeout(() => {
+        // Verificar se o usuario ja fechou o modal antes (localStorage)
+        const modalDismissed = localStorage.getItem(`convite-modal-dismissed-${pedidoId}`)
+        if (!modalDismissed) {
+          setShowConviteModal(true)
+        }
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [pedido, loading, pedidoId])
+
+  const handleCloseConviteModal = () => {
+    setShowConviteModal(false)
+    // Salvar que o usuario fechou o modal para nao mostrar de novo
+    localStorage.setItem(`convite-modal-dismissed-${pedidoId}`, 'true')
+  }
 
   // Buscar pedido
   useEffect(() => {
@@ -267,6 +305,38 @@ export default function PedidoPublicoPage() {
           </div>
         </div>
       </header>
+
+      {/* Banner CTA para fornecedor */}
+      <div className="bg-gradient-to-r from-amber-500 to-orange-500 print:hidden">
+        <div className="max-w-5xl mx-auto px-4 py-4 sm:px-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3 text-white">
+              <div className="p-2 bg-white/20 rounded-lg">
+                <ChatBubbleIcon />
+              </div>
+              <div>
+                <p className="font-semibold text-lg">Quer responder a este pedido?</p>
+                <p className="text-white/90 text-sm">Cadastre-se na FlowB2B e envie suas sugestoes comerciais</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <a
+                href={`/fornecedor/login?redirect=/fornecedor/pedidos/${pedidoId}`}
+                className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium transition-colors"
+              >
+                Ja tenho conta
+              </a>
+              <a
+                href={`/fornecedor/registro?redirect=/fornecedor/pedidos/${pedidoId}`}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-white text-amber-600 hover:bg-amber-50 rounded-lg font-semibold transition-colors"
+              >
+                Criar conta gratis
+                <ArrowRightIcon />
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Conteudo */}
       <main className="max-w-5xl mx-auto px-4 py-6 sm:px-6" id="print-area">
@@ -484,6 +554,14 @@ export default function PedidoPublicoPage() {
           }
         }
       `}</style>
+
+      {/* Modal de convite para fornecedor */}
+      <FornecedorConviteModal
+        isOpen={showConviteModal}
+        onClose={handleCloseConviteModal}
+        pedidoId={pedidoId}
+        fornecedorNome={pedido.fornecedor_nome}
+      />
     </div>
   )
 }

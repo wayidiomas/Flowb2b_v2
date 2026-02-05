@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
@@ -20,6 +20,18 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }>
   'Aguardando Entrega': { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Aguardando Entrega' },
   'Rascunho': { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Rascunho' },
 }
+
+// Workflow status filter tabs
+const WORKFLOW_TABS = [
+  { key: 'todos', label: 'Todos', color: 'gray' },
+  { key: 'rascunho', label: 'Rascunhos', color: 'gray' },
+  { key: 'enviado_fornecedor', label: 'Aguardando', color: 'blue' },
+  { key: 'sugestao_pendente', label: 'Sugestao', color: 'amber' },
+  { key: 'contra_proposta_pendente', label: 'Contra-prop', color: 'orange' },
+  { key: 'aceito', label: 'Aceitos', color: 'green' },
+  { key: 'finalizado', label: 'Finalizados', color: 'purple' },
+  { key: 'cancelado', label: 'Cancelados', color: 'red' },
+] as const
 
 // Icons
 function SearchIcon() {
@@ -151,6 +163,22 @@ export default function PedidoCompraPage() {
   // Status interno dos pedidos (mapa pedido_id -> status_interno)
   const [statusInternoMap, setStatusInternoMap] = useState<Record<number, StatusInterno>>({})
 
+  // Workflow filter tab
+  const [workflowFilter, setWorkflowFilter] = useState<string>('todos')
+
+  // Workflow counts for tabs
+  const [workflowCounts, setWorkflowCounts] = useState<Record<string, number>>({
+    todos: 0,
+    rascunho: 0,
+    enviado_fornecedor: 0,
+    sugestao_pendente: 0,
+    contra_proposta_pendente: 0,
+    aceito: 0,
+    rejeitado: 0,
+    finalizado: 0,
+    cancelado: 0,
+  })
+
   const filterDropdownRef = useRef<HTMLDivElement>(null)
   const itemsPerPage = 10
 
@@ -185,13 +213,12 @@ export default function PedidoCompraPage() {
       const empresaId = empresa?.id || user?.empresa_id
       if (!empresaId) return
 
-      // Buscar fornecedores
+      // Buscar fornecedores (sem limite para garantir que todos apareçam)
       const { data: fornecedoresData, error: fornecedoresError } = await supabase
         .from('fornecedores')
         .select('id, nome, cnpj')
         .eq('empresa_id', empresaId)
         .order('nome', { ascending: true })
-        .limit(100)
 
       if (fornecedoresError) throw fornecedoresError
 
@@ -292,6 +319,33 @@ export default function PedidoCompraPage() {
       setTotalCount(totalPedidos)
       setResumo({ qtd: totalPedidos, valorTotal: valorTotalGeral })
 
+      // Buscar contagens por workflow status
+      const { data: workflowData } = await supabase
+        .from('pedidos_compra')
+        .select('status_interno')
+        .eq('empresa_id', empresaId)
+
+      if (workflowData) {
+        const counts: Record<string, number> = {
+          todos: workflowData.length,
+          rascunho: 0,
+          enviado_fornecedor: 0,
+          sugestao_pendente: 0,
+          contra_proposta_pendente: 0,
+          aceito: 0,
+          rejeitado: 0,
+          finalizado: 0,
+          cancelado: 0,
+        }
+        workflowData.forEach(p => {
+          const status = p.status_interno || 'rascunho'
+          if (counts[status] !== undefined) {
+            counts[status]++
+          }
+        })
+        setWorkflowCounts(counts)
+      }
+
       // Agora buscar dados paginados via RPC
       let data: PedidoCompraListItem[] | null = null
       let error = null
@@ -373,6 +427,15 @@ export default function PedidoCompraPage() {
     fetchPedidos()
   }, [user?.id, user?.empresa_id, empresa?.id, currentPage, debouncedSearch, fornecedorFilter, dataInicioFilter, dataFimFilter, situacaoFilter])
 
+  // Filtrar pedidos por workflow status
+  const filteredPedidos = useMemo(() => {
+    if (workflowFilter === 'todos') return pedidos
+    return pedidos.filter(p => {
+      const status = statusInternoMap[p.pedido_id] || 'rascunho'
+      return status === workflowFilter
+    })
+  }, [pedidos, statusInternoMap, workflowFilter])
+
   // Verificar se ha filtros ativos
   const hasActiveFilters = fornecedorFilter !== '' || dataInicioFilter !== '' || dataFimFilter !== '' || situacaoFilter !== ''
 
@@ -398,10 +461,10 @@ export default function PedidoCompraPage() {
 
   // Selecao
   const handleSelectAll = () => {
-    if (selectedPedidos.length === pedidos.length) {
+    if (selectedPedidos.length === filteredPedidos.length) {
       setSelectedPedidos([])
     } else {
-      setSelectedPedidos(pedidos.map((p) => p.pedido_id))
+      setSelectedPedidos(filteredPedidos.map((p) => p.pedido_id))
     }
   }
 
@@ -523,18 +586,70 @@ export default function PedidoCompraPage() {
         subtitle={`${totalCount} pedidos`}
       />
 
-      <div className="flex gap-4">
+      {/* Workflow Status Cards - Quick Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 2xl:gap-4 mb-6">
+        {WORKFLOW_TABS.map(tab => {
+          const count = workflowCounts[tab.key] || 0
+          const isActive = workflowFilter === tab.key
+          const colorClasses: Record<string, string> = {
+            gray: isActive ? 'bg-gray-600 text-white border-gray-600' : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300',
+            blue: isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-200 hover:border-blue-300',
+            amber: isActive ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:border-amber-300',
+            orange: isActive ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-orange-700 border-orange-200 hover:border-orange-300',
+            green: isActive ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-700 border-green-200 hover:border-green-300',
+            purple: isActive ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-700 border-purple-200 hover:border-purple-300',
+            red: isActive ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-700 border-red-200 hover:border-red-300',
+          }
+          const bgAccent: Record<string, string> = {
+            gray: 'bg-gray-100',
+            blue: 'bg-blue-100',
+            amber: 'bg-amber-100',
+            orange: 'bg-orange-100',
+            green: 'bg-green-100',
+            purple: 'bg-purple-100',
+            red: 'bg-red-100',
+          }
+          return (
+            <button
+              key={tab.key}
+              onClick={() => {
+                setWorkflowFilter(tab.key)
+                setCurrentPage(1)
+              }}
+              className={`relative px-4 py-3 rounded-xl border-2 transition-all ${colorClasses[tab.color]} ${isActive ? 'shadow-md' : 'shadow-sm hover:shadow'}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">{tab.label}</span>
+                <span className={`text-lg font-bold ${isActive ? '' : bgAccent[tab.color]} ${isActive ? '' : `text-${tab.color}-600`} px-2 py-0.5 rounded-lg`}>
+                  {count}
+                </span>
+              </div>
+              {(tab.key === 'sugestao_pendente' || tab.key === 'contra_proposta_pendente') && count > 0 && !isActive && (
+                <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse ${tab.key === 'sugestao_pendente' ? 'bg-amber-500' : 'bg-orange-500'}`} />
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="flex gap-4 2xl:gap-6">
         {/* Main Content */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {/* Card Container */}
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
             {/* Card Header */}
             <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-[20px] px-5 py-[18px]">
               <div className="flex items-end justify-between gap-2 mb-4">
                 <div className="flex flex-col gap-1.5">
-                  <h2 className="text-base font-medium text-[#344054]">Pedidos de Compra</h2>
+                  <h2 className="text-base font-medium text-[#344054]">
+                    {workflowFilter === 'todos' ? 'Todos os Pedidos' : `Pedidos - ${WORKFLOW_TABS.find(t => t.key === workflowFilter)?.label}`}
+                  </h2>
                   <p className="text-xs text-[#838383]">
-                    Gerencie seus pedidos de compra
+                    {workflowFilter === 'sugestao_pendente'
+                      ? 'Pedidos aguardando sua analise de sugestao do fornecedor'
+                      : workflowFilter === 'enviado_fornecedor'
+                      ? 'Pedidos enviados ao fornecedor aguardando resposta'
+                      : 'Gerencie seus pedidos de compra'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -551,12 +666,12 @@ export default function PedidoCompraPage() {
                   <div className="relative" ref={filterDropdownRef}>
                     <button
                       onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                      className="inline-flex items-center gap-2 px-10 py-2.5 text-[13px] font-medium text-white bg-[#FFAA11] hover:bg-[#E59A0F] rounded-lg shadow-xs transition-colors"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg shadow-xs transition-colors"
                     >
                       <FilterIcon />
                       Filtros
                       {activeFiltersCount > 0 && (
-                        <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#336FB6] text-xs text-white">
+                        <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-xs text-white">
                           {activeFiltersCount}
                         </span>
                       )}
@@ -708,7 +823,7 @@ export default function PedidoCompraPage() {
                     <th className="px-4 py-3 text-left w-12">
                       <input
                         type="checkbox"
-                        checked={pedidos.length > 0 && selectedPedidos.length === pedidos.length}
+                        checked={filteredPedidos.length > 0 && selectedPedidos.length === filteredPedidos.length}
                         onChange={handleSelectAll}
                         className="w-5 h-5 text-[#336FB6] bg-white border-[#DCDCDC] rounded focus:ring-[#336FB6]"
                       />
@@ -731,8 +846,11 @@ export default function PedidoCompraPage() {
                     <th className="px-4 py-3 text-right text-sm font-medium text-[#344054] w-[120px]">
                       Valor (R$)
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-[#344054] w-[130px]">
-                      Status
+                    <th className="px-4 py-3 text-center text-sm font-medium text-[#344054] w-[100px]">
+                      Bling
+                    </th>
+                    <th className="px-4 py-3 text-center text-sm font-medium text-[#344054] w-[140px]">
+                      Negociacao
                     </th>
                     <th className="px-4 py-3 w-12">
                       <span className="sr-only">Acoes</span>
@@ -741,43 +859,90 @@ export default function PedidoCompraPage() {
                 </thead>
                 <tbody>
                   {loading ? (
-                    <TableSkeleton columns={7} rows={5} showCheckbox showActions />
-                  ) : pedidos.length === 0 ? (
+                    <TableSkeleton columns={8} rows={5} showCheckbox showActions />
+                  ) : filteredPedidos.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
-                        {searchTerm || hasActiveFilters ? (
-                          <div>
-                            <p>Nenhum pedido encontrado para os filtros aplicados.</p>
-                            {hasActiveFilters && (
-                              <button
-                                onClick={clearFilters}
-                                className="mt-2 text-sm text-[#336FB6] hover:underline"
-                              >
-                                Limpar filtros
-                              </button>
-                            )}
+                      <td colSpan={10} className="px-6 py-12 text-center">
+                        {searchTerm || hasActiveFilters || workflowFilter !== 'todos' ? (
+                          <div className="flex flex-col items-center">
+                            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                              </svg>
+                            </div>
+                            <p className="text-gray-600 font-medium">Nenhum pedido encontrado</p>
+                            <p className="text-sm text-gray-500 mt-1">Ajuste os filtros para ver mais resultados</p>
+                            <div className="flex gap-2 mt-4">
+                              {workflowFilter !== 'todos' && (
+                                <button
+                                  onClick={() => setWorkflowFilter('todos')}
+                                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                                >
+                                  Ver todos os pedidos
+                                </button>
+                              )}
+                              {hasActiveFilters && (
+                                <button
+                                  onClick={clearFilters}
+                                  className="text-sm text-gray-600 hover:text-gray-700"
+                                >
+                                  Limpar filtros
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ) : (
-                          <div>
-                            <p>Nenhum pedido de compra cadastrado.</p>
-                            <button
-                              onClick={handleNovoPedido}
-                              className="mt-2 inline-block text-sm text-[#336FB6] hover:underline"
-                            >
-                              Criar primeiro pedido
-                            </button>
+                          <div className="flex flex-col items-center">
+                            <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-blue-100 rounded-full flex items-center justify-center mb-4">
+                              <svg className="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+                              </svg>
+                            </div>
+                            <p className="text-gray-700 font-semibold text-lg">Nenhum pedido de compra</p>
+                            <p className="text-sm text-gray-500 mt-1 max-w-sm text-center">
+                              Crie seu primeiro pedido de compra manualmente ou deixe o sistema calcular automaticamente baseado nas vendas.
+                            </p>
+                            <div className="flex gap-3 mt-5">
+                              <button
+                                onClick={handleNovoPedido}
+                                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                                Novo Pedido
+                              </button>
+                              <button
+                                onClick={handleGerarAutomatico}
+                                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+                                </svg>
+                                Gerar Automatico
+                              </button>
+                            </div>
                           </div>
                         )}
                       </td>
                     </tr>
                   ) : (
-                    pedidos.map((pedido, index) => {
+                    filteredPedidos.map((pedido, index) => {
                       const statusConfig = STATUS_CONFIG[pedido.status] || STATUS_CONFIG['Rascunho']
+                      const statusInterno = statusInternoMap[pedido.pedido_id] || 'rascunho'
+                      const hasPendingSuggestion = statusInterno === 'sugestao_pendente'
+                      const hasContraProposta = statusInterno === 'contra_proposta_pendente'
+                      const isWaitingSupplier = statusInterno === 'enviado_fornecedor'
+
                       return (
                         <tr
                           key={pedido.pedido_id}
-                          className={`border-b border-[#EFEFEF] hover:bg-gray-50 ${
-                            selectedPedidos.includes(pedido.pedido_id) ? 'bg-blue-50' : index % 2 === 1 ? 'bg-[#F9F9F9]' : 'bg-white'
+                          className={`border-b border-[#EFEFEF] hover:bg-gray-50 transition-colors ${
+                            selectedPedidos.includes(pedido.pedido_id) ? 'bg-blue-50' :
+                            hasPendingSuggestion ? 'bg-amber-50/50' :
+                            hasContraProposta ? 'bg-orange-50/50' :
+                            isWaitingSupplier ? 'bg-blue-50/30' :
+                            index % 2 === 1 ? 'bg-[#F9F9F9]' : 'bg-white'
                           }`}
                         >
                           <td className="px-4 py-3">
@@ -789,9 +954,12 @@ export default function PedidoCompraPage() {
                             />
                           </td>
                           <td className="px-4 py-3">
-                            <span className="text-[13px] text-[#344054] font-medium">
-                              {pedido.numero_pedido || '-'}
-                            </span>
+                            <Link
+                              href={`/compras/pedidos/${pedido.pedido_id}`}
+                              className="text-[13px] text-primary-600 hover:text-primary-700 font-semibold hover:underline"
+                            >
+                              #{pedido.numero_pedido || pedido.pedido_id}
+                            </Link>
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-[13px] text-[#344054]">
@@ -799,7 +967,7 @@ export default function PedidoCompraPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className="text-[13px] text-[#344054]">
+                            <span className="text-[13px] text-[#344054] font-medium">
                               {pedido.fornecedor_nome || '-'}
                             </span>
                           </td>
@@ -814,69 +982,112 @@ export default function PedidoCompraPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <span className="text-[13px] text-[#344054]">
+                            <span className="text-[13px] text-[#344054] font-medium">
                               {formatCurrency(pedido.valor_total || 0)}
                             </span>
                           </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-col gap-1">
-                              <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${statusConfig.bg} ${statusConfig.text} w-fit`}>
-                                {statusConfig.label}
+                          {/* Coluna Bling */}
+                          <td className="px-4 py-3 text-center">
+                            <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-lg ${statusConfig.bg} ${statusConfig.text}`}>
+                              {statusConfig.label}
+                            </span>
+                          </td>
+                          {/* Coluna Negociacao */}
+                          <td className="px-4 py-3 text-center">
+                            {statusInterno && statusInterno !== 'rascunho' ? (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg ${STATUS_INTERNO_CONFIG[statusInterno].bg} ${STATUS_INTERNO_CONFIG[statusInterno].text}`}>
+                                {statusInterno === 'sugestao_pendente' && (
+                                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                                )}
+                                {statusInterno === 'contra_proposta_pendente' && (
+                                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                                )}
+                                {statusInterno === 'enviado_fornecedor' && (
+                                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                  </svg>
+                                )}
+                                {STATUS_INTERNO_CONFIG[statusInterno].label}
                               </span>
-                              {statusInternoMap[pedido.pedido_id] && statusInternoMap[pedido.pedido_id] !== 'rascunho' && (
-                                <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full w-fit ${STATUS_INTERNO_CONFIG[statusInternoMap[pedido.pedido_id]].bg} ${STATUS_INTERNO_CONFIG[statusInternoMap[pedido.pedido_id]].text}`}>
-                                  {STATUS_INTERNO_CONFIG[statusInternoMap[pedido.pedido_id]].label}
-                                </span>
-                              )}
-                            </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-center gap-1">
-                              {/* Ver/Editar - sempre disponivel */}
-                              <Link
-                                href={`/compras/pedidos/${pedido.pedido_id}/editar`}
-                                className="inline-flex items-center justify-center w-8 h-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                title={pedido.status === 'Rascunho' ? 'Editar pedido' : 'Ver pedido'}
-                              >
-                                {pedido.status === 'Rascunho' ? <EditIcon /> : <EyeIcon />}
-                              </Link>
-
-                              {/* Imprimir - disponivel quando nao e Rascunho ou Cancelada */}
-                              {pedido.status !== 'Rascunho' && pedido.status !== 'Cancelada' && (
-                                <button
-                                  onClick={() => window.open(`/compras/pedidos/${pedido.pedido_id}/imprimir`, '_blank')}
-                                  className="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                                  title="Imprimir pedido"
+                              {/* Acao principal baseada no status do workflow */}
+                              {hasPendingSuggestion ? (
+                                <Link
+                                  href={`/compras/pedidos/${pedido.pedido_id}`}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors"
+                                  title="Analisar sugestao do fornecedor"
                                 >
-                                  <PrintIcon />
-                                </button>
-                              )}
-
-                              {/* WhatsApp - disponivel quando nao e Rascunho ou Cancelada e tem telefone */}
-                              {pedido.status !== 'Rascunho' && pedido.status !== 'Cancelada' && (
-                                <button
-                                  onClick={() => handleWhatsApp(pedido)}
-                                  className="inline-flex items-center justify-center w-8 h-8 text-green-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                  title={pedido.fornecedor_telefone ? 'Enviar via WhatsApp' : 'Fornecedor sem telefone'}
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                                  </svg>
+                                  Analisar
+                                </Link>
+                              ) : hasContraProposta ? (
+                                <Link
+                                  href={`/compras/pedidos/${pedido.pedido_id}`}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors"
+                                  title="Aguardando resposta do fornecedor"
                                 >
-                                  <WhatsAppIcon />
-                                </button>
-                              )}
+                                  <svg className="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                                  </svg>
+                                  Aguardando
+                                </Link>
+                              ) : (
+                                <>
+                                  {/* Ver/Editar */}
+                                  <Link
+                                    href={`/compras/pedidos/${pedido.pedido_id}`}
+                                    className="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                    title="Ver detalhes"
+                                  >
+                                    <EyeIcon />
+                                  </Link>
 
-                              {/* Excluir - disponivel apenas para Rascunho */}
-                              {pedido.status === 'Rascunho' && (
-                                <button
-                                  onClick={() => {
-                                    if (confirm('Deseja realmente excluir este pedido?')) {
-                                      setSelectedPedidos([pedido.pedido_id])
-                                      handleExcluir()
-                                    }
-                                  }}
-                                  className="inline-flex items-center justify-center w-8 h-8 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Excluir pedido"
-                                >
-                                  <TrashIcon />
-                                </button>
+                                  {/* Imprimir */}
+                                  {pedido.status !== 'Rascunho' && pedido.status !== 'Cancelada' && (
+                                    <button
+                                      onClick={() => window.open(`/compras/pedidos/${pedido.pedido_id}/imprimir`, '_blank')}
+                                      className="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                                      title="Imprimir pedido"
+                                    >
+                                      <PrintIcon />
+                                    </button>
+                                  )}
+
+                                  {/* WhatsApp */}
+                                  {pedido.status !== 'Rascunho' && pedido.status !== 'Cancelada' && (
+                                    <button
+                                      onClick={() => handleWhatsApp(pedido)}
+                                      className="inline-flex items-center justify-center w-8 h-8 text-green-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                      title={pedido.fornecedor_telefone ? 'Enviar via WhatsApp' : 'Fornecedor sem telefone'}
+                                    >
+                                      <WhatsAppIcon />
+                                    </button>
+                                  )}
+
+                                  {/* Excluir - apenas Rascunho */}
+                                  {pedido.status === 'Rascunho' && (
+                                    <button
+                                      onClick={() => {
+                                        if (confirm('Deseja realmente excluir este pedido?')) {
+                                          setSelectedPedidos([pedido.pedido_id])
+                                          handleExcluir()
+                                        }
+                                      }}
+                                      className="inline-flex items-center justify-center w-8 h-8 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                      title="Excluir pedido"
+                                    >
+                                      <TrashIcon />
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </div>
                           </td>

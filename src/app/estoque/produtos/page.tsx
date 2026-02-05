@@ -669,7 +669,7 @@ export default function ControleEstoquePage() {
         subtitle="Gerencie as movimentacoes de estoque dos produtos"
       />
 
-      <div className="flex gap-4">
+      <div className="flex gap-4 2xl:gap-6">
         {/* Main Content */}
         <div className="flex-1">
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
@@ -773,7 +773,7 @@ export default function ControleEstoquePage() {
 
                 {/* Graficos */}
                 {movimentacoes.length > 0 && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 2xl:gap-8 mb-6">
                     {/* Grafico de Entradas e Saidas */}
                     <div className="bg-white border border-[#EFEFEF] rounded-xl p-4">
                       <h4 className="text-sm font-medium text-[#344054] mb-4">Movimentacao Temporal</h4>
@@ -1029,7 +1029,7 @@ export default function ControleEstoquePage() {
         </div>
 
         {/* Right Sidebar */}
-        <div className="w-[286px] shrink-0">
+        <div className="w-[286px] 2xl:w-[320px] shrink-0">
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
             {/* Sidebar Header */}
             <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-[20px] px-5 py-[18px]">

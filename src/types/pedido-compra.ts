@@ -58,6 +58,9 @@ export interface ItemPedidoCompra {
   preco_total?: number
   estoque_atual?: number
   ean?: string
+  // Campos de sugestao aplicada
+  valor_unitario_final?: number      // Valor unitario com desconto aplicado
+  quantidade_bonificacao?: number    // Quantidade de unidades bonificadas (gratis)
 }
 
 // Dados do formulario de pedido
@@ -189,15 +192,35 @@ export function calcularTotalPedido(params: {
 }
 
 // Status interno do pedido (fluxo fornecedor)
-export type StatusInterno = 'rascunho' | 'enviado_fornecedor' | 'sugestao_pendente' | 'aceito' | 'rejeitado' | 'finalizado'
+export type StatusInterno =
+  | 'rascunho'
+  | 'enviado_fornecedor'
+  | 'sugestao_pendente'
+  | 'contra_proposta_pendente'  // Lojista enviou contra-proposta
+  | 'aceito'
+  | 'rejeitado'
+  | 'finalizado'
+  | 'cancelado'
 
 export const STATUS_INTERNO_CONFIG: Record<StatusInterno, { bg: string; text: string; label: string }> = {
   rascunho: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Rascunho' },
   enviado_fornecedor: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Enviado ao Fornecedor' },
   sugestao_pendente: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Sugestao Pendente' },
+  contra_proposta_pendente: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Contra-Proposta Pendente' },
   aceito: { bg: 'bg-green-100', text: 'text-green-700', label: 'Aceito' },
   rejeitado: { bg: 'bg-red-100', text: 'text-red-700', label: 'Rejeitado' },
   finalizado: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Finalizado' },
+  cancelado: { bg: 'bg-red-100', text: 'text-red-700', label: 'Cancelado' },
+}
+
+// Estados finais - nao podem ser alterados
+export const ESTADOS_FINAIS: StatusInterno[] = ['finalizado', 'cancelado']
+
+// Mapeamento status_interno -> situacao Bling
+export const STATUS_INTERNO_TO_BLING: Partial<Record<StatusInterno, number>> = {
+  aceito: 3,      // Em Andamento
+  finalizado: 1,  // Atendido
+  cancelado: 2,   // Cancelado
 }
 
 // Sugestao do fornecedor
@@ -208,6 +231,13 @@ export interface SugestaoFornecedor {
   observacao_lojista?: string
   created_at: string
   users_fornecedor?: { nome: string; email: string }
+  // Condicoes comerciais
+  valor_minimo_pedido?: number      // Valor minimo para aplicar desconto/bonif geral
+  desconto_geral?: number           // % desconto se atingir valor_minimo
+  bonificacao_geral?: number        // % produtos extras se atingir valor_minimo
+  prazo_entrega_dias?: number       // Prazo de entrega em dias uteis
+  validade_proposta?: string        // Data limite de validade da proposta
+  autor_tipo: 'fornecedor' | 'lojista'  // Quem criou a sugestao (para contra-proposta)
 }
 
 export interface SugestaoItem {
@@ -215,9 +245,23 @@ export interface SugestaoItem {
   item_pedido_compra_id: number
   produto_id?: number
   quantidade_sugerida: number
-  desconto_percentual: number
-  bonificacao_percentual: number
+  desconto_percentual: number       // % desconto no valor unitario
+  bonificacao_percentual: number    // % produtos extras neste item
   validade?: string
+  // Campos calculados (frontend)
+  valor_unitario_com_desconto?: number
+  quantidade_bonificacao?: number   // unidades extras gratis calculadas
+  subtotal_original?: number
+  subtotal_sugerido?: number
+}
+
+// Condicoes comerciais para UI do fornecedor
+export interface CondicoesComerciais {
+  valor_minimo_pedido: number
+  desconto_geral: number
+  bonificacao_geral: number
+  prazo_entrega_dias: number
+  validade_proposta: string
 }
 
 // Detalhes do pedido (retornado pela RPC get_pedido_compra_detalhes)

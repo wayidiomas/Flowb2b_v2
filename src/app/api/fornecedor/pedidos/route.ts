@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const supabase = createServerSupabaseClient()
     const { searchParams } = new URL(request.url)
     const statusFilter = searchParams.get('status')
+    const searchQuery = searchParams.get('search')?.toLowerCase().trim()
 
     // Buscar fornecedores vinculados ao CNPJ
     const { data: fornecedores } = await supabase
@@ -26,6 +27,35 @@ export async function GET(request: NextRequest) {
     const fornecedorIds = fornecedores.map(f => f.id)
     const empresaIds = [...new Set(fornecedores.map(f => f.empresa_id))]
 
+    // Buscar empresas para nomes e CNPJ
+    const { data: empresas } = await supabase
+      .from('empresas')
+      .select('id, razao_social, nome_fantasia, cnpj')
+      .in('id', empresaIds)
+
+    const empresaMap = new Map((empresas || []).map(e => [e.id, e]))
+
+    // Se tiver busca, filtrar empresas primeiro
+    let empresaIdsFiltered = empresaIds
+    if (searchQuery) {
+      empresaIdsFiltered = (empresas || [])
+        .filter(e => {
+          const nomeFantasia = (e.nome_fantasia || '').toLowerCase()
+          const razaoSocial = (e.razao_social || '').toLowerCase()
+          const cnpj = (e.cnpj || '').replace(/\D/g, '')
+          const searchClean = searchQuery.replace(/\D/g, '')
+
+          return nomeFantasia.includes(searchQuery) ||
+                 razaoSocial.includes(searchQuery) ||
+                 (searchClean && cnpj.includes(searchClean))
+        })
+        .map(e => e.id)
+
+      if (empresaIdsFiltered.length === 0) {
+        return NextResponse.json({ pedidos: [] })
+      }
+    }
+
     // Buscar pedidos
     let query = supabase
       .from('pedidos_compra')
@@ -38,15 +68,11 @@ export async function GET(request: NextRequest) {
       query = query.eq('status_interno', statusFilter)
     }
 
+    if (searchQuery) {
+      query = query.in('empresa_id', empresaIdsFiltered)
+    }
+
     const { data: pedidos } = await query
-
-    // Buscar empresas para nomes
-    const { data: empresas } = await supabase
-      .from('empresas')
-      .select('id, razao_social, nome_fantasia')
-      .in('id', empresaIds)
-
-    const empresaMap = new Map((empresas || []).map(e => [e.id, e]))
 
     // Contar itens por pedido
     const pedidoIds = (pedidos || []).map(p => p.id)
@@ -60,11 +86,15 @@ export async function GET(request: NextRequest) {
       itensCountMap.set(item.pedido_compra_id, (itensCountMap.get(item.pedido_compra_id) || 0) + 1)
     })
 
-    const pedidosFormatted = (pedidos || []).map(p => ({
-      ...p,
-      empresa_nome: empresaMap.get(p.empresa_id)?.nome_fantasia || empresaMap.get(p.empresa_id)?.razao_social || '',
-      itens_count: itensCountMap.get(p.id) || 0,
-    }))
+    const pedidosFormatted = (pedidos || []).map(p => {
+      const empresa = empresaMap.get(p.empresa_id)
+      return {
+        ...p,
+        empresa_nome: empresa?.nome_fantasia || empresa?.razao_social || '',
+        empresa_cnpj: empresa?.cnpj || '',
+        itens_count: itensCountMap.get(p.id) || 0,
+      }
+    })
 
     return NextResponse.json({ pedidos: pedidosFormatted })
   } catch (error) {
