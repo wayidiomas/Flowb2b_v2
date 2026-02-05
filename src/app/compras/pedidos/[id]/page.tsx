@@ -1180,9 +1180,7 @@ ${pedido.observacoes ? `Observacoes: ${pedido.observacoes}` : ''}`
         </div>
 
         {/* Timeline */}
-        {statusInterno !== 'rascunho' && (
-          <PedidoTimeline pedidoCompraId={parseInt(pedidoId)} className="print:hidden" />
-        )}
+        <PedidoTimeline pedidoCompraId={parseInt(pedidoId)} className="print:hidden" />
 
         {/* Observacoes */}
         {(pedido.observacoes || pedido.observacoes_internas) && (
