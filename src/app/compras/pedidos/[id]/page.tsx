@@ -92,7 +92,8 @@ export default function VisualizarPedidoPage() {
 
       try {
         const { data, error } = await supabase.rpc('flowb2b_get_pedido_compra_detalhes', {
-          p_pedido_id: parseInt(pedidoId)
+          p_pedido_id: parseInt(pedidoId),
+          p_empresa_id: user.empresa_id
         })
 
         if (error) throw error

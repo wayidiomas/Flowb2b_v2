@@ -127,9 +127,10 @@ export default function EditarPedidoCompraPage() {
       try {
         const empresaId = user.empresa_id
 
-        // Buscar detalhes do pedido usando RPC
+        // Buscar detalhes do pedido usando RPC (com filtro empresa_id para seguranca)
         const { data: pedido, error: pError } = await supabase.rpc('flowb2b_get_pedido_compra_detalhes', {
-          p_pedido_id: parseInt(pedidoId)
+          p_pedido_id: parseInt(pedidoId),
+          p_empresa_id: empresaId
         })
 
         if (pError) throw pError
