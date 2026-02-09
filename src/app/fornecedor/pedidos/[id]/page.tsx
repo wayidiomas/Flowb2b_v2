@@ -926,7 +926,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               <thead>
                 <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
                   <th className="px-4 py-3">Produto</th>
-                  <th className="px-4 py-3">Cod.</th>
+                  <th className="px-4 py-3">SKU / EAN</th>
                   <th className="px-4 py-3">Und</th>
                   <th className="px-4 py-3 text-right">Valor unit.</th>
                   <th className="px-4 py-3 text-right">Qtd original</th>
@@ -950,7 +950,15 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                       <td className="px-4 py-3 text-sm text-gray-900 max-w-[200px] truncate" title={item.descricao}>
                         {item.descricao}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{item.codigo_produto || item.codigo_fornecedor}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {item.codigo_fornecedor && (
+                          <div className="font-medium text-gray-900">{item.codigo_fornecedor}</div>
+                        )}
+                        {item.codigo_produto && (
+                          <div className="text-xs text-gray-400">{item.codigo_produto}</div>
+                        )}
+                        {!item.codigo_fornecedor && !item.codigo_produto && '-'}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-500">{item.unidade}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right">
                         {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}

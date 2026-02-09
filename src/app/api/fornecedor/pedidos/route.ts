@@ -5,7 +5,15 @@ import { getCurrentUser } from '@/lib/auth'
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
+    console.log('[Fornecedor Pedidos] User:', JSON.stringify({
+      tipo: user?.tipo,
+      cnpj: user?.cnpj,
+      fornecedorUserId: user?.fornecedorUserId,
+      email: user?.email
+    }))
+
     if (!user || user.tipo !== 'fornecedor' || !user.cnpj) {
+      console.log('[Fornecedor Pedidos] Auth failed - user:', !!user, 'tipo:', user?.tipo, 'cnpj:', user?.cnpj)
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
@@ -15,10 +23,12 @@ export async function GET(request: NextRequest) {
     const searchQuery = searchParams.get('search')?.toLowerCase().trim()
 
     // Buscar fornecedores vinculados ao CNPJ
-    const { data: fornecedores } = await supabase
+    const { data: fornecedores, error: fornError } = await supabase
       .from('fornecedores')
       .select('id, empresa_id')
       .eq('cnpj', user.cnpj)
+
+    console.log('[Fornecedor Pedidos] CNPJ search:', user.cnpj, '- Found:', fornecedores?.length || 0, 'fornecedores', fornError ? `Error: ${fornError.message}` : '')
 
     if (!fornecedores || fornecedores.length === 0) {
       return NextResponse.json({ pedidos: [] })

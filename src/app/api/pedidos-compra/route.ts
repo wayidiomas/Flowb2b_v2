@@ -96,6 +96,40 @@ interface BlingPedidoCompraResponse {
   }
 }
 
+// Funcao para buscar codigos do fornecedor para os produtos
+async function fetchSupplierProductCodes(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  fornecedorId: number,
+  produtoIds: number[]
+): Promise<Map<number, string>> {
+  const codesMap = new Map<number, string>()
+
+  if (produtoIds.length === 0) {
+    return codesMap
+  }
+
+  const { data, error } = await supabase
+    .from('fornecedores_produtos')
+    .select('produto_id, codigo_fornecedor')
+    .eq('fornecedor_id', fornecedorId)
+    .in('produto_id', produtoIds)
+    .not('codigo_fornecedor', 'is', null)
+
+  if (error) {
+    console.error('Erro ao buscar codigos do fornecedor:', error)
+    return codesMap
+  }
+
+  for (const row of data || []) {
+    if (row.codigo_fornecedor) {
+      codesMap.set(row.produto_id, row.codigo_fornecedor)
+    }
+  }
+
+  console.log(`Codigos do fornecedor encontrados: ${codesMap.size} de ${produtoIds.length} produtos`)
+  return codesMap
+}
+
 // Funcao para obter e validar o token do Bling
 async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeof createServerSupabaseClient>) {
   const { data: tokens, error } = await supabase
@@ -304,8 +338,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. Montar payload do Bling (sem numeroPedido inicialmente)
-    const blingPayload = buildBlingPayload(body)
+    // 2. Buscar codigos do fornecedor para enriquecer os itens
+    const produtoIds = body.itens
+      .filter(item => item.produto_id)
+      .map(item => item.produto_id as number)
+
+    const supplierCodes = await fetchSupplierProductCodes(supabase, body.fornecedor_id, produtoIds)
+    console.log('Codigos do fornecedor para Bling:', Object.fromEntries(supplierCodes))
+
+    // Enriquecer itens com codigos do fornecedor
+    const enrichedItens = body.itens.map(item => ({
+      ...item,
+      codigoFornecedor: item.produto_id
+        ? (supplierCodes.get(item.produto_id) || item.codigoFornecedor || item.produto?.codigo)
+        : (item.codigoFornecedor || item.produto?.codigo),
+    }))
+
+    // 3. Montar payload do Bling (sem numeroPedido inicialmente)
+    const blingPayload = buildBlingPayload({ ...body, itens: enrichedItens })
     console.log('Payload Bling:', JSON.stringify(blingPayload, null, 2))
 
     // 3. POST para Bling (com retry para erros transientes)
@@ -400,9 +450,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Preparar itens para RPC (JSONB - sem JSON.stringify)
+    // Usa os itens ja enriquecidos com codigos do fornecedor (supplierCodes ja foi buscado acima)
     // produto_id = ID interno Supabase (para FK em itens_pedido_compra)
     // produto.id = id_produto_bling (para referencia)
-    const itensRPC = body.itens.map(item => ({
+    // codigo_fornecedor = codigo do produto no sistema do fornecedor (buscado de fornecedores_produtos)
+    const itensRPC = enrichedItens.map(item => ({
       descricao: item.descricao,
       codigo_fornecedor: item.codigoFornecedor || item.produto?.codigo || '',
       unidade: item.unidade || 'UN',
