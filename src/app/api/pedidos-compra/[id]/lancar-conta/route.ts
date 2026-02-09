@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
+import { blingFetch, BlingRateLimitError } from '@/lib/bling-fetch'
 
 // Funcao para obter e validar o token do Bling
 async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeof createServerSupabaseClient>) {
@@ -99,18 +100,35 @@ export async function POST(
       )
     }
 
-    // 3. POST para Bling - Lancar contas
-    const blingResponse = await fetch(
-      `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/lancar-contas`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+    // 3. POST para Bling - Lancar contas (com retry para rate limit)
+    let blingResponse: Response
+    try {
+      const result = await blingFetch(
+        `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/lancar-contas`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({}),
         },
-        body: JSON.stringify({}),
+        { context: 'lancar conta', maxRetries: 3 }
+      )
+      blingResponse = result.response
+
+      if (result.hadRateLimit) {
+        console.log(`Conta lancada apos ${result.retriesUsed} retries por rate limit`)
       }
-    )
+    } catch (err) {
+      if (err instanceof BlingRateLimitError) {
+        return NextResponse.json(
+          { error: err.message },
+          { status: 503 }
+        )
+      }
+      throw err
+    }
 
     if (!blingResponse.ok) {
       const errorText = await blingResponse.text()

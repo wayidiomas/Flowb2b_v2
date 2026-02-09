@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
+import { blingFetch, BlingRateLimitError } from '@/lib/bling-fetch'
 
 // Situacoes do Bling para pedido de compra
 // 0: Em aberto (Registrada)
@@ -111,18 +112,35 @@ export async function PUT(
       )
     }
 
-    // Alterar situacao no Bling
+    // Alterar situacao no Bling (com retry para rate limit)
     // PUT /pedidos/compras/{idPedidoCompra}/situacoes/{valor}
-    const blingResponse = await fetch(
-      `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes/${body.situacao}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+    let blingResponse: Response
+    try {
+      const result = await blingFetch(
+        `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes/${body.situacao}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
         },
+        { context: 'alterar status pedido', maxRetries: 3 }
+      )
+      blingResponse = result.response
+
+      if (result.hadRateLimit) {
+        console.log(`Status alterado apos ${result.retriesUsed} retries por rate limit`)
       }
-    )
+    } catch (err) {
+      if (err instanceof BlingRateLimitError) {
+        return NextResponse.json(
+          { error: err.message },
+          { status: 503 }
+        )
+      }
+      throw err
+    }
 
     if (!blingResponse.ok) {
       const errorText = await blingResponse.text()

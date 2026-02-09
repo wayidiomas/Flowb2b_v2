@@ -2,40 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
+import { blingFetch, BlingRateLimitError } from '@/lib/bling-fetch'
 import { FRETE_POR_CONTA_MAP, FretePorContaLabel } from '@/types/pedido-compra'
-
-// Helper: retry fetch com delay para erros transientes do Bling
-async function fetchBlingWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries = 1,
-  delayMs = 3000
-): Promise<Response> {
-  let lastResponse = await fetch(url, options)
-
-  for (let attempt = 0; attempt < maxRetries && !lastResponse.ok; attempt++) {
-    const errorText = await lastResponse.text()
-    const isTransient = lastResponse.status === 400 && (
-      errorText.includes('n\\u00e3o existe') ||
-      errorText.includes('não existe') ||
-      errorText.includes('nao existe')
-    )
-
-    if (!isTransient) {
-      return new Response(errorText, {
-        status: lastResponse.status,
-        statusText: lastResponse.statusText,
-        headers: lastResponse.headers,
-      })
-    }
-
-    console.log(`Bling retornou erro transiente, retry ${attempt + 1}/${maxRetries} em ${delayMs}ms...`)
-    await new Promise(resolve => setTimeout(resolve, delayMs))
-    lastResponse = await fetch(url, options)
-  }
-
-  return lastResponse
-}
 
 // Interface para item do pedido
 interface ItemPedidoRequest {
@@ -298,15 +266,35 @@ export async function PUT(
     const blingPayload = buildBlingPayload(body)
     console.log('Payload Bling (PUT):', JSON.stringify(blingPayload, null, 2))
 
-    // 4. PUT para Bling (com retry para erros transientes)
-    const blingResponse = await fetchBlingWithRetry(`${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(blingPayload),
-    })
+    // 4. PUT para Bling (com retry inteligente para rate limit e erros transientes)
+    let blingResponse: Response
+    try {
+      const result = await blingFetch(
+        `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(blingPayload),
+        },
+        { context: 'editar pedido de compra', maxRetries: 5 }
+      )
+      blingResponse = result.response
+
+      if (result.hadRateLimit) {
+        console.log(`Pedido editado apos ${result.retriesUsed} retries por rate limit`)
+      }
+    } catch (err) {
+      if (err instanceof BlingRateLimitError) {
+        return NextResponse.json(
+          { error: err.message },
+          { status: 503 }
+        )
+      }
+      throw err
+    }
 
     if (!blingResponse.ok) {
       const errorText = await blingResponse.text()
@@ -333,19 +321,23 @@ export async function PUT(
     // 5. Estornar contas automaticamente (Bling pode recriar contas a pagar ao editar parcelas)
     let estornoWarning: string | null = null
     try {
-      const estornoResponse = await fetch(`${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/estornar-contas`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+      const estornoResult = await blingFetch(
+        `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/estornar-contas`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({}),
         },
-        body: JSON.stringify({}),
-      })
+        { context: 'estornar contas', maxRetries: 3 }
+      )
 
-      if (estornoResponse.ok) {
+      if (estornoResult.response.ok) {
         console.log('Contas estornadas com sucesso para pedido:', pedido.bling_id)
       } else {
-        const estornoError = await estornoResponse.text()
+        const estornoError = await estornoResult.response.text()
         console.warn('Aviso: Nao foi possivel estornar contas:', estornoError)
         estornoWarning = 'Nao foi possivel estornar contas a pagar automaticamente. Verifique no Bling.'
       }

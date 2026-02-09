@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
+import { blingFetch } from '@/lib/bling-fetch'
 
 // Funcao para obter e validar o token do Bling
 async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeof createServerSupabaseClient>) {
@@ -39,10 +40,10 @@ async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeo
   return tokens.access_token
 }
 
-// Funcao para sincronizar status com Bling
+// Funcao para sincronizar status com Bling (com retry para rate limit)
 async function syncBlingStatus(blingId: number, situacao: number, accessToken: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(
+    const result = await blingFetch(
       `${BLING_CONFIG.apiUrl}/pedidos/compras/${blingId}/situacoes/${situacao}`,
       {
         method: 'PUT',
@@ -50,13 +51,17 @@ async function syncBlingStatus(blingId: number, situacao: number, accessToken: s
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
-      }
+      },
+      { context: 'sincronizar status sugestao', maxRetries: 3 }
     )
 
-    if (response.ok) {
+    if (result.response.ok) {
+      if (result.hadRateLimit) {
+        console.log(`Status sincronizado apos ${result.retriesUsed} retries por rate limit`)
+      }
       return { success: true }
     } else {
-      const errorText = await response.text()
+      const errorText = await result.response.text()
       return { success: false, error: errorText }
     }
   } catch (err) {

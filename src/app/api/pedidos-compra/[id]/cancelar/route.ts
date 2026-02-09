@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
+import { blingFetch } from '@/lib/bling-fetch'
 import { ESTADOS_FINAIS } from '@/types/pedido-compra'
 
 interface CancelarRequest {
@@ -106,7 +107,7 @@ export async function POST(
 
       if (accessToken) {
         try {
-          const blingResponse = await fetch(
+          const result = await blingFetch(
             `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes/2`,
             {
               method: 'PUT',
@@ -114,13 +115,17 @@ export async function POST(
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${accessToken}`,
               },
-            }
+            },
+            { context: 'cancelar pedido', maxRetries: 3 }
           )
 
-          if (blingResponse.ok) {
+          if (result.response.ok) {
             blingSyncSuccess = true
+            if (result.hadRateLimit) {
+              console.log(`Pedido cancelado apos ${result.retriesUsed} retries por rate limit`)
+            }
           } else {
-            const errorText = await blingResponse.text()
+            const errorText = await result.response.text()
             blingSyncError = `Bling: ${errorText}`
             console.error('Erro ao cancelar no Bling:', errorText)
           }

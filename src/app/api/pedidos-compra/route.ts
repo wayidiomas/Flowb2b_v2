@@ -2,42 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
+import { blingFetch, BlingRateLimitError } from '@/lib/bling-fetch'
 import { FRETE_POR_CONTA_MAP, FretePorContaLabel } from '@/types/pedido-compra'
-
-// Helper: retry fetch com delay para erros transientes do Bling
-async function fetchBlingWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries = 1,
-  delayMs = 3000
-): Promise<Response> {
-  let lastResponse = await fetch(url, options)
-
-  for (let attempt = 0; attempt < maxRetries && !lastResponse.ok; attempt++) {
-    // Ler body para verificar se e erro transiente
-    const errorText = await lastResponse.text()
-    const isTransient = lastResponse.status === 400 && (
-      errorText.includes('n\\u00e3o existe') ||
-      errorText.includes('não existe') ||
-      errorText.includes('nao existe')
-    )
-
-    if (!isTransient) {
-      // Retornar response com body recarregado (nao e transiente, nao faz retry)
-      return new Response(errorText, {
-        status: lastResponse.status,
-        statusText: lastResponse.statusText,
-        headers: lastResponse.headers,
-      })
-    }
-
-    console.log(`Bling retornou erro transiente, retry ${attempt + 1}/${maxRetries} em ${delayMs}ms...`)
-    await new Promise(resolve => setTimeout(resolve, delayMs))
-    lastResponse = await fetch(url, options)
-  }
-
-  return lastResponse
-}
 
 // Interface para item do pedido
 interface ItemPedidoRequest {
@@ -358,15 +324,35 @@ export async function POST(request: NextRequest) {
     const blingPayload = buildBlingPayload({ ...body, itens: enrichedItens })
     console.log('Payload Bling:', JSON.stringify(blingPayload, null, 2))
 
-    // 3. POST para Bling (com retry para erros transientes)
-    let blingResponse = await fetchBlingWithRetry(`${BLING_CONFIG.apiUrl}/pedidos/compras`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(blingPayload),
-    })
+    // 3. POST para Bling (com retry inteligente para rate limit e erros transientes)
+    let blingResponse: Response
+    try {
+      const result = await blingFetch(
+        `${BLING_CONFIG.apiUrl}/pedidos/compras`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(blingPayload),
+        },
+        { context: 'criar pedido de compra', maxRetries: 5 }
+      )
+      blingResponse = result.response
+
+      if (result.hadRateLimit) {
+        console.log(`Pedido criado apos ${result.retriesUsed} retries por rate limit`)
+      }
+    } catch (err) {
+      if (err instanceof BlingRateLimitError) {
+        return NextResponse.json(
+          { error: err.message },
+          { status: 503 }
+        )
+      }
+      throw err
+    }
 
     // 3.1 Se Bling exigir numeroPedido (numeracao manual), retry com numero
     if (!blingResponse.ok) {
@@ -385,14 +371,29 @@ export async function POST(request: NextRequest) {
         const retryPayload = { ...blingPayload, numeroPedido: nextNumero }
         console.log('Retry com numeroPedido:', nextNumero)
 
-        blingResponse = await fetch(`${BLING_CONFIG.apiUrl}/pedidos/compras`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(retryPayload),
-        })
+        try {
+          const retryResult = await blingFetch(
+            `${BLING_CONFIG.apiUrl}/pedidos/compras`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify(retryPayload),
+            },
+            { context: 'criar pedido com numeroPedido', maxRetries: 5 }
+          )
+          blingResponse = retryResult.response
+        } catch (err) {
+          if (err instanceof BlingRateLimitError) {
+            return NextResponse.json(
+              { error: err.message },
+              { status: 503 }
+            )
+          }
+          throw err
+        }
       }
 
       if (!blingResponse.ok) {
@@ -428,19 +429,23 @@ export async function POST(request: NextRequest) {
     // Isso evita que o pedido gere contas a pagar indesejadas
     let estornoWarning: string | null = null
     try {
-      const estornoResponse = await fetch(`${BLING_CONFIG.apiUrl}/pedidos/compras/${blingId}/estornar-contas`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+      const estornoResult = await blingFetch(
+        `${BLING_CONFIG.apiUrl}/pedidos/compras/${blingId}/estornar-contas`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({}),
         },
-        body: JSON.stringify({}),
-      })
+        { context: 'estornar contas', maxRetries: 3 }
+      )
 
-      if (estornoResponse.ok) {
+      if (estornoResult.response.ok) {
         console.log('Contas estornadas com sucesso para pedido:', blingId)
       } else {
-        const estornoError = await estornoResponse.text()
+        const estornoError = await estornoResult.response.text()
         console.warn('Aviso: Nao foi possivel estornar contas:', estornoError)
         estornoWarning = 'Nao foi possivel estornar contas a pagar automaticamente. Verifique no Bling.'
       }
