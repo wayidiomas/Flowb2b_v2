@@ -87,7 +87,9 @@ export async function middleware(request: NextRequest) {
     const userTipo = String(payload.tipo || 'lojista')
 
     // Protecao por tipo de usuario
-    const isFornecedorRoute = pathname.startsWith('/fornecedor') || pathname.startsWith('/api/fornecedor')
+    // IMPORTANTE: /api/fornecedores (lojista) != /api/fornecedor/* (portal fornecedor)
+    const isFornecedorRoute = pathname.startsWith('/fornecedor') ||
+      (pathname.startsWith('/api/fornecedor') && !pathname.startsWith('/api/fornecedores'))
     const isLojistaRoute = pathname.startsWith('/compras') || pathname.startsWith('/dashboard') ||
       pathname.startsWith('/estoque') || pathname.startsWith('/vendas') ||
       pathname.startsWith('/configuracoes') || pathname.startsWith('/api/pedidos-compra') ||
