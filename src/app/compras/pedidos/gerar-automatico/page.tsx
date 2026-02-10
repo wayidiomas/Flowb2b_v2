@@ -185,6 +185,7 @@ interface SugestaoItem {
   codigo: string
   nome: string
   ean?: string
+  codigo_fornecedor?: string  // Codigo do produto no sistema do fornecedor
   estoque_atual: number
   media_vendas_dia: number
   sugestao_quantidade: number
@@ -720,6 +721,7 @@ function GerarAutomaticoContent() {
         codigo: item.codigo || '-',
         nome: item.nome || item.codigo || `Produto ${item.produto_id}`,
         ean: item.gtin || item.ean || '',
+        codigo_fornecedor: item.codigo_fornecedor || undefined,
         estoque_atual: item.estoque_atual || 0,
         media_vendas_dia: item.media_venda_dia || 0,
         sugestao_quantidade: item.quantidade_sugerida,
@@ -899,6 +901,7 @@ function GerarAutomaticoContent() {
       // produto.id = id_produto_bling (para API do Bling)
       const itensPayload = sugestoes.map(item => ({
         descricao: item.nome,
+        codigoFornecedor: item.codigo_fornecedor || undefined,
         unidade: 'UN',
         valor: item.valor_unitario,
         quantidade: item.quantidade_ajustada,

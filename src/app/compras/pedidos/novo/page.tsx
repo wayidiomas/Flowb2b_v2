@@ -346,6 +346,7 @@ function NovoPedidoContent() {
         .select(`
           produto_id,
           valor_de_compra,
+          codigo_fornecedor,
           produtos!inner(id, id_produto_bling, codigo, nome, unidade, estoque_atual, gtin)
         `)
         .eq('fornecedor_id', fornecedorId)
@@ -368,7 +369,8 @@ function NovoPedidoContent() {
           unidade: item.produtos.unidade || 'UN',
           valor_de_compra: item.valor_de_compra || 0,
           estoque_atual: item.produtos.estoque_atual || 0,
-          gtin: item.produtos.gtin
+          gtin: item.produtos.gtin,
+          codigo_fornecedor: item.codigo_fornecedor || undefined
         }))
         setProdutosFornecedor(formatted)
       }
@@ -463,6 +465,7 @@ function NovoPedidoContent() {
       id_produto_bling: produto.id_produto_bling,
       descricao: produto.nome,
       codigo_produto: produto.codigo,
+      codigo_fornecedor: produto.codigo_fornecedor,
       unidade: produto.unidade,
       quantidade: 1,
       valor: produto.valor_de_compra,
@@ -651,6 +654,7 @@ function NovoPedidoContent() {
         valor: item.valor,
         quantidade: item.quantidade,
         aliquotaIPI: item.aliquota_ipi,
+        produto_id: item.produto_id,  // ID interno Supabase para FK
         produto: item.id_produto_bling ? {
           id: item.id_produto_bling,
           codigo: item.codigo_produto

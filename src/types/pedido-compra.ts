@@ -142,6 +142,7 @@ export interface ProdutoFornecedor {
   valor_de_compra: number
   estoque_atual: number
   gtin?: string
+  codigo_fornecedor?: string  // Codigo do produto no sistema do fornecedor
 }
 
 // Tipo de frete por conta (valores do Bling)

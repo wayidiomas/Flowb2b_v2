@@ -10,8 +10,9 @@ import { Button, Skeleton } from '@/components/ui'
 interface PedidoItem {
   id: number
   descricao: string
-  codigo_produto: string
-  codigo_fornecedor: string
+  codigo_produto: string      // SKU do lojista
+  codigo_fornecedor: string   // SKU do fornecedor
+  ean: string | null          // EAN/GTIN do produto
   unidade: string
   valor: number
   quantidade: number
@@ -926,7 +927,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               <thead>
                 <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
                   <th className="px-4 py-3">Produto</th>
-                  <th className="px-4 py-3">SKU / EAN</th>
+                  <th className="px-4 py-3">Codigos</th>
                   <th className="px-4 py-3">Und</th>
                   <th className="px-4 py-3 text-right">Valor unit.</th>
                   <th className="px-4 py-3 text-right">Qtd original</th>
@@ -950,14 +951,26 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                       <td className="px-4 py-3 text-sm text-gray-900 max-w-[200px] truncate" title={item.descricao}>
                         {item.descricao}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
+                      <td className="px-4 py-3 text-sm">
                         {item.codigo_fornecedor && (
-                          <div className="font-medium text-gray-900">{item.codigo_fornecedor}</div>
+                          <div className="font-medium text-gray-900" title="SKU Fornecedor">
+                            <span className="text-xs text-gray-400 mr-1">SKU:</span>
+                            {item.codigo_fornecedor}
+                          </div>
+                        )}
+                        {item.ean && (
+                          <div className="text-xs text-gray-500" title="EAN/GTIN">
+                            <span className="text-gray-400 mr-1">EAN:</span>
+                            {item.ean}
+                          </div>
                         )}
                         {item.codigo_produto && (
-                          <div className="text-xs text-gray-400">{item.codigo_produto}</div>
+                          <div className="text-xs text-gray-400" title="Codigo Lojista">
+                            <span className="mr-1">Lojista:</span>
+                            {item.codigo_produto}
+                          </div>
                         )}
-                        {!item.codigo_fornecedor && !item.codigo_produto && '-'}
+                        {!item.codigo_fornecedor && !item.ean && !item.codigo_produto && '-'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">{item.unidade}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right">

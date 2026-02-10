@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 
+// Tipo para item do pedido com produto relacionado
+interface ItemPedidoComProduto {
+  id: number
+  descricao: string
+  codigo_produto: string | null
+  codigo_fornecedor: string | null
+  unidade: string
+  valor: number
+  quantidade: number
+  aliquota_ipi: number
+  produto_id: number | null
+  produtos: { gtin: string | null } | null
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -39,11 +53,25 @@ export async function GET(
       return NextResponse.json({ error: 'Pedido nao encontrado' }, { status: 404 })
     }
 
-    // Buscar itens do pedido
-    const { data: itens } = await supabase
+    // Buscar itens do pedido (com EAN do produto)
+    const { data: itensRaw } = await supabase
       .from('itens_pedido_compra')
-      .select('id, descricao, codigo_produto, codigo_fornecedor, unidade, valor, quantidade, aliquota_ipi, produto_id')
+      .select('id, descricao, codigo_produto, codigo_fornecedor, unidade, valor, quantidade, aliquota_ipi, produto_id, produtos(gtin)')
       .eq('pedido_compra_id', id)
+
+    // Mapear itens para incluir ean
+    const itens = (itensRaw as ItemPedidoComProduto[] | null)?.map(item => ({
+      id: item.id,
+      descricao: item.descricao,
+      codigo_produto: item.codigo_produto,
+      codigo_fornecedor: item.codigo_fornecedor,
+      unidade: item.unidade,
+      valor: item.valor,
+      quantidade: item.quantidade,
+      aliquota_ipi: item.aliquota_ipi,
+      produto_id: item.produto_id,
+      ean: item.produtos?.gtin || null
+    })) || []
 
     // Buscar nome da empresa (lojista)
     const { data: empresa } = await supabase

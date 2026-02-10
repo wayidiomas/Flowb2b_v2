@@ -118,6 +118,20 @@ export async function POST(request: NextRequest) {
         if (p.gtin) gtinMap.set(p.id, p.gtin)
       })
 
+      // Buscar codigo_fornecedor de fornecedores_produtos
+      const { data: produtosFornecedor } = await supabase
+        .from('fornecedores_produtos')
+        .select('produto_id, codigo_fornecedor')
+        .eq('fornecedor_id', fornecedor_id)
+        .in('produto_id', Array.from(todosProduotIds))
+        .not('codigo_fornecedor', 'is', null)
+
+      // Criar mapa de produto_id -> codigo_fornecedor
+      const codigoFornecedorMap = new Map<number, string>()
+      produtosFornecedor?.forEach(p => {
+        if (p.codigo_fornecedor) codigoFornecedorMap.set(p.produto_id, p.codigo_fornecedor)
+      })
+
       // Transformar cada politica para o formato do frontend
       const politicasAplicaveis = politicasAPI.map(pol => {
         const sugestoes = pol.produtos.map((produto: ProdutoAPI) => {
@@ -137,6 +151,7 @@ export async function POST(request: NextRequest) {
             codigo: produto.codigo_do_produto || '-',
             nome: produto.nome_produto || produto.codigo_do_produto || `Produto ${produto.produto_id}`,
             gtin: gtinMap.get(produto.produto_id) || '',
+            codigo_fornecedor: codigoFornecedorMap.get(produto.produto_id) || undefined,
             estoque_atual: produto.estoque_atual || 0,
             media_venda_dia: Number(mediaVendaDia.toFixed(2)),
             quantidade_sugerida: produto.sugestao_quantidade,
