@@ -56,29 +56,33 @@ export async function POST(
 
     const fornecedorCadastrado = !!usuarioFornecedor
 
-    // Se o fornecedor esta cadastrado na Flow, apenas avanca o status
+    // SEMPRE atualizar status para enviado_fornecedor (independente de estar cadastrado)
+    const { error: updateError } = await supabase
+      .from('pedidos_compra')
+      .update({ status_interno: 'enviado_fornecedor' })
+      .eq('id', pedidoId)
+
+    if (updateError) {
+      return NextResponse.json({ error: 'Erro ao atualizar status' }, { status: 500 })
+    }
+
+    // Registrar na timeline
+    const descricaoTimeline = fornecedorCadastrado
+      ? 'Pedido enviado ao fornecedor para analise'
+      : 'Pedido enviado ao fornecedor via WhatsApp'
+
+    await supabase
+      .from('pedido_timeline')
+      .insert({
+        pedido_compra_id: parseInt(pedidoId),
+        evento: 'enviado_fornecedor',
+        descricao: descricaoTimeline,
+        autor_tipo: 'lojista',
+        autor_nome: user.email,
+      })
+
+    // Se o fornecedor esta cadastrado na Flow, retorna sucesso simples
     if (fornecedorCadastrado) {
-      // Atualizar status
-      const { error: updateError } = await supabase
-        .from('pedidos_compra')
-        .update({ status_interno: 'enviado_fornecedor' })
-        .eq('id', pedidoId)
-
-      if (updateError) {
-        return NextResponse.json({ error: 'Erro ao atualizar status' }, { status: 500 })
-      }
-
-      // Registrar na timeline
-      await supabase
-        .from('pedido_timeline')
-        .insert({
-          pedido_compra_id: parseInt(pedidoId),
-          evento: 'enviado_fornecedor',
-          descricao: 'Pedido enviado ao fornecedor para analise',
-          autor_tipo: 'lojista',
-          autor_nome: user.email,
-        })
-
       return NextResponse.json({
         success: true,
         fornecedorCadastrado: true,

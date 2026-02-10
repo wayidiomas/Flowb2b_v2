@@ -1,15 +1,7 @@
 'use client'
 
-import { useState } from 'react'
 import type { StatusInterno, SugestaoFornecedor, SugestaoItem } from '@/types/pedido-compra'
 import { ESTADOS_FINAIS } from '@/types/pedido-compra'
-
-interface ContraPropostaItem {
-  item_pedido_compra_id: number
-  quantidade_contra_proposta: number
-  desconto_percentual: number
-  bonificacao_percentual: number
-}
 
 interface StatusActionCardProps {
   statusInterno: StatusInterno
@@ -19,7 +11,7 @@ interface StatusActionCardProps {
   onEnviarFornecedor: () => void
   onAceitarSugestao: () => void
   onRejeitarSugestao: () => void
-  onEnviarContraProposta?: (itens: ContraPropostaItem[], observacao: string) => Promise<void>
+  onManterOriginal?: () => void // Rejeita sugestao mas mantem pedido original
   onCancelar?: () => void
   onFinalizar?: () => void
   enviandoFornecedor: boolean
@@ -41,7 +33,7 @@ export function StatusActionCard({
   onEnviarFornecedor,
   onAceitarSugestao,
   onRejeitarSugestao,
-  onEnviarContraProposta,
+  onManterOriginal,
   onCancelar,
   onFinalizar,
   enviandoFornecedor,
@@ -53,11 +45,6 @@ export function StatusActionCard({
   formatDate,
   situacaoBling,
 }: StatusActionCardProps) {
-  // Estado para modo negociacao
-  const [modoNegociacao, setModoNegociacao] = useState(false)
-  const [contraPropostaItens, setContraPropostaItens] = useState<ContraPropostaItem[]>([])
-  const [observacaoContraProposta, setObservacaoContraProposta] = useState('')
-  const [enviandoContraProposta, setEnviandoContraProposta] = useState(false)
   const pendenteSugestao = sugestoes.find(s => s.status === 'pendente')
 
   // Verifica se pode cancelar (nao esta em estado final e Bling nao esta finalizado/cancelado)
@@ -353,193 +340,45 @@ export function StatusActionCard({
           )}
         </div>
 
-        {/* Acoes ou Modo Negociacao */}
-        {!modoNegociacao ? (
-          <div className="px-6 py-4 border-t border-amber-200 bg-amber-50/50">
-            <div className="mb-3">
-              <input
-                type="text"
-                value={observacaoResposta}
-                onChange={(e) => setObservacaoResposta(e.target.value)}
-                placeholder="Observacao para o fornecedor (opcional)"
-                className="w-full px-3 py-2 text-sm border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={onAceitarSugestao}
-                  disabled={processandoSugestao}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  {processandoSugestao ? 'Processando...' : 'Aceitar Sugestao'}
-                </button>
-                {onEnviarContraProposta && (
-                  <button
-                    onClick={() => {
-                      // Inicializar contra-proposta com valores da sugestao
-                      const inicial = sugestaoItens?.map(sItem => ({
-                        item_pedido_compra_id: sItem.item_pedido_compra_id,
-                        quantidade_contra_proposta: sItem.quantidade_sugerida,
-                        desconto_percentual: sItem.desconto_percentual,
-                        bonificacao_percentual: sItem.bonificacao_percentual,
-                      })) || []
-                      setContraPropostaItens(inicial)
-                      setModoNegociacao(true)
-                    }}
-                    disabled={processandoSugestao}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    Negociar
-                  </button>
-                )}
-                <button
-                  onClick={onRejeitarSugestao}
-                  disabled={processandoSugestao}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-red-300 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors disabled:opacity-50"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Rejeitar
-                </button>
-              </div>
-              <CancelarButton />
-            </div>
+        {/* Acoes */}
+        <div className="px-6 py-4 border-t border-amber-200 bg-amber-50/50">
+          <div className="mb-3">
+            <input
+              type="text"
+              value={observacaoResposta}
+              onChange={(e) => setObservacaoResposta(e.target.value)}
+              placeholder="Observacao para o fornecedor (opcional)"
+              className="w-full px-3 py-2 text-sm border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+            />
           </div>
-        ) : (
-          // Formulario de contra-proposta
-          <div className="px-6 py-4 border-t border-blue-200 bg-blue-50/50">
-            <div className="flex items-center gap-2 mb-4">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-              <h4 className="font-semibold text-blue-900">Sua Contra-Proposta</h4>
-            </div>
-
-            <div className="overflow-x-auto mb-4">
-              <table className="w-full text-sm">
-                <thead className="bg-blue-100">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-blue-800 uppercase">Produto</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-blue-800 uppercase">Sugerido</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-blue-800 uppercase">Sua Qtd</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-blue-800 uppercase">Desc%</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-blue-800 uppercase">Bonif%</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-blue-100">
-                  {contraPropostaItens.map((cpItem, idx) => {
-                    const itemOriginal = itens.find(i => i.id === cpItem.item_pedido_compra_id)
-                    const sItem = sugestaoItens?.find(s => s.item_pedido_compra_id === cpItem.item_pedido_compra_id)
-                    return (
-                      <tr key={cpItem.item_pedido_compra_id} className="hover:bg-blue-50/50">
-                        <td className="px-3 py-2 text-gray-900 truncate max-w-[150px]" title={itemOriginal?.descricao}>
-                          {itemOriginal?.descricao || `Item #${cpItem.item_pedido_compra_id}`}
-                        </td>
-                        <td className="px-3 py-2 text-right text-gray-500">
-                          {sItem?.quantidade_sugerida}
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min={0}
-                            value={cpItem.quantidade_contra_proposta}
-                            onChange={(e) => {
-                              const newItens = [...contraPropostaItens]
-                              newItens[idx].quantidade_contra_proposta = Number(e.target.value)
-                              setContraPropostaItens(newItens)
-                            }}
-                            className="w-20 px-2 py-1 text-sm text-right border border-blue-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.5}
-                            value={cpItem.desconto_percentual}
-                            onChange={(e) => {
-                              const newItens = [...contraPropostaItens]
-                              newItens[idx].desconto_percentual = Number(e.target.value)
-                              setContraPropostaItens(newItens)
-                            }}
-                            className="w-20 px-2 py-1 text-sm text-right border border-blue-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.5}
-                            value={cpItem.bonificacao_percentual}
-                            onChange={(e) => {
-                              const newItens = [...contraPropostaItens]
-                              newItens[idx].bonificacao_percentual = Number(e.target.value)
-                              setContraPropostaItens(newItens)
-                            }}
-                            className="w-20 px-2 py-1 text-sm text-right border border-blue-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mb-4">
-              <textarea
-                value={observacaoContraProposta}
-                onChange={(e) => setObservacaoContraProposta(e.target.value)}
-                placeholder="Justifique sua contra-proposta para o fornecedor..."
-                rows={2}
-                className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white"
-              />
-            </div>
-
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
-                onClick={async () => {
-                  if (!onEnviarContraProposta) return
-                  setEnviandoContraProposta(true)
-                  try {
-                    await onEnviarContraProposta(contraPropostaItens, observacaoContraProposta)
-                    setModoNegociacao(false)
-                    setObservacaoContraProposta('')
-                  } finally {
-                    setEnviandoContraProposta(false)
-                  }
-                }}
-                disabled={enviandoContraProposta}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
+                onClick={onAceitarSugestao}
+                disabled={processandoSugestao}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                {enviandoContraProposta ? 'Enviando...' : 'Enviar Contra-Proposta'}
+                {processandoSugestao ? 'Processando...' : 'Aceitar Sugestao'}
               </button>
-              <button
-                onClick={() => {
-                  setModoNegociacao(false)
-                  setObservacaoContraProposta('')
-                }}
-                disabled={enviandoContraProposta}
-                className="px-4 py-2.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Cancelar
-              </button>
+              {onManterOriginal && (
+                <button
+                  onClick={onManterOriginal}
+                  disabled={processandoSugestao}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                  </svg>
+                  Manter Original
+                </button>
+              )}
             </div>
+            <CancelarButton />
           </div>
-        )}
+        </div>
       </div>
     )
   }

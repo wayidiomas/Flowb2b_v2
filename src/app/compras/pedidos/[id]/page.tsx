@@ -165,6 +165,8 @@ export default function VisualizarPedidoPage() {
       }
 
       // Caso 2 e 3: Fornecedor NAO cadastrado - abrir modal/WhatsApp
+      // Status ja foi atualizado no backend, atualizar estado local
+      setStatusInterno('enviado_fornecedor')
       setFornecedorEnvio(data.fornecedor)
       setLinkPublicoEnvio(data.linkPublico)
       setNumeroPedidoEnvio(data.numeroPedido)
@@ -229,7 +231,7 @@ export default function VisualizarPedidoPage() {
     }
   }
 
-  const handleProcessarSugestao = async (action: 'aceitar' | 'rejeitar') => {
+  const handleProcessarSugestao = async (action: 'aceitar' | 'rejeitar' | 'manter_original') => {
     if (!pedido) return
     const pendente = sugestoes.find(s => s.status === 'pendente')
     if (!pendente) return
@@ -251,12 +253,14 @@ export default function VisualizarPedidoPage() {
       })
 
       if (res.ok) {
-        setStatusInterno(action === 'aceitar' ? 'aceito' : 'rejeitado')
+        // manter_original tambem vai para 'aceito' pois o pedido continua
+        const novoStatus = action === 'aceitar' || action === 'manter_original' ? 'aceito' : 'rejeitado'
+        setStatusInterno(novoStatus)
         setSugestoes(prev => prev.map(s =>
           s.id === pendente.id ? { ...s, status: action === 'aceitar' ? 'aceita' : 'rejeitada' } : s
         ))
         setObservacaoResposta('')
-        if (action === 'aceitar') window.location.reload()
+        if (action === 'aceitar' || action === 'manter_original') window.location.reload()
       } else {
         const error = await res.json()
         alert(`Erro: ${error.error || 'Falha ao processar'}`)
@@ -266,35 +270,6 @@ export default function VisualizarPedidoPage() {
       alert('Erro ao processar sugestao')
     } finally {
       setProcessandoSugestao(false)
-    }
-  }
-
-  const handleEnviarContraProposta = async (
-    itens: { item_pedido_compra_id: number; quantidade_contra_proposta: number; desconto_percentual: number; bonificacao_percentual: number }[],
-    observacao: string
-  ) => {
-    if (!pedido) return
-
-    try {
-      const res = await fetch(`/api/pedidos-compra/${pedido.id}/contra-proposta`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          itens,
-          observacao: observacao.trim() || undefined,
-        }),
-      })
-
-      if (res.ok) {
-        setStatusInterno('contra_proposta_pendente')
-        window.location.reload()
-      } else {
-        const error = await res.json()
-        alert(`Erro: ${error.error || 'Falha ao enviar contra-proposta'}`)
-      }
-    } catch (err) {
-      console.error('Erro ao enviar contra-proposta:', err)
-      alert('Erro ao enviar contra-proposta')
     }
   }
 
@@ -667,7 +642,7 @@ export default function VisualizarPedidoPage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Card de Acao Contextual */}
           <div className="print:hidden">
-            <StatusActionCard
+<StatusActionCard
               statusInterno={statusInterno}
               sugestoes={sugestoes}
               sugestaoItens={sugestaoItens}
@@ -675,7 +650,7 @@ export default function VisualizarPedidoPage() {
               onEnviarFornecedor={handleEnviarFornecedor}
               onAceitarSugestao={() => handleProcessarSugestao('aceitar')}
               onRejeitarSugestao={() => handleProcessarSugestao('rejeitar')}
-              onEnviarContraProposta={handleEnviarContraProposta}
+              onManterOriginal={() => handleProcessarSugestao('manter_original')}
               onCancelar={() => setShowCancelamentoModal(true)}
               onFinalizar={handleFinalizar}
               enviandoFornecedor={enviandoFornecedor}

@@ -44,6 +44,8 @@ export async function GET(
       observacoes: pedido.observacoes,
       itens: pedido.itens?.map((item: any) => ({
         codigo_produto: item.codigo_produto,
+        codigo_fornecedor: item.codigo_fornecedor,
+        ean: item.ean || item.gtin,
         descricao: item.descricao,
         unidade: item.unidade,
         quantidade: item.quantidade,

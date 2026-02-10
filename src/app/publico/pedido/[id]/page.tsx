@@ -6,6 +6,8 @@ import { FornecedorConviteModal } from '@/components/fornecedor/FornecedorConvit
 
 interface ItemPedido {
   codigo_produto?: string
+  codigo_fornecedor?: string
+  ean?: string
   descricao: string
   unidade: string
   quantidade: number
@@ -393,7 +395,7 @@ export default function PedidoPublicoPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Codigo
+                      Codigos
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Descricao
@@ -415,8 +417,26 @@ export default function PedidoPublicoPage() {
                 <tbody className="divide-y divide-gray-200">
                   {pedido.itens.map((item, index) => (
                     <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {item.codigo_produto || '-'}
+                      <td className="px-6 py-4 text-sm">
+                        {item.codigo_fornecedor && (
+                          <div className="font-medium text-gray-900">
+                            <span className="text-xs text-gray-400 mr-1">SKU:</span>
+                            {item.codigo_fornecedor}
+                          </div>
+                        )}
+                        {item.ean && (
+                          <div className="text-xs text-gray-500">
+                            <span className="text-gray-400 mr-1">EAN:</span>
+                            {item.ean}
+                          </div>
+                        )}
+                        {item.codigo_produto && (
+                          <div className="text-xs text-gray-400">
+                            <span className="mr-1">Lojista:</span>
+                            {item.codigo_produto}
+                          </div>
+                        )}
+                        {!item.codigo_fornecedor && !item.ean && !item.codigo_produto && '-'}
                       </td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">
                         {item.descricao}

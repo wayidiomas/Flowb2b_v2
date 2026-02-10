@@ -243,10 +243,34 @@ export async function POST(
         })
         .eq('id', sugestao_id)
 
-      // Voltar status para enviado_fornecedor para permitir nova negociacao
+      // Buscar a ultima sugestao do fornecedor (rejeitada quando lojista enviou contra-proposta)
+      // e reativar ela para que o lojista possa aceitar ou manter original
+      const { data: ultimaSugestaoFornecedor } = await supabase
+        .from('sugestoes_fornecedor')
+        .select('id')
+        .eq('pedido_compra_id', pedidoId)
+        .eq('autor_tipo', 'fornecedor')
+        .eq('status', 'rejeitada')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (ultimaSugestaoFornecedor) {
+        // Reativar a sugestao do fornecedor
+        await supabase
+          .from('sugestoes_fornecedor')
+          .update({
+            status: 'pendente',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', ultimaSugestaoFornecedor.id)
+      }
+
+      // Voltar para sugestao_pendente - NAO permite mais negociacao
+      // O lojista so pode: aceitar, manter original, ou cancelar
       await supabase
         .from('pedidos_compra')
-        .update({ status_interno: 'enviado_fornecedor' })
+        .update({ status_interno: 'sugestao_pendente' })
         .eq('id', pedidoId)
 
       // Timeline
@@ -256,13 +280,13 @@ export async function POST(
           pedido_compra_id: parseInt(pedidoId),
           evento: 'contra_proposta_rejeitada',
           descricao: observacao
-            ? `Fornecedor rejeitou contra-proposta: "${observacao}"`
-            : 'Fornecedor rejeitou a contra-proposta do lojista',
+            ? `Fornecedor rejeitou contra-proposta: "${observacao}" - Negociacao encerrada`
+            : 'Fornecedor rejeitou a contra-proposta - Negociacao encerrada',
           autor_tipo: 'fornecedor',
           autor_nome: autorNome,
         })
 
-      return NextResponse.json({ success: true, message: 'Contra-proposta rejeitada' })
+      return NextResponse.json({ success: true, message: 'Contra-proposta rejeitada - negociacao encerrada' })
     }
 
     return NextResponse.json({ error: 'Acao invalida' }, { status: 400 })

@@ -143,7 +143,7 @@ export async function POST(
 
     const { id: pedidoId } = await params
     const body = await request.json()
-    const { action, observacao, sugestao_id }: { action: 'aceitar' | 'rejeitar'; observacao?: string; sugestao_id: number } = body
+    const { action, observacao, sugestao_id }: { action: 'aceitar' | 'rejeitar' | 'manter_original'; observacao?: string; sugestao_id: number } = body
 
     if (!action || !sugestao_id) {
       return NextResponse.json({ error: 'Acao e sugestao_id sao obrigatorios' }, { status: 400 })
@@ -343,6 +343,81 @@ export async function POST(
         })
 
       return NextResponse.json({ success: true, message: 'Sugestao rejeitada' })
+    }
+
+    if (action === 'manter_original') {
+      // Rejeita a sugestao mas mantem o pedido original para continuar o fluxo
+      // Diferente de 'rejeitar' que encerra o pedido
+
+      // Marcar sugestao como rejeitada
+      await supabase
+        .from('sugestoes_fornecedor')
+        .update({
+          status: 'rejeitada',
+          observacao_lojista: observacao || 'Lojista optou por manter pedido original',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sugestao_id)
+
+      // Sincronizar com Bling - mudar para "Em Andamento" (3)
+      let blingSyncSuccess = false
+      let blingSyncError = ''
+
+      if (pedido.bling_id && pedido.situacao !== 1 && pedido.situacao !== 2) {
+        const accessToken = await getBlingAccessToken(empresaId, supabase)
+        if (accessToken) {
+          const syncResult = await syncBlingStatus(pedido.bling_id, 3, accessToken)
+          blingSyncSuccess = syncResult.success
+          if (!syncResult.success) {
+            blingSyncError = syncResult.error || ''
+            console.error('Erro ao sincronizar com Bling:', syncResult.error)
+          }
+        }
+      }
+
+      // Atualizar status do pedido para aceito (continua o fluxo)
+      const updateData: Record<string, unknown> = {
+        status_interno: 'aceito',
+      }
+      if (blingSyncSuccess) {
+        updateData.situacao = 3 // Em Andamento
+      }
+
+      await supabase
+        .from('pedidos_compra')
+        .update(updateData)
+        .eq('id', pedidoId)
+
+      // Timeline
+      await supabase
+        .from('pedido_timeline')
+        .insert({
+          pedido_compra_id: parseInt(pedidoId),
+          evento: 'sugestao_rejeitada_manter_original',
+          descricao: observacao
+            ? `Sugestao rejeitada, mantendo pedido original: "${observacao}"${blingSyncSuccess ? ' (Bling: Em Andamento)' : ''}`
+            : `Sugestao do fornecedor rejeitada - pedido original mantido${blingSyncSuccess ? ' (Bling: Em Andamento)' : ''}`,
+          autor_tipo: 'lojista',
+          autor_nome: user.email,
+        })
+
+      // Se houve erro no Bling, registrar na timeline
+      if (blingSyncError) {
+        await supabase
+          .from('pedido_timeline')
+          .insert({
+            pedido_compra_id: parseInt(pedidoId),
+            evento: 'erro_sync_bling',
+            descricao: `Falha ao sincronizar status com Bling: ${blingSyncError}`,
+            autor_tipo: 'sistema',
+            autor_nome: 'FlowB2B',
+          })
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Sugestao rejeitada, pedido original mantido para processamento'
+      })
     }
 
     return NextResponse.json({ error: 'Acao invalida' }, { status: 400 })
