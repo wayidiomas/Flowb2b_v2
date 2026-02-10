@@ -100,7 +100,7 @@ export async function GET(
       .from('sugestoes_fornecedor')
       .select(`
         id, status, observacao_fornecedor, observacao_lojista, created_at,
-        valor_minimo_pedido, desconto_geral, bonificacao_geral,
+        valor_minimo_pedido, desconto_geral, bonificacao_quantidade_geral,
         prazo_entrega_dias, validade_proposta, autor_tipo,
         users_fornecedor!inner(nome, email)
       `)
@@ -168,7 +168,7 @@ export async function POST(
     // Verificar sugestao existe e esta pendente COM condicoes comerciais
     const { data: sugestao } = await supabase
       .from('sugestoes_fornecedor')
-      .select('id, status, valor_minimo_pedido, desconto_geral, bonificacao_geral')
+      .select('id, status, valor_minimo_pedido, desconto_geral, bonificacao_quantidade_geral')
       .eq('id', sugestao_id)
       .eq('pedido_compra_id', pedidoId)
       .single()
@@ -203,9 +203,8 @@ export async function POST(
               const descontoItem = sItem.desconto_percentual || 0
               const valorComDesconto = itemAtual.valor * (1 - descontoItem / 100)
 
-              // Calcular quantidade bonificada (gratis)
-              const bonifItem = sItem.bonificacao_percentual || 0
-              const qtdBonificacao = Math.floor(sItem.quantidade_sugerida * bonifItem / 100)
+              // bonificacao_quantidade eh quantidade direta de unidades, nao percentual
+              const qtdBonificacao = sItem.bonificacao_quantidade || 0
 
               await supabase
                 .from('itens_pedido_compra')

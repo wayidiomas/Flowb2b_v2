@@ -24,7 +24,7 @@ interface SugestaoItem {
   item_pedido_compra_id: number
   quantidade_sugerida: number
   desconto_percentual: number
-  bonificacao_percentual: number
+  bonificacao_quantidade: number
   validade: string | null
 }
 
@@ -46,7 +46,7 @@ interface SugestaoInfo {
   autor_tipo: 'fornecedor' | 'lojista'
   valor_minimo_pedido?: number
   desconto_geral?: number
-  bonificacao_geral?: number
+  bonificacao_quantidade_geral?: number
   prazo_entrega_dias?: number
   validade_proposta?: string
 }
@@ -80,7 +80,7 @@ interface ItemSugestao {
   produto_id: number | null
   quantidade_sugerida: number
   desconto_percentual: number
-  bonificacao_percentual: number
+  bonificacao_quantidade: number
   validade: string
 }
 
@@ -88,7 +88,7 @@ interface ItemSugestao {
 interface CondicoesComerciais {
   valor_minimo_pedido: number
   desconto_geral: number
-  bonificacao_geral: number
+  bonificacao_quantidade_geral: number
   prazo_entrega_dias: number
   validade_proposta: string
 }
@@ -149,13 +149,14 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const [condicoesComerciais, setCondicoesComerciais] = useState<CondicoesComerciais>({
     valor_minimo_pedido: 0,
     desconto_geral: 0,
-    bonificacao_geral: 0,
+    bonificacao_quantidade_geral: 0,
     prazo_entrega_dias: 0,
     validade_proposta: '',
   })
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const [showCancelamentoModal, setShowCancelamentoModal] = useState(false)
+  const [showSucessoModal, setShowSucessoModal] = useState(false)
   const [cancelando, setCancelando] = useState(false)
   const [processandoContraProposta, setProcessandoContraProposta] = useState(false)
   const [observacaoRespostaCP, setObservacaoRespostaCP] = useState('')
@@ -182,7 +183,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               produto_id: item.produto_id,
               quantidade_sugerida: existingSugestao?.quantidade_sugerida ?? item.quantidade,
               desconto_percentual: existingSugestao?.desconto_percentual ?? 0,
-              bonificacao_percentual: existingSugestao?.bonificacao_percentual ?? 0,
+              bonificacao_quantidade: existingSugestao?.bonificacao_quantidade ?? 0,
               validade: existingSugestao?.validade || '',
             }
           })
@@ -226,9 +227,9 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         totalSugeridoItens += subtotalComDesconto
         totalDescontoItens += descontoItem
 
-        // Bonificacao: unidades extras gratis
-        if (sug.bonificacao_percentual > 0) {
-          totalBonificacaoUnidades += Math.floor(sug.quantidade_sugerida * sug.bonificacao_percentual / 100)
+        // Bonificacao: unidades extras gratis (agora eh quantidade direta, nao percentual)
+        if (sug.bonificacao_quantidade > 0) {
+          totalBonificacaoUnidades += sug.bonificacao_quantidade
         }
       } else {
         totalSugeridoItens += item.valor * item.quantidade
@@ -242,10 +243,9 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       if (condicoesComerciais.desconto_geral > 0) {
         descontoGeral = totalSugeridoItens * (condicoesComerciais.desconto_geral / 100)
       }
-      if (condicoesComerciais.bonificacao_geral > 0) {
-        // Bonificacao geral: % sobre total de unidades sugeridas
-        const totalUnidades = sugestoes.reduce((sum, s) => sum + s.quantidade_sugerida, 0)
-        bonificacaoGeralUnidades = Math.floor(totalUnidades * condicoesComerciais.bonificacao_geral / 100)
+      if (condicoesComerciais.bonificacao_quantidade_geral > 0) {
+        // Bonificacao geral: quantidade direta de unidades
+        bonificacaoGeralUnidades = condicoesComerciais.bonificacao_quantidade_geral
       }
     }
 
@@ -282,14 +282,14 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           produto_id: s.produto_id,
           quantidade_sugerida: s.quantidade_sugerida,
           desconto_percentual: s.desconto_percentual,
-          bonificacao_percentual: s.bonificacao_percentual,
+          bonificacao_quantidade: s.bonificacao_quantidade,
           validade: s.validade || null,
         })),
         observacao: observacao || undefined,
         condicoes_comerciais: {
           valor_minimo_pedido: condicoesComerciais.valor_minimo_pedido || undefined,
           desconto_geral: condicoesComerciais.desconto_geral || undefined,
-          bonificacao_geral: condicoesComerciais.bonificacao_geral || undefined,
+          bonificacao_quantidade_geral: condicoesComerciais.bonificacao_quantidade_geral || undefined,
           prazo_entrega_dias: condicoesComerciais.prazo_entrega_dias || undefined,
           validade_proposta: condicoesComerciais.validade_proposta || undefined,
         },
@@ -304,9 +304,13 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       const result = await res.json()
 
       if (result.success) {
-        setToast({ type: 'success', msg: 'Sugestao enviada com sucesso!' })
-        // Recarregar dados
-        setTimeout(() => router.refresh(), 1500)
+        // Mostrar modal de sucesso
+        setShowSucessoModal(true)
+        // Atualizar status local imediatamente
+        setData(prev => prev ? {
+          ...prev,
+          pedido: { ...prev.pedido, status_interno: 'sugestao_pendente' }
+        } : null)
       } else {
         setToast({ type: 'error', msg: result.error || 'Erro ao enviar sugestao' })
       }
@@ -548,8 +552,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                                 )}
                               </td>
                               <td className="px-4 py-2 text-right">
-                                {sItem.bonificacao_percentual > 0 ? (
-                                  <span className="text-blue-600">{sItem.bonificacao_percentual}%</span>
+                                {sItem.bonificacao_quantidade > 0 ? (
+                                  <span className="text-blue-600">+{sItem.bonificacao_quantidade} un</span>
                                 ) : (
                                   <span className="text-gray-400">-</span>
                                 )}
@@ -852,19 +856,18 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   <input
                     type="number"
                     min={0}
-                    max={100}
-                    step={0.5}
-                    value={condicoesComerciais.bonificacao_geral || ''}
+                    step={1}
+                    value={condicoesComerciais.bonificacao_quantidade_geral || ''}
                     onChange={(e) => setCondicoesComerciais(prev => ({
                       ...prev,
-                      bonificacao_geral: Number(e.target.value)
+                      bonificacao_quantidade_geral: Number(e.target.value)
                     }))}
                     placeholder="0"
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                   />
-                  <span className="text-sm text-gray-500">%</span>
+                  <span className="text-sm text-gray-500">un</span>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">% produtos extras gratis</p>
+                <p className="text-xs text-gray-400 mt-1">Unidades extras gratis</p>
               </div>
 
               {/* Prazo de entrega */}
@@ -1007,8 +1010,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                               min={0}
                               max={100}
                               step={0.5}
-                              value={sug.bonificacao_percentual}
-                              onChange={(e) => updateSugestao(item.id, 'bonificacao_percentual', Number(e.target.value))}
+                              value={sug.bonificacao_quantidade}
+                              onChange={(e) => updateSugestao(item.id, 'bonificacao_quantidade', Number(e.target.value))}
                               className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                             />
                           </td>
@@ -1026,9 +1029,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                               const subtotalBase = item.valor * sug.quantidade_sugerida
                               const desconto = subtotalBase * (sug.desconto_percentual / 100)
                               const subtotalComDesconto = subtotalBase - desconto
-                              const bonifUnidades = sug.bonificacao_percentual > 0
-                                ? Math.floor(sug.quantidade_sugerida * sug.bonificacao_percentual / 100)
-                                : 0
+                              // bonificacao_quantidade eh quantidade direta de unidades, nao percentual
+                              const bonifUnidades = sug.bonificacao_quantidade || 0
                               const diferenca = subtotalComDesconto - (item.valor * item.quantidade)
 
                               return (
@@ -1113,6 +1115,59 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Sucesso ao Enviar Sugestao */}
+        {showSucessoModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+              {/* Icone de sucesso */}
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+
+              <h2 className="text-xl font-bold text-gray-900 text-center mb-2">
+                Sugestao Enviada!
+              </h2>
+
+              <p className="text-gray-600 text-center mb-6">
+                Sua sugestao comercial foi enviada com sucesso para o lojista.
+                Voce sera notificado quando houver uma resposta.
+              </p>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6">
+                <p className="text-sm text-amber-700 text-center">
+                  <strong>Aguarde:</strong> O lojista ira analisar sua proposta e podera aceitar,
+                  rejeitar ou manter o pedido original.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => {
+                    setShowSucessoModal(false)
+                    router.push('/fornecedor/pedidos')
+                  }}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Ver Pedidos
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowSucessoModal(false)
+                    router.refresh()
+                  }}
+                  variant="primary"
+                  className="flex-1"
+                >
+                  Continuar
+                </Button>
               </div>
             </div>
           </div>

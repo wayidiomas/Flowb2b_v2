@@ -7,14 +7,14 @@ interface SugestaoItemRequest {
   produto_id: number | null
   quantidade_sugerida: number
   desconto_percentual: number
-  bonificacao_percentual: number
+  bonificacao_quantidade: number  // Quantidade direta de unidades bonificadas
   validade: string | null
 }
 
 interface CondicoesComerciais {
   valor_minimo_pedido?: number
   desconto_geral?: number
-  bonificacao_geral?: number
+  bonificacao_quantidade_geral?: number  // Quantidade direta de unidades bonificadas
   prazo_entrega_dias?: number
   validade_proposta?: string
 }
@@ -92,7 +92,7 @@ export async function POST(
         // Condicoes comerciais
         valor_minimo_pedido: condicoes_comerciais?.valor_minimo_pedido || null,
         desconto_geral: condicoes_comerciais?.desconto_geral || 0,
-        bonificacao_geral: condicoes_comerciais?.bonificacao_geral || 0,
+        bonificacao_quantidade_geral: condicoes_comerciais?.bonificacao_quantidade_geral || 0,
         prazo_entrega_dias: condicoes_comerciais?.prazo_entrega_dias || null,
         validade_proposta: condicoes_comerciais?.validade_proposta || null,
       })
@@ -111,7 +111,7 @@ export async function POST(
       produto_id: item.produto_id,
       quantidade_sugerida: item.quantidade_sugerida,
       desconto_percentual: item.desconto_percentual || 0,
-      bonificacao_percentual: item.bonificacao_percentual || 0,
+      bonificacao_quantidade: item.bonificacao_quantidade || 0,  // Quantidade direta de unidades
       validade: item.validade || null,
     }))
 

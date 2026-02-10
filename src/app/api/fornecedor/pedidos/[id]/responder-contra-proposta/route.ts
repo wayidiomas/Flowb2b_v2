@@ -154,8 +154,8 @@ export async function POST(
             if (itemAtual) {
               const descontoItem = sItem.desconto_percentual || 0
               const valorComDesconto = itemAtual.valor * (1 - descontoItem / 100)
-              const bonifItem = sItem.bonificacao_percentual || 0
-              const qtdBonificacao = Math.floor(sItem.quantidade_sugerida * bonifItem / 100)
+              // bonificacao_quantidade eh quantidade direta de unidades, nao percentual
+              const qtdBonificacao = sItem.bonificacao_quantidade || 0
 
               await supabase
                 .from('itens_pedido_compra')

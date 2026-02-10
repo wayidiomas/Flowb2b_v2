@@ -233,12 +233,12 @@ export interface SugestaoFornecedor {
   created_at: string
   users_fornecedor?: { nome: string; email: string }
   // Condicoes comerciais
-  valor_minimo_pedido?: number      // Valor minimo para aplicar desconto/bonif geral
-  desconto_geral?: number           // % desconto se atingir valor_minimo
-  bonificacao_geral?: number        // % produtos extras se atingir valor_minimo
-  prazo_entrega_dias?: number       // Prazo de entrega em dias uteis
-  validade_proposta?: string        // Data limite de validade da proposta
-  autor_tipo: 'fornecedor' | 'lojista'  // Quem criou a sugestao (para contra-proposta)
+  valor_minimo_pedido?: number           // Valor minimo para aplicar desconto
+  desconto_geral?: number                // % desconto se atingir valor_minimo
+  bonificacao_quantidade_geral?: number  // Quantidade de unidades bonificadas no pedido
+  prazo_entrega_dias?: number            // Prazo de entrega em dias uteis
+  validade_proposta?: string             // Data limite de validade da proposta
+  autor_tipo: 'fornecedor' | 'lojista'   // Quem criou a sugestao
 }
 
 export interface SugestaoItem {
@@ -246,12 +246,11 @@ export interface SugestaoItem {
   item_pedido_compra_id: number
   produto_id?: number
   quantidade_sugerida: number
-  desconto_percentual: number       // % desconto no valor unitario
-  bonificacao_percentual: number    // % produtos extras neste item
+  desconto_percentual: number        // % desconto no valor unitario
+  bonificacao_quantidade: number     // Quantidade de unidades bonificadas deste item
   validade?: string
   // Campos calculados (frontend)
   valor_unitario_com_desconto?: number
-  quantidade_bonificacao?: number   // unidades extras gratis calculadas
   subtotal_original?: number
   subtotal_sugerido?: number
 }
@@ -260,7 +259,7 @@ export interface SugestaoItem {
 export interface CondicoesComerciais {
   valor_minimo_pedido: number
   desconto_geral: number
-  bonificacao_geral: number
+  bonificacao_quantidade_geral: number  // Quantidade total de bonificacao
   prazo_entrega_dias: number
   validade_proposta: string
 }

@@ -147,13 +147,13 @@ export function StatusActionCard({
       const qtdOriginal = itemOriginal?.quantidade || 0
       const qtdSugerida = sItem.quantidade_sugerida
       const descontoItem = sItem.desconto_percentual || 0
-      const bonifItem = sItem.bonificacao_percentual || 0
+      // bonificacao_quantidade eh quantidade direta de unidades, nao percentual
+      const unidadesBonificadas = sItem.bonificacao_quantidade || 0
 
       // Calculos
       const subtotalOriginal = valorUnitario * qtdOriginal
       const valorComDesconto = valorUnitario * (1 - descontoItem / 100)
       const subtotalSugerido = valorComDesconto * qtdSugerida
-      const unidadesBonificadas = Math.floor(qtdSugerida * bonifItem / 100)
 
       totalOriginal += subtotalOriginal
       totalComDescontoItem += subtotalSugerido
@@ -174,7 +174,8 @@ export function StatusActionCard({
     // Condicoes comerciais gerais
     const valorMinimo = pendenteSugestao?.valor_minimo_pedido || 0
     const descontoGeral = pendenteSugestao?.desconto_geral || 0
-    const bonificacaoGeral = pendenteSugestao?.bonificacao_geral || 0
+    // bonificacao_quantidade_geral eh quantidade direta de unidades, nao percentual
+    const bonificacaoGeral = pendenteSugestao?.bonificacao_quantidade_geral || 0
     const prazoEntrega = pendenteSugestao?.prazo_entrega_dias
     const validadeProposta = pendenteSugestao?.validade_proposta
 
@@ -225,7 +226,7 @@ export function StatusActionCard({
                     <span className="text-green-600 ml-1">({descontoGeral}% desc)</span>
                   )}
                   {bonificacaoGeral > 0 && (
-                    <span className="text-purple-600 ml-1">(+{bonificacaoGeral}% bonif)</span>
+                    <span className="text-purple-600 ml-1">(+{bonificacaoGeral} un bonif)</span>
                   )}
                 </div>
               )}

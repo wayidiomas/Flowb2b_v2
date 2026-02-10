@@ -6,7 +6,7 @@ interface ContraPropostaItem {
   item_pedido_compra_id: number
   quantidade_contra_proposta: number
   desconto_percentual: number
-  bonificacao_percentual: number
+  bonificacao_quantidade: number  // Quantidade direta de unidades bonificadas
 }
 
 // POST - Lojista envia contra-proposta para o fornecedor
@@ -101,7 +101,7 @@ export async function POST(
       item_pedido_compra_id: item.item_pedido_compra_id,
       quantidade_sugerida: item.quantidade_contra_proposta,
       desconto_percentual: item.desconto_percentual || 0,
-      bonificacao_percentual: item.bonificacao_percentual || 0,
+      bonificacao_quantidade: item.bonificacao_quantidade || 0,  // Quantidade direta de unidades
     }))
 
     const { error: itensError } = await supabase
