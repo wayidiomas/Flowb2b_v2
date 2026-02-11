@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 
 // Tipo para item do pedido com produto relacionado
-interface ItemPedidoComProduto {
+interface ItemPedidoRaw {
   id: number
   descricao: string
   codigo_produto: string | null
@@ -13,7 +13,7 @@ interface ItemPedidoComProduto {
   quantidade: number
   aliquota_ipi: number
   produto_id: number | null
-  produtos: { gtin: string | null } | null
+  produtos: { gtin: string | null } | { gtin: string | null }[] | null
 }
 
 export async function GET(
@@ -59,19 +59,50 @@ export async function GET(
       .select('id, descricao, codigo_produto, codigo_fornecedor, unidade, valor, quantidade, aliquota_ipi, produto_id, produtos(gtin)')
       .eq('pedido_compra_id', id)
 
-    // Mapear itens para incluir ean
-    const itens = (itensRaw as ItemPedidoComProduto[] | null)?.map(item => ({
+    // Buscar codigos do fornecedor para os produtos deste pedido
+    const itensTyped = (itensRaw || []) as ItemPedidoRaw[]
+    const produtoIds = itensTyped
+      .map(item => item.produto_id)
+      .filter((id): id is number => id !== null)
+
+    let codigosFornecedor: Record<number, string> = {}
+    if (produtoIds.length > 0) {
+      const { data: fpData } = await supabase
+        .from('fornecedores_produtos')
+        .select('produto_id, codigo_fornecedor')
+        .eq('fornecedor_id', pedido.fornecedor_id)
+        .in('produto_id', produtoIds)
+
+      if (fpData) {
+        codigosFornecedor = Object.fromEntries(
+          fpData.map(fp => [fp.produto_id, fp.codigo_fornecedor])
+        )
+      }
+    }
+
+    // Helper para extrair gtin do produto (pode ser objeto ou array)
+    const getGtin = (produtos: ItemPedidoRaw['produtos']): string | null => {
+      if (!produtos) return null
+      if (Array.isArray(produtos)) return produtos[0]?.gtin || null
+      return produtos.gtin || null
+    }
+
+    // Mapear itens para incluir ean e codigo_fornecedor correto
+    const itens = itensTyped.map(item => ({
       id: item.id,
       descricao: item.descricao,
       codigo_produto: item.codigo_produto,
-      codigo_fornecedor: item.codigo_fornecedor,
+      // Usar codigo_fornecedor de fornecedores_produtos se disponivel
+      codigo_fornecedor: (item.produto_id && codigosFornecedor[item.produto_id])
+        || item.codigo_fornecedor
+        || null,
       unidade: item.unidade,
       valor: item.valor,
       quantidade: item.quantidade,
       aliquota_ipi: item.aliquota_ipi,
       produto_id: item.produto_id,
-      ean: item.produtos?.gtin || null
-    })) || []
+      ean: getGtin(item.produtos)
+    }))
 
     // Buscar nome da empresa (lojista)
     const { data: empresa } = await supabase
