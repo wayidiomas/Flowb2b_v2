@@ -702,7 +702,8 @@ export default function VisualizarPedidoPage() {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Codigo</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cod. Forn.</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descricao</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Und</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qtd</th>
@@ -714,6 +715,7 @@ export default function VisualizarPedidoPage() {
                   {pedido.itens.map((item, index) => (
                     <tr key={item.id || index} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-gray-500">{item.codigo_produto || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-blue-600 font-medium">{item.codigo_fornecedor || '-'}</td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate" title={item.descricao}>{item.descricao}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 text-center">{item.unidade}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{item.quantidade}</td>
