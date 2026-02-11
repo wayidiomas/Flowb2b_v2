@@ -92,10 +92,8 @@ export async function GET(
       id: item.id,
       descricao: item.descricao,
       codigo_produto: item.codigo_produto,
-      // Usar codigo_fornecedor de fornecedores_produtos se disponivel
-      codigo_fornecedor: (item.produto_id && codigosFornecedor[item.produto_id])
-        || item.codigo_fornecedor
-        || null,
+      // Usar APENAS codigo_fornecedor de fornecedores_produtos, sem fallback
+      codigo_fornecedor: (item.produto_id && codigosFornecedor[item.produto_id]) || null,
       unidade: item.unidade,
       valor: item.valor,
       quantidade: item.quantidade,
