@@ -93,6 +93,17 @@ export function FornecedorSelectModal({
     setMounted(true)
   }, [])
 
+  // Bloquear scroll do body quando modal esta aberto
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = originalOverflow
+      }
+    }
+  }, [isOpen])
+
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {

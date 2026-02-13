@@ -272,6 +272,55 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
 
   const handleSubmitSugestao = async () => {
     if (!data) return
+
+    // Validacao: itens alterados precisam ter validade preenchida
+    const itensAlteradosSemValidade = sugestoes.filter(sug => {
+      const itemOriginal = data.itens.find(item => item.id === sug.item_id)
+      if (!itemOriginal) return false
+
+      // Verifica se o item foi alterado (quantidade, desconto ou bonificacao)
+      const foiAlterado =
+        sug.quantidade_sugerida !== itemOriginal.quantidade ||
+        sug.desconto_percentual > 0 ||
+        sug.bonificacao_quantidade > 0
+
+      // Se foi alterado, precisa ter validade
+      return foiAlterado && !sug.validade
+    })
+
+    if (itensAlteradosSemValidade.length > 0) {
+      const nomesItens = itensAlteradosSemValidade
+        .map(sug => {
+          const item = data.itens.find(i => i.id === sug.item_id)
+          return item?.descricao || `Item #${sug.item_id}`
+        })
+        .slice(0, 3)
+        .join(', ')
+      const mais = itensAlteradosSemValidade.length > 3
+        ? ` e mais ${itensAlteradosSemValidade.length - 3}`
+        : ''
+
+      setToast({
+        type: 'error',
+        msg: `Preencha a validade dos itens alterados: ${nomesItens}${mais}`
+      })
+
+      // Scroll para o primeiro item sem validade
+      setTimeout(() => {
+        const primeiroItemId = itensAlteradosSemValidade[0].item_id
+        const inputElement = document.getElementById(`validade-${primeiroItemId}`)
+        if (inputElement) {
+          inputElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          inputElement.focus()
+          inputElement.classList.add('ring-2', 'ring-red-500', 'border-red-500')
+          setTimeout(() => {
+            inputElement.classList.remove('ring-2', 'ring-red-500', 'border-red-500')
+          }, 3000)
+        }
+      }, 100)
+      return
+    }
+
     setSubmitting(true)
     setToast(null)
 
@@ -999,28 +1048,30 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                               min={0}
                               max={100}
                               step={0.5}
-                              value={sug.desconto_percentual}
-                              onChange={(e) => updateSugestao(item.id, 'desconto_percentual', Number(e.target.value))}
+                              value={sug.desconto_percentual || ''}
+                              onChange={(e) => updateSugestao(item.id, 'desconto_percentual', Number(e.target.value) || 0)}
                               className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                              placeholder="0"
                             />
                           </td>
                           <td className="px-4 py-2 bg-[#FFAA11]/5">
                             <input
                               type="number"
                               min={0}
-                              max={100}
-                              step={0.5}
-                              value={sug.bonificacao_quantidade}
-                              onChange={(e) => updateSugestao(item.id, 'bonificacao_quantidade', Number(e.target.value))}
+                              step={1}
+                              value={sug.bonificacao_quantidade || ''}
+                              onChange={(e) => updateSugestao(item.id, 'bonificacao_quantidade', Number(e.target.value) || 0)}
                               className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                              placeholder="0"
                             />
                           </td>
                           <td className="px-4 py-2 bg-[#FFAA11]/5">
                             <input
+                              id={`validade-${item.id}`}
                               type="date"
                               value={sug.validade}
                               onChange={(e) => updateSugestao(item.id, 'validade', e.target.value)}
-                              className="px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                              className="px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] transition-all"
                             />
                           </td>
                           {/* Subtotal sugerido calculado em tempo real */}

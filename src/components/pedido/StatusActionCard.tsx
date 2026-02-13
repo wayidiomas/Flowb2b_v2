@@ -256,6 +256,7 @@ export function StatusActionCard({
                 <th className="px-3 py-2 text-right text-xs font-medium text-amber-700 uppercase">Qtd Sug</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-amber-700 uppercase">Desc%</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-amber-700 uppercase">Bonif</th>
+                <th className="px-3 py-2 text-center text-xs font-medium text-amber-700 uppercase">Validade</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Valor c/Desc</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Subtotal Orig</th>
                 <th className="px-3 py-2 text-right text-xs font-medium text-green-700 uppercase">Subtotal Sug</th>
@@ -287,6 +288,11 @@ export function StatusActionCard({
                     <td className="px-3 py-2 text-right">
                       {item.unidadesBonificadas > 0 ? (
                         <span className="text-purple-600 font-medium">+{item.unidadesBonificadas}</span>
+                      ) : '-'}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {item.validade ? (
+                        <span className="text-amber-700 font-medium">{formatDate(item.validade)}</span>
                       ) : '-'}
                     </td>
                     <td className="px-3 py-2 text-right text-gray-600">

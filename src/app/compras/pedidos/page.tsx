@@ -543,15 +543,24 @@ export default function PedidoCompraPage() {
     return '55' + cleaned
   }
 
-  // Abrir WhatsApp com mensagem do pedido
+  // Abrir WhatsApp com mensagem do pedido (inclui link para fornecedor)
   const handleWhatsApp = (pedido: PedidoCompraListItem) => {
     const phone = formatPhoneForWhatsApp(pedido.fornecedor_telefone)
     if (!phone) {
       alert('Fornecedor sem telefone cadastrado')
       return
     }
+
+    // Gerar link publico para o fornecedor visualizar o pedido
+    const baseUrl = window.location.origin
+    const linkPublico = `${baseUrl}/publico/pedido/${pedido.pedido_id}`
+
     const message = encodeURIComponent(
-      `Ola! Segue o pedido de compra #${pedido.numero_pedido} no valor de ${formatCurrency(pedido.valor_total)}.`
+      `Ola ${pedido.fornecedor_nome || ''}!\n\n` +
+      `Tenho um pedido de compra #${pedido.numero_pedido || pedido.pedido_id} no valor de ${formatCurrency(pedido.valor_total)}.\n\n` +
+      `Acesse o link abaixo para visualizar os detalhes e enviar sua proposta:\n` +
+      `${linkPublico}\n\n` +
+      `Atenciosamente.`
     )
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
   }

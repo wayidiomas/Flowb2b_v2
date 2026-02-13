@@ -636,6 +636,28 @@ function NovoPedidoContent() {
         return
       }
 
+      // Validacao: Forma de pagamento obrigatoria em todas as parcelas
+      const indicePrimeiraSemFormaPagamento = parcelas.findIndex(p => !p.forma_pagamento_id_bling)
+      if (indicePrimeiraSemFormaPagamento !== -1) {
+        showToast('error', 'Forma de pagamento obrigatoria',
+          'Selecione uma forma de pagamento para todas as parcelas antes de criar o pedido.')
+
+        // Scroll e foco no campo de forma de pagamento vazio
+        setTimeout(() => {
+          const selectElement = document.getElementById(`forma-pagamento-${indicePrimeiraSemFormaPagamento}`)
+          if (selectElement) {
+            selectElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            selectElement.focus()
+            // Adicionar borda vermelha temporária para destacar
+            selectElement.classList.add('ring-2', 'ring-red-500', 'border-red-500')
+            setTimeout(() => {
+              selectElement.classList.remove('ring-2', 'ring-red-500', 'border-red-500')
+            }, 3000)
+          }
+        }, 100)
+        return
+      }
+
       // Aviso se total das parcelas diferente do total do pedido
       const diferenca = Math.abs(totalParcelas - totalPedido)
       if (diferenca > 0.01) {
@@ -1183,9 +1205,10 @@ function NovoPedidoContent() {
                               </td>
                               <td className="px-3 py-2">
                                 <select
+                                  id={`forma-pagamento-${index}`}
                                   value={parcela.forma_pagamento_id || ''}
                                   onChange={(e) => handleUpdateParcela(index, 'forma_pagamento_id', e.target.value ? Number(e.target.value) : null)}
-                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6] transition-all"
                                 >
                                   <option value="">Selecione...</option>
                                   {formasPagamento.map(fp => (
@@ -1250,9 +1273,10 @@ function NovoPedidoContent() {
                   min="0"
                   max="100"
                   step="0.01"
-                  value={desconto}
-                  onChange={(e) => setDesconto(Number(e.target.value))}
+                  value={desconto || ''}
+                  onChange={(e) => setDesconto(Number(e.target.value) || 0)}
                   className="block w-full px-3 py-2 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="0"
                 />
               </div>
               <div>
@@ -1261,9 +1285,10 @@ function NovoPedidoContent() {
                   type="number"
                   min="0"
                   step="0.01"
-                  value={frete}
-                  onChange={(e) => setFrete(Number(e.target.value))}
+                  value={frete || ''}
+                  onChange={(e) => setFrete(Number(e.target.value) || 0)}
                   className="block w-full px-3 py-2 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="0"
                 />
               </div>
               <div>
@@ -1272,9 +1297,10 @@ function NovoPedidoContent() {
                   type="number"
                   min="0"
                   step="0.01"
-                  value={totalIcms}
-                  onChange={(e) => setTotalIcms(Number(e.target.value))}
+                  value={totalIcms || ''}
+                  onChange={(e) => setTotalIcms(Number(e.target.value) || 0)}
                   className="block w-full px-3 py-2 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="0"
                 />
               </div>
             </div>

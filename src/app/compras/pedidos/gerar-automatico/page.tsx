@@ -890,6 +890,30 @@ function GerarAutomaticoContent() {
       return
     }
 
+    // Validacao: Forma de pagamento nas parcelas
+    if (parcelas.length > 0) {
+      const indicePrimeiraSemFormaPagamento = parcelas.findIndex(p => !p.forma_pagamento_id_bling)
+      if (indicePrimeiraSemFormaPagamento !== -1) {
+        showToast('error', 'Forma de pagamento obrigatoria',
+          'Selecione uma forma de pagamento para todas as parcelas antes de criar o pedido.')
+
+        // Scroll e foco no campo de forma de pagamento vazio
+        setTimeout(() => {
+          const selectElement = document.getElementById(`forma-pagamento-${indicePrimeiraSemFormaPagamento}`)
+          if (selectElement) {
+            selectElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            selectElement.focus()
+            // Adicionar borda vermelha temporária para destacar
+            selectElement.classList.add('ring-2', 'ring-red-500', 'border-red-500')
+            setTimeout(() => {
+              selectElement.classList.remove('ring-2', 'ring-red-500', 'border-red-500')
+            }, 3000)
+          }
+        }, 100)
+        return
+      }
+    }
+
     setSaving(true)
     setError(null)
 
@@ -1395,7 +1419,7 @@ function GerarAutomaticoContent() {
                         type="number"
                         min="0"
                         step="0.01"
-                        value={politicaForm.valor_minimo}
+                        value={politicaForm.valor_minimo || ''}
                         onChange={(e) => setPoliticaForm(prev => ({ ...prev, valor_minimo: parseFloat(e.target.value) || 0 }))}
                         className="w-full px-3 py-2 text-sm border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                         placeholder="0"
@@ -1412,7 +1436,7 @@ function GerarAutomaticoContent() {
                         min="0"
                         max="100"
                         step="0.1"
-                        value={politicaForm.desconto}
+                        value={politicaForm.desconto || ''}
                         onChange={(e) => setPoliticaForm(prev => ({ ...prev, desconto: parseFloat(e.target.value) || 0 }))}
                         className="w-full px-3 py-2 text-sm border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                         placeholder="0"
@@ -1600,9 +1624,10 @@ function GerarAutomaticoContent() {
                     type="number"
                     min="0"
                     step="0.01"
-                    value={frete}
-                    onChange={(e) => setFrete(Number(e.target.value))}
+                    value={frete || ''}
+                    onChange={(e) => setFrete(Number(e.target.value) || 0)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                    placeholder="0"
                   />
                 </div>
                 <div>
@@ -1745,9 +1770,10 @@ function GerarAutomaticoContent() {
                           <div>
                             <label className="block text-[10px] text-gray-500 mb-0.5">Forma de Pagamento</label>
                             <select
+                              id={`forma-pagamento-${index}`}
                               value={parcela.forma_pagamento_id || ''}
                               onChange={(e) => handleUpdateParcela(index, 'forma_pagamento_id', e.target.value ? Number(e.target.value) : null)}
-                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-[#336FB6] transition-all"
                             >
                               <option value="">Selecione...</option>
                               {formasPagamento.map(fp => (
