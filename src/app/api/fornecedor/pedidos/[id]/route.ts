@@ -109,6 +109,20 @@ export async function GET(
       .eq('id', pedido.empresa_id)
       .single()
 
+    // Buscar representante se vinculado
+    let representante = null
+    if (pedido.representante_id) {
+      const { data: repData } = await supabase
+        .from('representantes')
+        .select('id, nome')
+        .eq('id', pedido.representante_id)
+        .single()
+
+      if (repData) {
+        representante = { id: repData.id, nome: repData.nome }
+      }
+    }
+
     // Buscar sugestoes existentes (incluindo autor_tipo para identificar contra-propostas)
     const { data: sugestoes } = await supabase
       .from('sugestoes_fornecedor')
@@ -138,6 +152,7 @@ export async function GET(
       pedido: {
         ...pedido,
         empresa_nome: empresa?.nome_fantasia || empresa?.razao_social || '',
+        representante,
       },
       itens: itens || [],
       sugestoes: sugestoes || [],

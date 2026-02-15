@@ -14,9 +14,10 @@ export interface JWTPayload {
   empresaId: number | null
   email: string
   role: 'admin' | 'user'
-  tipo: 'lojista' | 'fornecedor'
+  tipo: 'lojista' | 'fornecedor' | 'representante'
   cnpj?: string
   fornecedorUserId?: number
+  representanteUserId?: number
   iat: number
   exp: number
 }
@@ -84,7 +85,8 @@ export interface SessionUser {
   email: string
   nome: string
   role: 'admin' | 'user'
-  tipo: 'lojista' | 'fornecedor'
+  tipo: 'lojista' | 'fornecedor' | 'representante'
   cnpj?: string
   fornecedorUserId?: number
+  representanteUserId?: number
 }

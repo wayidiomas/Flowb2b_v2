@@ -70,6 +70,7 @@ const navigation: NavItem[] = [
       { label: 'Cadastro de funcionarios', href: '/cadastros/colaboradores', permission: 'cadastros' },
       { label: 'Cadastro de fornecedores', href: '/cadastros/fornecedores', permission: 'cadastros' },
       { label: 'Cadastro de produtos', href: '/cadastros/produtos', permission: 'cadastros' },
+      { label: 'Representantes', href: '/cadastros/representantes', permission: 'cadastros' },
       { label: 'Minhas empresas', href: '/cadastros/empresas', permission: 'cadastros' },
     ],
   },
@@ -78,6 +79,7 @@ const navigation: NavItem[] = [
     href: '/suprimentos',
     children: [
       { label: 'Pedido de compras', href: '/compras/pedidos', permission: 'pedidos' },
+      { label: 'Compras por Curva', href: '/compras/curva', permission: 'pedidos' },
       { label: 'Controle de estoque', href: '/estoque/produtos', permission: 'estoque' },
       { label: 'Notas de entrada', href: '/fiscal/notas', permission: 'financeiro' },
       { label: 'Politica de compra', href: '/suprimentos/politica-compra', permission: 'cadastros' },

@@ -207,6 +207,7 @@ function NovoPedidoContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const fornecedorIdParam = searchParams.get('fornecedor_id')
+  const fromCurva = searchParams.get('from') === 'curva'
 
   // Form state
   const [fornecedorId, setFornecedorId] = useState<number | null>(null)
@@ -331,6 +332,53 @@ function NovoPedidoContent() {
 
     fetchFornecedor()
   }, [fornecedorIdParam, user?.id, user?.empresa_id, empresa?.id])
+
+  // Carregar itens pre-preenchidos do sessionStorage (vindo da pagina de curva)
+  useEffect(() => {
+    if (fromCurva && fornecedorId) {
+      try {
+        const itensJson = sessionStorage.getItem('curva_pedido_itens')
+        if (itensJson) {
+          const itensSalvos = JSON.parse(itensJson)
+          if (Array.isArray(itensSalvos) && itensSalvos.length > 0) {
+            // Converter para o formato ItemPedidoCompra
+            const itensFormatados: ItemPedidoCompra[] = itensSalvos.map((item: {
+              produto_id: number
+              id_produto_bling: number
+              codigo_produto: string
+              codigo_fornecedor?: string
+              descricao: string
+              unidade: string
+              quantidade: number
+              valor: number
+              aliquota_ipi: number
+              estoque_atual: number
+              ean?: string
+            }) => ({
+              produto_id: item.produto_id,
+              id_produto_bling: item.id_produto_bling,
+              codigo_produto: item.codigo_produto,
+              codigo_fornecedor: item.codigo_fornecedor,
+              descricao: item.descricao,
+              unidade: item.unidade || 'UN',
+              quantidade: item.quantidade,
+              valor: item.valor,
+              aliquota_ipi: item.aliquota_ipi || 0,
+              estoque_atual: item.estoque_atual || 0,
+              ean: item.ean,
+            }))
+            setItens(itensFormatados)
+            // Limpar sessionStorage apos carregar
+            sessionStorage.removeItem('curva_pedido_itens')
+            // Mostrar notificacao de sucesso
+            showToast('success', 'Itens carregados', `${itensFormatados.length} produto(s) foram adicionados ao pedido a partir da analise de curva.`)
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao carregar itens do sessionStorage:', error)
+      }
+    }
+  }, [fromCurva, fornecedorId])
 
   // Buscar produtos do fornecedor
   const fetchProdutosFornecedor = async (search: string = '') => {

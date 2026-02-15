@@ -27,6 +27,24 @@ export async function GET(
       return NextResponse.json({ error: 'Pedido nao encontrado' }, { status: 404 })
     }
 
+    // Verificar se tem representante vinculado
+    let representante = null
+    if (pedido.representante_id) {
+      const { data: repData } = await supabase
+        .from('representantes')
+        .select('id, codigo_acesso, nome')
+        .eq('id', pedido.representante_id)
+        .single()
+
+      if (repData) {
+        representante = {
+          id: repData.id,
+          codigo_acesso: repData.codigo_acesso,
+          nome: repData.nome,
+        }
+      }
+    }
+
     // Retornar dados do pedido (sem informacoes sensiveis)
     return NextResponse.json({
       id: pedido.id,
@@ -42,6 +60,7 @@ export async function GET(
       frete_por_conta: pedido.frete_por_conta,
       transportador: pedido.transportador,
       observacoes: pedido.observacoes,
+      representante,
       itens: pedido.itens?.map((item: any) => ({
         codigo_produto: item.codigo_produto,
         codigo_fornecedor: item.codigo_fornecedor,

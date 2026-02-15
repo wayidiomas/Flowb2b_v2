@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     // Buscar pedidos
     let query = supabase
       .from('pedidos_compra')
-      .select('id, numero, data, data_prevista, total, total_produtos, status_interno, empresa_id, fornecedor_id')
+      .select('id, numero, data, data_prevista, total, total_produtos, status_interno, empresa_id, fornecedor_id, representante_id')
       .in('fornecedor_id', fornecedorIds)
       .neq('status_interno', 'rascunho')
       .order('data', { ascending: false })
@@ -96,13 +96,30 @@ export async function GET(request: NextRequest) {
       itensCountMap.set(item.pedido_compra_id, (itensCountMap.get(item.pedido_compra_id) || 0) + 1)
     })
 
+    // Buscar representantes vinculados aos pedidos
+    const representanteIds = [...new Set((pedidos || []).map(p => p.representante_id).filter(Boolean))]
+    const representanteMap = new Map<number, { id: number; nome: string }>()
+
+    if (representanteIds.length > 0) {
+      const { data: representantes } = await supabase
+        .from('representantes')
+        .select('id, nome')
+        .in('id', representanteIds)
+
+      ;(representantes || []).forEach(r => {
+        representanteMap.set(r.id, { id: r.id, nome: r.nome })
+      })
+    }
+
     const pedidosFormatted = (pedidos || []).map(p => {
       const empresa = empresaMap.get(p.empresa_id)
+      const representante = p.representante_id ? representanteMap.get(p.representante_id) : null
       return {
         ...p,
         empresa_nome: empresa?.nome_fantasia || empresa?.razao_social || '',
         empresa_cnpj: empresa?.cnpj || '',
         itens_count: itensCountMap.get(p.id) || 0,
+        representante: representante || null,
       }
     })
 

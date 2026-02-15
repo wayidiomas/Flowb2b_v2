@@ -9,6 +9,8 @@ import { PedidoTimeline } from '@/components/pedido/PedidoTimeline'
 import { WorkflowStepper } from '@/components/pedido/WorkflowStepper'
 import { StatusActionCard } from '@/components/pedido/StatusActionCard'
 import { CancelamentoModal } from '@/components/pedido/CancelamentoModal'
+import { TipoDestinatarioModal } from '@/components/representante/TipoDestinatarioModal'
+import { RepresentanteSelectModal } from '@/components/representante/RepresentanteSelectModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import type { PedidoCompraDetalhes, FornecedorOption, SugestaoFornecedor, SugestaoItem, StatusInterno } from '@/types/pedido-compra'
@@ -85,6 +87,20 @@ export default function VisualizarPedidoPage() {
   const [telefoneEnvioInput, setTelefoneEnvioInput] = useState('')
   const [salvandoTelefoneEnvio, setSalvandoTelefoneEnvio] = useState(false)
 
+  // Modais de escolha destinatario (fornecedor vs representante)
+  const [showTipoDestinatarioModal, setShowTipoDestinatarioModal] = useState(false)
+  const [showRepresentanteSelectModal, setShowRepresentanteSelectModal] = useState(false)
+  const [representantes, setRepresentantes] = useState<Array<{
+    id: number
+    nome: string
+    telefone?: string
+    codigo_acesso: string
+    cadastrado: boolean
+    fornecedores_count: number
+  }>>([])
+  const [fornecedoresForRepresentante, setFornecedoresForRepresentante] = useState<Array<{ id: number; nome: string; cnpj?: string }>>([])
+  const [loadingRepresentantes, setLoadingRepresentantes] = useState(false)
+
   // Buscar detalhes do pedido
   useEffect(() => {
     async function fetchPedido() {
@@ -146,7 +162,164 @@ export default function VisualizarPedidoPage() {
   }, [pedidoId, user?.empresa_id])
 
   // Handlers
-  const handleEnviarFornecedor = async () => {
+  // Abre modal de escolha: fornecedor direto ou representante
+  const handleEnviarClick = () => {
+    setShowTipoDestinatarioModal(true)
+  }
+
+  // Fecha TipoDestinatarioModal e vai para fluxo de fornecedor direto
+  const handleEnviarFornecedorDireto = async () => {
+    setShowTipoDestinatarioModal(false)
+    await handleEnviarFornecedorInterno()
+  }
+
+  // Carrega representantes e abre modal de selecao
+  const handleSelecionarRepresentante = async () => {
+    setShowTipoDestinatarioModal(false)
+    setLoadingRepresentantes(true)
+    setShowRepresentanteSelectModal(true)
+
+    try {
+      const res = await fetch('/api/representantes')
+      if (res.ok) {
+        const data = await res.json()
+        setRepresentantes(data.representantes || [])
+      }
+      // Buscar fornecedores da empresa para vincular ao novo representante
+      if (user?.empresa_id) {
+        const { data: fornecedoresData } = await supabase
+          .from('fornecedores')
+          .select('id, nome')
+          .eq('empresa_id', user.empresa_id)
+          .order('nome')
+        setFornecedoresForRepresentante(fornecedoresData || [])
+      }
+    } catch (err) {
+      console.error('Erro ao carregar representantes:', err)
+    } finally {
+      setLoadingRepresentantes(false)
+    }
+  }
+
+  // Seleciona representante existente e envia pedido
+  const handleSelectRepresentante = async (rep: {
+    id: number
+    nome: string
+    telefone?: string
+    codigo_acesso: string
+    cadastrado: boolean
+    fornecedores_count: number
+  }) => {
+    if (!pedido) return
+    setEnviandoFornecedor(true)
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedido.id}/enviar-fornecedor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ representante_id: rep.id }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(`Erro: ${data.error || 'Falha ao enviar'}`)
+        return
+      }
+
+      setStatusInterno('enviado_fornecedor')
+      setShowRepresentanteSelectModal(false)
+
+      // Se fornecedor nao cadastrado, abrir WhatsApp
+      if (!data.fornecedorCadastrado && data.linkPublico) {
+        setFornecedorEnvio(data.fornecedor)
+        setLinkPublicoEnvio(data.linkPublico)
+        setNumeroPedidoEnvio(data.numeroPedido)
+
+        if (data.fornecedor.telefone) {
+          abrirWhatsAppFornecedor(data.fornecedor.telefone, data.linkPublico, data.numeroPedido, data.fornecedor.nome)
+        } else {
+          setShowEnvioWhatsAppModal(true)
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao enviar ao fornecedor via representante:', err)
+      alert('Erro ao enviar pedido')
+    } finally {
+      setEnviandoFornecedor(false)
+    }
+  }
+
+  // Cria novo representante e envia pedido
+  const handleCreateNovoRepresentante = async (dados: {
+    nome: string
+    telefone: string
+    fornecedor_ids: number[]
+  }): Promise<void> => {
+    if (!pedido) return
+    setEnviandoFornecedor(true)
+    try {
+      // Criar representante
+      const resCreate = await fetch('/api/representantes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: dados.nome,
+          telefone: dados.telefone,
+          fornecedor_ids: dados.fornecedor_ids,
+        }),
+      })
+
+      if (!resCreate.ok) {
+        const errData = await resCreate.json()
+        alert(`Erro ao criar representante: ${errData.error || 'Falha'}`)
+        return
+      }
+
+      const { representante } = await resCreate.json()
+
+      // Enviar pedido com representante_id
+      const res = await fetch(`/api/pedidos-compra/${pedido.id}/enviar-fornecedor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ representante_id: representante.id }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(`Erro: ${data.error || 'Falha ao enviar'}`)
+        return
+      }
+
+      setStatusInterno('enviado_fornecedor')
+      setShowRepresentanteSelectModal(false)
+
+      // Se tem telefone do representante, pode abrir WhatsApp direto para ele
+      if (dados.telefone) {
+        const telefoneFormatado = dados.telefone.replace(/\D/g, '')
+        const telefoneWhatsApp = telefoneFormatado.startsWith('55') ? telefoneFormatado : `55${telefoneFormatado}`
+        const linkPublico = data.linkPublico || `${window.location.origin}/publico/pedido/${pedido.id}`
+        const codigoAcesso = representante.codigo_acesso || ''
+        const mensagem = encodeURIComponent(
+          `Ola ${dados.nome}!\n\n` +
+          `Voce foi cadastrado como representante para receber pedidos de compra.\n\n` +
+          `*Codigo de Acesso:* ${codigoAcesso}\n\n` +
+          `Acesse o link abaixo para visualizar o pedido #${pedido.numero}:\n` +
+          `${linkPublico}\n\n` +
+          `Para acessar o portal de representantes, registre-se em:\n` +
+          `${window.location.origin}/representante/registro\n\n` +
+          `Atenciosamente.`
+        )
+        window.open(`https://wa.me/${telefoneWhatsApp}?text=${mensagem}`, '_blank')
+      }
+    } catch (err) {
+      console.error('Erro ao criar representante e enviar:', err)
+      alert('Erro ao processar')
+    } finally {
+      setEnviandoFornecedor(false)
+    }
+  }
+
+  // Funcao interna de envio direto ao fornecedor (sem representante)
+  const handleEnviarFornecedorInterno = async () => {
     if (!pedido) return
     setEnviandoFornecedor(true)
     try {
@@ -647,7 +820,7 @@ export default function VisualizarPedidoPage() {
               sugestoes={sugestoes}
               sugestaoItens={sugestaoItens}
               itens={pedido.itens.filter(i => i.id !== undefined).map(i => ({ id: i.id as number, descricao: i.descricao, quantidade: i.quantidade, valor: i.valor }))}
-              onEnviarFornecedor={handleEnviarFornecedor}
+              onEnviarFornecedor={handleEnviarClick}
               onAceitarSugestao={() => handleProcessarSugestao('aceitar')}
               onRejeitarSugestao={() => handleProcessarSugestao('rejeitar')}
               onManterOriginal={() => handleProcessarSugestao('manter_original')}
@@ -948,6 +1121,27 @@ export default function VisualizarPedidoPage() {
         onClose={() => setShowCancelamentoModal(false)}
         onConfirm={handleCancelar}
         loading={cancelando}
+      />
+
+      {/* Modal de Escolha: Fornecedor Direto ou Representante */}
+      <TipoDestinatarioModal
+        isOpen={showTipoDestinatarioModal}
+        onClose={() => setShowTipoDestinatarioModal(false)}
+        onSelectFornecedor={handleEnviarFornecedorDireto}
+        onSelectRepresentante={handleSelecionarRepresentante}
+        fornecedorNome={pedido?.fornecedor_nome}
+      />
+
+      {/* Modal de Selecao de Representante */}
+      <RepresentanteSelectModal
+        isOpen={showRepresentanteSelectModal}
+        onClose={() => setShowRepresentanteSelectModal(false)}
+        onSelectExistente={handleSelectRepresentante}
+        onCreateNovo={handleCreateNovoRepresentante}
+        representantes={representantes}
+        fornecedores={fornecedoresForRepresentante}
+        fornecedorAtual={pedido ? { id: pedido.fornecedor_id, nome: pedido.fornecedor_nome } : undefined}
+        loading={loadingRepresentantes}
       />
 
       {/* Estilos de impressao */}

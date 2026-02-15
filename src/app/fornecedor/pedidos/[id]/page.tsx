@@ -51,6 +51,11 @@ interface SugestaoInfo {
   validade_proposta?: string
 }
 
+interface RepresentanteInfo {
+  id: number
+  nome: string
+}
+
 interface PedidoDetail {
   pedido: {
     id: number
@@ -67,6 +72,7 @@ interface PedidoDetail {
     status_interno: string
     observacoes: string | null
     empresa_nome: string
+    representante: RepresentanteInfo | null
   }
   itens: PedidoItem[]
   sugestoes: SugestaoInfo[]
@@ -492,11 +498,24 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               </svg>
               Voltar
             </button>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-3">
               Pedido #{pedido.numero}
+              {pedido.representante && (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-700" title={`Via representante: ${pedido.representante.nome}`}>
+                  <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Via Representante
+                </span>
+              )}
             </h1>
             <p className="text-sm text-gray-500 mt-1">
               {pedido.empresa_nome} - {new Date(pedido.data).toLocaleDateString('pt-BR')}
+              {pedido.representante && (
+                <span className="ml-2 text-violet-600">
+                  (Rep: {pedido.representante.nome})
+                </span>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-3">

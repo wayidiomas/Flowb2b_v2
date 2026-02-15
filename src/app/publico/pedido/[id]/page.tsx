@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { FornecedorConviteModal } from '@/components/fornecedor/FornecedorConviteModal'
+import { RepresentanteConviteModal } from '@/components/representante/RepresentanteConviteModal'
 
 interface ItemPedido {
   codigo_produto?: string
@@ -20,6 +21,12 @@ interface Parcela {
   forma_pagamento_nome?: string
 }
 
+interface RepresentanteInfo {
+  id: number
+  codigo_acesso: string
+  nome: string
+}
+
 interface PedidoPublico {
   id: number
   numero: string
@@ -34,6 +41,7 @@ interface PedidoPublico {
   frete_por_conta?: string
   transportador?: string
   observacoes?: string
+  representante?: RepresentanteInfo | null
   itens: ItemPedido[]
   parcelas: Parcela[]
 }
@@ -111,6 +119,7 @@ export default function PedidoPublicoPage() {
   const [error, setError] = useState<string | null>(null)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showConviteModal, setShowConviteModal] = useState(false)
+  const [showRepresentanteModal, setShowRepresentanteModal] = useState(false)
 
   // Abrir modal de convite apos 3 segundos
   useEffect(() => {
@@ -119,7 +128,12 @@ export default function PedidoPublicoPage() {
         // Verificar se o usuario ja fechou o modal antes (localStorage)
         const modalDismissed = localStorage.getItem(`convite-modal-dismissed-${pedidoId}`)
         if (!modalDismissed) {
-          setShowConviteModal(true)
+          // Se tem representante, mostrar modal de representante, senao fornecedor
+          if (pedido.representante) {
+            setShowRepresentanteModal(true)
+          } else {
+            setShowConviteModal(true)
+          }
         }
       }, 3000)
       return () => clearTimeout(timer)
@@ -128,6 +142,7 @@ export default function PedidoPublicoPage() {
 
   const handleCloseConviteModal = () => {
     setShowConviteModal(false)
+    setShowRepresentanteModal(false)
     // Salvar que o usuario fechou o modal para nao mostrar de novo
     localStorage.setItem(`convite-modal-dismissed-${pedidoId}`, 'true')
   }
@@ -308,37 +323,72 @@ export default function PedidoPublicoPage() {
         </div>
       </header>
 
-      {/* Banner CTA para fornecedor */}
-      <div className="bg-gradient-to-r from-amber-500 to-orange-500 print:hidden">
-        <div className="max-w-5xl mx-auto px-4 py-4 sm:px-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3 text-white">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <ChatBubbleIcon />
+      {/* Banner CTA - Representante ou Fornecedor */}
+      {pedido.representante ? (
+        <div className="bg-gradient-to-r from-violet-500 to-purple-600 print:hidden">
+          <div className="max-w-5xl mx-auto px-4 py-4 sm:px-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3 text-white">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-lg">Ola, {pedido.representante.nome}!</p>
+                  <p className="text-white/90 text-sm">Cadastre-se como representante e responda a este pedido</p>
+                </div>
               </div>
-              <div>
-                <p className="font-semibold text-lg">Quer responder a este pedido?</p>
-                <p className="text-white/90 text-sm">Cadastre-se na FlowB2B e envie suas sugestoes comerciais</p>
+              <div className="flex items-center gap-3">
+                <a
+                  href={`/representante/login?redirect=/representante/pedidos/${pedidoId}`}
+                  className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium transition-colors"
+                >
+                  Ja tenho conta
+                </a>
+                <a
+                  href={`/representante/registro?codigo=${pedido.representante.codigo_acesso}&redirect=/representante/pedidos/${pedidoId}`}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-white text-purple-600 hover:bg-purple-50 rounded-lg font-semibold transition-colors"
+                >
+                  Criar conta
+                  <ArrowRightIcon />
+                </a>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <a
-                href={`/fornecedor/login?redirect=/fornecedor/pedidos/${pedidoId}`}
-                className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium transition-colors"
-              >
-                Ja tenho conta
-              </a>
-              <a
-                href={`/fornecedor/registro?redirect=/fornecedor/pedidos/${pedidoId}`}
-                className="inline-flex items-center gap-2 px-5 py-2 bg-white text-amber-600 hover:bg-amber-50 rounded-lg font-semibold transition-colors"
-              >
-                Criar conta gratis
-                <ArrowRightIcon />
-              </a>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 print:hidden">
+          <div className="max-w-5xl mx-auto px-4 py-4 sm:px-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3 text-white">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <ChatBubbleIcon />
+                </div>
+                <div>
+                  <p className="font-semibold text-lg">Quer responder a este pedido?</p>
+                  <p className="text-white/90 text-sm">Cadastre-se na FlowB2B e envie suas sugestoes comerciais</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <a
+                  href={`/fornecedor/login?redirect=/fornecedor/pedidos/${pedidoId}`}
+                  className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium transition-colors"
+                >
+                  Ja tenho conta
+                </a>
+                <a
+                  href={`/fornecedor/registro?redirect=/fornecedor/pedidos/${pedidoId}`}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-white text-amber-600 hover:bg-amber-50 rounded-lg font-semibold transition-colors"
+                >
+                  Criar conta gratis
+                  <ArrowRightIcon />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Conteudo */}
       <main className="max-w-5xl mx-auto px-4 py-6 sm:px-6" id="print-area">
@@ -582,6 +632,17 @@ export default function PedidoPublicoPage() {
         pedidoId={pedidoId}
         fornecedorNome={pedido.fornecedor_nome}
       />
+
+      {/* Modal de convite para representante */}
+      {pedido.representante && (
+        <RepresentanteConviteModal
+          isOpen={showRepresentanteModal}
+          onClose={handleCloseConviteModal}
+          pedidoId={pedidoId}
+          codigoAcesso={pedido.representante.codigo_acesso}
+          representanteNome={pedido.representante.nome}
+        />
+      )}
     </div>
   )
 }

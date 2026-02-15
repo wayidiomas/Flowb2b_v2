@@ -166,6 +166,38 @@ function buildBlingPayload(data: FornecedorRequest) {
   return payload
 }
 
+// GET - Listar fornecedores da empresa
+export async function GET() {
+  try {
+    const user = await getCurrentUser()
+    if (!user || !user.empresaId) {
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    }
+
+    const supabase = createServerSupabaseClient()
+
+    const { data: fornecedores, error } = await supabase
+      .from('fornecedores')
+      .select('id, nome, nome_fantasia, cnpj, cpf, telefone, email')
+      .eq('empresa_id', user.empresaId)
+      .order('nome')
+
+    if (error) throw error
+
+    return NextResponse.json({
+      success: true,
+      fornecedores: fornecedores || [],
+    })
+
+  } catch (error) {
+    console.error('Erro ao listar fornecedores:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Erro ao listar fornecedores' },
+      { status: 500 }
+    )
+  }
+}
+
 // POST - Criar novo fornecedor
 export async function POST(request: NextRequest) {
   try {

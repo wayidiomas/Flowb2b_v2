@@ -80,6 +80,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     tipo: payload.tipo || 'lojista',
     cnpj: payload.cnpj,
     fornecedorUserId: payload.fornecedorUserId,
+    representanteUserId: payload.representanteUserId,
   }
 }
 

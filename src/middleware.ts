@@ -19,6 +19,8 @@ const publicRoutes = [
   '/politica-privacidade',
   '/fornecedor/login',
   '/fornecedor/registro',
+  '/representante/login',
+  '/representante/registro',
   '/publico',
 ]
 
@@ -34,6 +36,8 @@ const publicApiRoutes = [
   '/api/auth/verify-email',
   '/api/auth/fornecedor/login',
   '/api/auth/fornecedor/registro',
+  '/api/auth/representante/login',
+  '/api/auth/representante/registro',
 ]
 
 // Padroes de API publicas (com regex)
@@ -74,7 +78,13 @@ export async function middleware(request: NextRequest) {
   if (!token) {
     // Redirecionar para login apropriado se nao estiver autenticado
     const isFornecedorRoute = pathname.startsWith('/fornecedor') || pathname.startsWith('/api/fornecedor')
-    const loginPath = isFornecedorRoute ? '/fornecedor/login' : '/login'
+    const isRepresentanteRoute = pathname.startsWith('/representante') || pathname.startsWith('/api/representante')
+    let loginPath = '/login'
+    if (isFornecedorRoute) {
+      loginPath = '/fornecedor/login'
+    } else if (isRepresentanteRoute) {
+      loginPath = '/representante/login'
+    }
     const loginUrl = new URL(loginPath, request.url)
     loginUrl.searchParams.set('redirect', pathname)
     return NextResponse.redirect(loginUrl)
@@ -88,21 +98,45 @@ export async function middleware(request: NextRequest) {
 
     // Protecao por tipo de usuario
     // IMPORTANTE: /api/fornecedores (lojista) != /api/fornecedor/* (portal fornecedor)
+    // IMPORTANTE: /api/representantes (lojista) != /api/representante/* (portal representante)
     const isFornecedorRoute = pathname.startsWith('/fornecedor') ||
       (pathname.startsWith('/api/fornecedor') && !pathname.startsWith('/api/fornecedores'))
+    const isRepresentanteRoute = pathname.startsWith('/representante') ||
+      (pathname.startsWith('/api/representante') && !pathname.startsWith('/api/representantes'))
     const isLojistaRoute = pathname.startsWith('/compras') || pathname.startsWith('/dashboard') ||
       pathname.startsWith('/estoque') || pathname.startsWith('/vendas') ||
       pathname.startsWith('/configuracoes') || pathname.startsWith('/api/pedidos-compra') ||
       pathname.startsWith('/api/produtos') || pathname.startsWith('/api/fornecedores') ||
+      pathname.startsWith('/api/representantes') || pathname.startsWith('/cadastros') ||
       pathname.startsWith('/api/dashboard') || pathname.startsWith('/api/auth/bling')
+
+    // Representante tentando acessar rota de lojista
+    if (userTipo === 'representante' && isLojistaRoute) {
+      return NextResponse.redirect(new URL('/representante/dashboard', request.url))
+    }
+
+    // Representante tentando acessar rota de fornecedor
+    if (userTipo === 'representante' && isFornecedorRoute) {
+      return NextResponse.redirect(new URL('/representante/dashboard', request.url))
+    }
 
     // Fornecedor tentando acessar rota de lojista
     if (userTipo === 'fornecedor' && isLojistaRoute) {
       return NextResponse.redirect(new URL('/fornecedor/dashboard', request.url))
     }
 
-    // Lojista tentando acessar rota de fornecedor (exceto APIs de sugestoes)
+    // Fornecedor tentando acessar rota de representante
+    if (userTipo === 'fornecedor' && isRepresentanteRoute) {
+      return NextResponse.redirect(new URL('/fornecedor/dashboard', request.url))
+    }
+
+    // Lojista tentando acessar rota de fornecedor
     if (userTipo === 'lojista' && isFornecedorRoute) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+
+    // Lojista tentando acessar rota de representante
+    if (userTipo === 'lojista' && isRepresentanteRoute) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
@@ -123,7 +157,12 @@ export async function middleware(request: NextRequest) {
     })
   } catch {
     // Token invalido - redirecionar para login
-    const loginPath = pathname.startsWith('/fornecedor') ? '/fornecedor/login' : '/login'
+    let loginPath = '/login'
+    if (pathname.startsWith('/fornecedor')) {
+      loginPath = '/fornecedor/login'
+    } else if (pathname.startsWith('/representante')) {
+      loginPath = '/representante/login'
+    }
     const response = NextResponse.redirect(new URL(loginPath, request.url))
     response.cookies.delete(COOKIE_NAME)
     return response

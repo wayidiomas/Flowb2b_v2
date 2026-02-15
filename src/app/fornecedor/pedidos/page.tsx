@@ -6,6 +6,11 @@ import { useFornecedorAuth } from '@/contexts/FornecedorAuthContext'
 import { FornecedorLayout } from '@/components/layout/FornecedorLayout'
 import { Button, Skeleton, Input } from '@/components/ui'
 
+interface Representante {
+  id: number
+  nome: string
+}
+
 interface Pedido {
   id: number
   numero: string
@@ -18,6 +23,7 @@ interface Pedido {
   empresa_nome: string
   empresa_cnpj: string
   itens_count: number
+  representante: Representante | null
 }
 
 const statusColors: Record<string, string> = {
@@ -187,10 +193,27 @@ export default function FornecedorPedidosPage() {
                   {pedidos.map((pedido) => (
                     <tr key={pedido.id} className="hover:bg-[#336FB6]/5 transition-colors">
                       <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                        #{pedido.numero}
+                        <div className="flex items-center gap-2">
+                          #{pedido.numero}
+                          {pedido.representante && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700" title={`Via representante: ${pedido.representante.nome}`}>
+                              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              Rep
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-700 font-medium">
-                        {pedido.empresa_nome}
+                        <div>
+                          {pedido.empresa_nome}
+                          {pedido.representante && (
+                            <p className="text-xs text-violet-600 mt-0.5">
+                              via {pedido.representante.nome}
+                            </p>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500 font-mono">
                         {formatCNPJ(pedido.empresa_cnpj)}
