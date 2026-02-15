@@ -7,6 +7,7 @@ import { DashboardLayout, PageHeader } from '@/components/layout'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { FRETE_POR_CONTA_OPTIONS, calcularTotalPedido } from '@/types/pedido-compra'
+import { PedidoEmAbertoModal } from '@/components/compras/curva'
 
 // Icons
 function ArrowLeftIcon() {
@@ -318,6 +319,25 @@ function GerarAutomaticoContent() {
   const [dataPrevista, setDataPrevista] = useState('')
   const [parcelas, setParcelas] = useState<ParcelaPedido[]>([])
   const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([])
+
+  // Estados para modal de pedido em aberto
+  const [pedidoAbertoModalOpen, setPedidoAbertoModalOpen] = useState(false)
+  const [pedidoAbertoLoading, setPedidoAbertoLoading] = useState(false)
+  const [pedidosEmAberto, setPedidosEmAberto] = useState<Array<{
+    id: number
+    numero: string
+    data: string
+    total: number
+    situacao: number
+  }>>([])
+  const [itensJaPedidos, setItensJaPedidos] = useState<Array<{
+    produto_id: number
+    nome: string
+    codigo: string
+    quantidade: number
+    valor: number
+  }>>([])
+  const [descontarPedidos, setDescontarPedidos] = useState(false)
 
   // Buscar fornecedores para o modal
   const fetchFornecedores = async () => {
@@ -782,8 +802,52 @@ function GerarAutomaticoContent() {
     }
   }, [politicaSelecionadaId, politicasAplicaveis])
 
+  // Verificar pedido em aberto e abrir modal se existir
+  const verificarPedidoEmAberto = async () => {
+    if (!fornecedor) return
+
+    setPedidoAbertoLoading(true)
+
+    try {
+      const res = await fetch(`/api/compras/curva/pedido-aberto-itens?fornecedor_id=${fornecedor.id}`)
+      const data = await res.json()
+
+      if (data.success && data.pedidos?.length > 0) {
+        // Tem pedido em aberto - abrir modal de aviso
+        setPedidosEmAberto(data.pedidos || [])
+        setItensJaPedidos(data.itens || [])
+        setPedidoAbertoModalOpen(true)
+      } else {
+        // Nao tem pedido em aberto - calcular diretamente
+        setDescontarPedidos(false)
+        executarCalculo(false)
+      }
+    } catch (error) {
+      console.error('Erro ao verificar pedido em aberto:', error)
+      // Em caso de erro, continuar normalmente
+      setDescontarPedidos(false)
+      executarCalculo(false)
+    } finally {
+      setPedidoAbertoLoading(false)
+    }
+  }
+
+  // Continuar com desconto apos ver modal de pedido em aberto
+  const handleContinuarComDesconto = () => {
+    setPedidoAbertoModalOpen(false)
+    setDescontarPedidos(true)
+    executarCalculo(true)
+  }
+
   // Calcular sugestoes via API externa
   const calcularSugestoes = async () => {
+    if (!fornecedor) return
+    // Verificar se tem pedido em aberto antes de calcular
+    await verificarPedidoEmAberto()
+  }
+
+  // Executa o calculo de fato (pode ser com ou sem desconto)
+  const executarCalculo = async (comDesconto: boolean) => {
     if (!fornecedor) return
 
     setCalculando(true)
@@ -793,7 +857,10 @@ function GerarAutomaticoContent() {
       const response = await fetch('/api/pedidos-compra/calcular-automatico', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fornecedor_id: fornecedor.id })
+        body: JSON.stringify({
+          fornecedor_id: fornecedor.id,
+          descontar_pedidos_abertos: comDesconto
+        })
       })
 
       if (!response.ok) {
@@ -821,6 +888,12 @@ function GerarAutomaticoContent() {
       if (data.politicas_aplicaveis.length > 1) {
         showToast('success', 'Calculo concluido!',
           `${data.politicas_aplicaveis.length} politicas atingiram o valor minimo. Voce pode alternar entre elas.`)
+      }
+
+      // Se foi com desconto, mostrar aviso
+      if (comDesconto) {
+        showToast('success', 'Sugestao ajustada',
+          'As quantidades foram ajustadas descontando os itens ja pedidos em pedidos anteriores.')
       }
     } catch (err) {
       console.error('Erro ao calcular sugestoes:', err)
@@ -1977,6 +2050,21 @@ function GerarAutomaticoContent() {
           </div>
         </div>
       )}
+
+      {/* Modal de Pedido em Aberto */}
+      <PedidoEmAbertoModal
+        isOpen={pedidoAbertoModalOpen}
+        onClose={() => {
+          setPedidoAbertoModalOpen(false)
+          setPedidosEmAberto([])
+          setItensJaPedidos([])
+        }}
+        fornecedorNome={fornecedor?.nome || ''}
+        pedidos={pedidosEmAberto}
+        itens={itensJaPedidos}
+        loading={pedidoAbertoLoading}
+        onContinuar={handleContinuarComDesconto}
+      />
     </DashboardLayout>
   )
 }

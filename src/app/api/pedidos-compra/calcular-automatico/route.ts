@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nao autorizado' }, { status: 401 })
     }
 
-    const { fornecedor_id } = await request.json()
+    const body = await request.json()
+    const { fornecedor_id, descontar_pedidos_abertos } = body
 
     if (!fornecedor_id) {
       return NextResponse.json({ error: 'fornecedor_id obrigatorio' }, { status: 400 })
@@ -132,9 +133,46 @@ export async function POST(request: NextRequest) {
         if (p.codigo_fornecedor) codigoFornecedorMap.set(p.produto_id, p.codigo_fornecedor)
       })
 
+      // Buscar quantidades ja pedidas em pedidos abertos (se flag ativa)
+      const qtdJaPedidaMap = new Map<number, number>()
+      if (descontar_pedidos_abertos) {
+        // Calcular data limite (30 dias atras)
+        const dataLimite = new Date()
+        dataLimite.setDate(dataLimite.getDate() - 30)
+        const dataLimiteStr = dataLimite.toISOString().split('T')[0]
+
+        // 1. Buscar pedido mais recente em aberto do fornecedor (ultimos 30 dias)
+        const { data: pedidosAbertos } = await supabase
+          .from('pedidos_compra')
+          .select('id')
+          .eq('fornecedor_id', fornecedor_id)
+          .eq('empresa_id', user.empresaId)
+          .in('situacao', [0, 3]) // 0=aberto, 3=parcial
+          .gte('data', dataLimiteStr)
+          .order('data', { ascending: false })
+          .limit(1) // Apenas o mais recente
+
+        const pedidoIds = pedidosAbertos?.map(p => p.id) || []
+
+        if (pedidoIds.length > 0) {
+          // 2. Buscar itens desses pedidos
+          const { data: itensJaPedidos } = await supabase
+            .from('itens_pedido_compra')
+            .select('produto_id, quantidade')
+            .in('pedido_compra_id', pedidoIds)
+
+          // 3. Criar mapa de quantidade ja pedida por produto
+          itensJaPedidos?.forEach(item => {
+            if (!item.produto_id) return
+            const atual = qtdJaPedidaMap.get(item.produto_id) || 0
+            qtdJaPedidaMap.set(item.produto_id, atual + (item.quantidade || 0))
+          })
+        }
+      }
+
       // Transformar cada politica para o formato do frontend
       const politicasAplicaveis = politicasAPI.map(pol => {
-        const sugestoes = pol.produtos.map((produto: ProdutoAPI) => {
+        let sugestoes = pol.produtos.map((produto: ProdutoAPI) => {
           // Calcular media de venda por dia
           const mediaVendaDia = produto.periodo_venda > 0
             ? produto.quantidade_vendida / produto.periodo_venda
@@ -145,6 +183,13 @@ export async function POST(request: NextRequest) {
             ? produto.valor_total_produto / produto.sugestao_quantidade
             : (produto.valor_de_compra || 0)
 
+          // Descontar quantidade ja pedida se flag ativa
+          const qtdJaPedida = qtdJaPedidaMap.get(produto.produto_id) || 0
+          const quantidadeAjustada = descontar_pedidos_abertos
+            ? Math.max(0, produto.sugestao_quantidade - qtdJaPedida)
+            : produto.sugestao_quantidade
+          const valorTotalAjustado = quantidadeAjustada * Number(valorUnitario.toFixed(2))
+
           return {
             produto_id: produto.produto_id,
             id_produto_bling: produto.id_produto_bling,
@@ -154,18 +199,27 @@ export async function POST(request: NextRequest) {
             codigo_fornecedor: codigoFornecedorMap.get(produto.produto_id) || undefined,
             estoque_atual: produto.estoque_atual || 0,
             media_venda_dia: Number(mediaVendaDia.toFixed(2)),
-            quantidade_sugerida: produto.sugestao_quantidade,
+            quantidade_sugerida: quantidadeAjustada,
             valor_unitario: Number(valorUnitario.toFixed(2)),
-            valor_total: produto.valor_total_produto,
-            itens_por_caixa: produto.itens_por_caixa || 1
+            valor_total: valorTotalAjustado,
+            itens_por_caixa: produto.itens_por_caixa || 1,
+            qtd_ja_pedida: qtdJaPedida > 0 ? qtdJaPedida : undefined
           }
         })
+
+        // Se desconto ativo, remover itens com quantidade <= 0
+        if (descontar_pedidos_abertos) {
+          sugestoes = sugestoes.filter(s => s.quantidade_sugerida > 0)
+        }
+
+        // Recalcular totais se houve desconto
+        const valorTotalComDesconto = sugestoes.reduce((sum, s) => sum + s.valor_total, 0)
 
         return {
           politica_id: pol.politica_id,
           melhor_politica: pol.melhor_politica,
           valor_total_sem_desconto: pol.valor_total_pedido_sem_desconto,
-          valor_total_com_desconto: pol.valor_total_pedido_com_desconto,
+          valor_total_com_desconto: descontar_pedidos_abertos ? valorTotalComDesconto : pol.valor_total_pedido_com_desconto,
           sugestoes
         }
       })
