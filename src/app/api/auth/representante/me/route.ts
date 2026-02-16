@@ -73,19 +73,28 @@ export async function GET() {
         .in('representante_id', representanteIds)
 
       if (vinculos) {
-        fornecedoresVinculados = vinculos.map(v => {
-          const forn = v.fornecedores as { id: number; nome: string; cnpj?: string; empresa_id: number }
-          const rep = representantes?.find(r => r.id === v.representante_id)
-          const emp = rep?.empresas as { id: number; razao_social: string; nome_fantasia?: string } | null
-          return {
-            fornecedor_id: forn.id,
-            fornecedor_nome: forn.nome,
-            fornecedor_cnpj: forn.cnpj,
-            empresa_id: forn.empresa_id,
-            empresa_nome: emp?.nome_fantasia || emp?.razao_social || '',
-            representante_id: v.representante_id,
-          }
-        })
+        fornecedoresVinculados = vinculos
+          .filter(v => v.fornecedores)
+          .map(v => {
+            // Supabase pode retornar como array ou objeto dependendo da relação
+            const fornData = v.fornecedores as unknown
+            const forn = Array.isArray(fornData) ? fornData[0] : fornData
+            const typedForn = forn as { id: number; nome: string; cnpj?: string; empresa_id: number }
+
+            const rep = representantes?.find(r => r.id === v.representante_id)
+            const empData = rep?.empresas as unknown
+            const emp = Array.isArray(empData) ? empData[0] : empData
+            const typedEmp = emp as { id: number; razao_social: string; nome_fantasia?: string } | null
+
+            return {
+              fornecedor_id: typedForn.id,
+              fornecedor_nome: typedForn.nome,
+              fornecedor_cnpj: typedForn.cnpj,
+              empresa_id: typedForn.empresa_id,
+              empresa_nome: typedEmp?.nome_fantasia || typedEmp?.razao_social || '',
+              representante_id: v.representante_id,
+            }
+          })
       }
     }
 
@@ -98,14 +107,18 @@ export async function GET() {
         telefone: userData.telefone,
         tipo: 'representante',
       },
-      representantes: representantes?.map(r => ({
-        id: r.id,
-        codigo_acesso: r.codigo_acesso,
-        nome: r.nome,
-        empresa_id: r.empresa_id,
-        empresa_nome: (r.empresas as { nome_fantasia?: string; razao_social: string })?.nome_fantasia ||
-                      (r.empresas as { razao_social: string })?.razao_social || '',
-      })) || [],
+      representantes: representantes?.map(r => {
+        const empData = r.empresas as unknown
+        const emp = Array.isArray(empData) ? empData[0] : empData
+        const typedEmp = emp as { nome_fantasia?: string; razao_social: string } | null
+        return {
+          id: r.id,
+          codigo_acesso: r.codigo_acesso,
+          nome: r.nome,
+          empresa_id: r.empresa_id,
+          empresa_nome: typedEmp?.nome_fantasia || typedEmp?.razao_social || '',
+        }
+      }) || [],
       fornecedoresVinculados,
     })
   } catch (error) {

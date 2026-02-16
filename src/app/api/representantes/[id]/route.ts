@@ -65,12 +65,17 @@ export async function GET(
       `)
       .eq('representante_id', representanteId)
 
-    const fornecedores = vinculos?.map(v => ({
-      id: v.fornecedor_id,
-      nome: (v.fornecedores as { id: number; nome: string; cnpj?: string })?.nome || '',
-      cnpj: (v.fornecedores as { id: number; nome: string; cnpj?: string })?.cnpj,
-      vinculado_em: v.created_at,
-    })) || []
+    const fornecedores = vinculos?.map(v => {
+      const fornData = v.fornecedores as unknown
+      const forn = Array.isArray(fornData) ? fornData[0] : fornData
+      const typedForn = forn as { id: number; nome: string; cnpj?: string } | null
+      return {
+        id: v.fornecedor_id,
+        nome: typedForn?.nome || '',
+        cnpj: typedForn?.cnpj,
+        vinculado_em: v.created_at,
+      }
+    }) || []
 
     return NextResponse.json({
       success: true,

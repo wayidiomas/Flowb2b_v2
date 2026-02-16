@@ -111,24 +111,33 @@ export async function GET(request: NextRequest) {
     }
 
     // Formatar pedidos
-    const pedidosFormatados = pedidos?.map(p => ({
-      id: p.id,
-      numero: p.numero,
-      data: p.data,
-      data_prevista: p.data_prevista,
-      status: p.status,
-      total: p.total,
-      desconto: p.desconto,
-      valor_frete: p.valor_frete,
-      fornecedor_id: p.fornecedor_id,
-      fornecedor_nome: (p.fornecedores as { nome: string })?.nome || '',
-      fornecedor_cnpj: (p.fornecedores as { cnpj?: string })?.cnpj,
-      empresa_id: p.empresa_id,
-      empresa_nome: (p.empresas as { nome_fantasia?: string; razao_social: string })?.nome_fantasia ||
-                    (p.empresas as { razao_social: string })?.razao_social || '',
-      created_at: p.created_at,
-      updated_at: p.updated_at,
-    })) || []
+    const pedidosFormatados = pedidos?.map(p => {
+      const fornData = p.fornecedores as unknown
+      const forn = Array.isArray(fornData) ? fornData[0] : fornData
+      const typedForn = forn as { nome: string; cnpj?: string } | null
+
+      const empData = p.empresas as unknown
+      const emp = Array.isArray(empData) ? empData[0] : empData
+      const typedEmp = emp as { nome_fantasia?: string; razao_social: string } | null
+
+      return {
+        id: p.id,
+        numero: p.numero,
+        data: p.data,
+        data_prevista: p.data_prevista,
+        status: p.status,
+        total: p.total,
+        desconto: p.desconto,
+        valor_frete: p.valor_frete,
+        fornecedor_id: p.fornecedor_id,
+        fornecedor_nome: typedForn?.nome || '',
+        fornecedor_cnpj: typedForn?.cnpj,
+        empresa_id: p.empresa_id,
+        empresa_nome: typedEmp?.nome_fantasia || typedEmp?.razao_social || '',
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+      }
+    }) || []
 
     return NextResponse.json({
       success: true,
