@@ -65,14 +65,16 @@ export async function GET(
       `)
       .eq('representante_id', representanteId)
 
+    // Tipo para o fornecedor retornado pelo Supabase (relação many-to-one retorna objeto)
+    type FornecedorRelation = { id: number; nome: string; cnpj?: string } | null
+
     const fornecedores = vinculos?.map(v => {
-      const fornData = v.fornecedores as unknown
-      const forn = Array.isArray(fornData) ? fornData[0] : fornData
-      const typedForn = forn as { id: number; nome: string; cnpj?: string } | null
+      // Supabase pode inferir tipos incorretamente em queries complexas, usar unknown como intermediário
+      const forn = v.fornecedores as unknown as FornecedorRelation
       return {
         id: v.fornecedor_id,
-        nome: typedForn?.nome || '',
-        cnpj: typedForn?.cnpj,
+        nome: forn?.nome || '',
+        cnpj: forn?.cnpj,
         vinculado_em: v.created_at,
       }
     }) || []

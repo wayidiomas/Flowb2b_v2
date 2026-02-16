@@ -273,10 +273,12 @@ function NovoPedidoContent() {
         const fId = parseInt(fornecedorIdParam)
         setFornecedorId(fId)
 
-        // Buscar dados do fornecedor (incluindo id_bling para integracao)
+        // Buscar dados do fornecedor (incluindo id_contato_bling para integracao)
+        // IMPORTANTE: Para pedidos de compra, o Bling espera o id_contato_bling (ID do contato)
+        // e NAO o id_bling (ID do cadastro de fornecedor)
         const { data: fornecedor, error: fError } = await supabase
           .from('fornecedores')
-          .select('id, id_bling, nome')
+          .select('id, id_contato_bling, nome')
           .eq('id', fId)
           .eq('empresa_id', empresaId)
           .single()
@@ -284,7 +286,7 @@ function NovoPedidoContent() {
         if (fError) throw fError
         if (fornecedor) {
           setFornecedorNome(fornecedor.nome)
-          setFornecedorIdBling(fornecedor.id_bling)
+          setFornecedorIdBling(fornecedor.id_contato_bling)
         }
 
         // Buscar politicas de compra do fornecedor

@@ -110,15 +110,15 @@ export async function GET(request: NextRequest) {
       throw error
     }
 
+    // Tipos para relações retornadas pelo Supabase (relação many-to-one retorna objeto)
+    type FornecedorRelation = { nome: string; cnpj?: string } | null
+    type EmpresaRelation = { nome_fantasia?: string; razao_social: string } | null
+
     // Formatar pedidos
     const pedidosFormatados = pedidos?.map(p => {
-      const fornData = p.fornecedores as unknown
-      const forn = Array.isArray(fornData) ? fornData[0] : fornData
-      const typedForn = forn as { nome: string; cnpj?: string } | null
-
-      const empData = p.empresas as unknown
-      const emp = Array.isArray(empData) ? empData[0] : empData
-      const typedEmp = emp as { nome_fantasia?: string; razao_social: string } | null
+      // Supabase pode inferir tipos incorretamente em queries complexas, usar unknown como intermediário
+      const forn = p.fornecedores as unknown as FornecedorRelation
+      const emp = p.empresas as unknown as EmpresaRelation
 
       return {
         id: p.id,
@@ -130,10 +130,10 @@ export async function GET(request: NextRequest) {
         desconto: p.desconto,
         valor_frete: p.valor_frete,
         fornecedor_id: p.fornecedor_id,
-        fornecedor_nome: typedForn?.nome || '',
-        fornecedor_cnpj: typedForn?.cnpj,
+        fornecedor_nome: forn?.nome || '',
+        fornecedor_cnpj: forn?.cnpj,
         empresa_id: p.empresa_id,
-        empresa_nome: typedEmp?.nome_fantasia || typedEmp?.razao_social || '',
+        empresa_nome: emp?.nome_fantasia || emp?.razao_social || '',
         created_at: p.created_at,
         updated_at: p.updated_at,
       }

@@ -58,12 +58,31 @@ export async function GET(
 
     if (error) throw error
 
-    const fornecedores = vinculos?.map(v => ({
-      vinculo_id: v.id,
-      fornecedor_id: v.fornecedor_id,
-      vinculado_em: v.created_at,
-      ...(v.fornecedores as object),
-    })) || []
+    // Tipo para o fornecedor retornado pelo Supabase (relação many-to-one retorna objeto)
+    type FornecedorRelation = {
+      id: number
+      nome: string
+      nome_fantasia?: string
+      cnpj?: string
+      telefone?: string
+      email?: string
+    } | null
+
+    const fornecedores = vinculos?.map(v => {
+      // Supabase pode inferir tipos incorretamente em queries complexas, usar unknown como intermediário
+      const forn = v.fornecedores as unknown as FornecedorRelation
+      return {
+        vinculo_id: v.id,
+        fornecedor_id: v.fornecedor_id,
+        vinculado_em: v.created_at,
+        id: forn?.id,
+        nome: forn?.nome,
+        nome_fantasia: forn?.nome_fantasia,
+        cnpj: forn?.cnpj,
+        telefone: forn?.telefone,
+        email: forn?.email,
+      }
+    }) || []
 
     return NextResponse.json({
       success: true,

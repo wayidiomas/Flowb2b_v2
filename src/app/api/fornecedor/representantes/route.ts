@@ -71,26 +71,23 @@ export async function GET() {
       vinculado_em: string
     }>()
 
-    for (const vinculo of vinculos || []) {
-      // Supabase retorna objeto unico para relacoes many-to-one
-      const repRaw = vinculo.representantes as unknown
-      const rep = repRaw as {
-        id: number
-        nome: string
-        telefone: string | null
-        codigo_acesso: string
-        ativo: boolean
-        user_representante_id: number | null
-        empresa_id: number
-        empresas: { id: number; razao_social: string; nome_fantasia: string | null } | null
-      } | null
+    // Tipos para relações retornadas pelo Supabase (relação many-to-one retorna objeto)
+    type RepresentanteRelation = {
+      id: number
+      nome: string
+      telefone: string | null
+      codigo_acesso: string
+      ativo: boolean
+      user_representante_id: number | null
+      empresa_id: number
+      empresas: { id: number; razao_social: string; nome_fantasia: string | null } | null
+    } | null
+    type FornecedorRelation = { id: number; nome: string; nome_fantasia: string | null } | null
 
-      const fornRaw = vinculo.fornecedores as unknown
-      const forn = fornRaw as {
-        id: number
-        nome: string
-        nome_fantasia: string | null
-      } | null
+    for (const vinculo of vinculos || []) {
+      // Supabase pode inferir tipos incorretamente em queries complexas, usar unknown como intermediário
+      const rep = vinculo.representantes as unknown as RepresentanteRelation
+      const forn = vinculo.fornecedores as unknown as FornecedorRelation
 
       if (!rep) continue
 
