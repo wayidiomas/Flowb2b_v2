@@ -42,3 +42,12 @@ next-env.d.ts
 
 # Claude Code
 .claude/
+
+# Playwright MCP
+.playwright-mcp/
+
+# Screenshots de teste
+*.png
+
+# Supabase temp
+supabase/.temp/
