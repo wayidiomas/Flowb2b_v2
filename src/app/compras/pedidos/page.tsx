@@ -12,6 +12,15 @@ import { supabase } from '@/lib/supabase'
 import type { PedidoCompraListItem, FornecedorOption, SITUACAO_LABELS, SITUACAO_COLORS, StatusInterno } from '@/types/pedido-compra'
 import { STATUS_INTERNO_CONFIG } from '@/types/pedido-compra'
 
+// Tipo para representante vinculado ao fornecedor
+interface RepresentanteFornecedor {
+  id: number
+  nome: string
+  telefone: string | null
+  codigo_acesso: string
+  cadastrado: boolean // se ja tem user_representante_id
+}
+
 // Status config
 const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
   'Emitida': { bg: 'bg-green-100', text: 'text-green-700', label: 'Emitida' },
@@ -166,6 +175,9 @@ export default function PedidoCompraPage() {
   // Workflow filter tab
   const [workflowFilter, setWorkflowFilter] = useState<string>('todos')
 
+  // Mapa de fornecedor_id -> representante (para WhatsApp inteligente)
+  const [representantesPorFornecedor, setRepresentantesPorFornecedor] = useState<Record<number, RepresentanteFornecedor>>({})
+
   // Workflow counts for tabs
   const [workflowCounts, setWorkflowCounts] = useState<Record<string, number>>({
     todos: 0,
@@ -256,8 +268,73 @@ export default function PedidoCompraPage() {
     }
   }
 
+  // Buscar representantes vinculados aos fornecedores
+  const fetchRepresentantesPorFornecedor = async () => {
+    if (!user?.id) return
+    try {
+      const empresaId = empresa?.id || user?.empresa_id
+      if (!empresaId) return
+
+      // Buscar vinculos representante-fornecedor com dados do representante
+      const { data: vinculos, error } = await supabase
+        .from('representante_fornecedores')
+        .select(`
+          fornecedor_id,
+          representantes (
+            id,
+            nome,
+            telefone,
+            codigo_acesso,
+            user_representante_id,
+            ativo
+          )
+        `)
+        .eq('representantes.empresa_id', empresaId)
+        .eq('representantes.ativo', true)
+
+      if (error) {
+        console.error('Erro ao buscar representantes por fornecedor:', error)
+        return
+      }
+
+      // Montar mapa de fornecedor_id -> representante
+      const mapa: Record<number, RepresentanteFornecedor> = {}
+
+      // Tipo para relação retornada pelo Supabase
+      type RepRelation = {
+        id: number
+        nome: string
+        telefone: string | null
+        codigo_acesso: string
+        user_representante_id: number | null
+        ativo: boolean
+      } | null
+
+      vinculos?.forEach(v => {
+        const rep = v.representantes as unknown as RepRelation
+        if (rep && v.fornecedor_id) {
+          // Se ja existe um representante para este fornecedor, manter o primeiro (ou pode-se escolher outro criterio)
+          if (!mapa[v.fornecedor_id]) {
+            mapa[v.fornecedor_id] = {
+              id: rep.id,
+              nome: rep.nome,
+              telefone: rep.telefone,
+              codigo_acesso: rep.codigo_acesso,
+              cadastrado: !!rep.user_representante_id,
+            }
+          }
+        }
+      })
+
+      setRepresentantesPorFornecedor(mapa)
+    } catch (err) {
+      console.error('Erro ao buscar representantes:', err)
+    }
+  }
+
   useEffect(() => {
     fetchFornecedores()
+    fetchRepresentantesPorFornecedor()
   }, [user?.id, user?.empresa_id, empresa?.id])
 
   // Buscar pedidos
@@ -543,8 +620,53 @@ export default function PedidoCompraPage() {
     return '55' + cleaned
   }
 
-  // Abrir WhatsApp com mensagem do pedido (inclui link para fornecedor)
+  // Abrir WhatsApp com mensagem do pedido (verifica se tem representante vinculado)
   const handleWhatsApp = (pedido: PedidoCompraListItem) => {
+    const baseUrl = window.location.origin
+    const empresaNome = empresa?.nome_fantasia || empresa?.razao_social || 'nossa empresa'
+
+    // Verificar se fornecedor tem representante vinculado
+    const representante = pedido.fornecedor_id ? representantesPorFornecedor[pedido.fornecedor_id] : null
+
+    if (representante && representante.telefone) {
+      // Enviar para o REPRESENTANTE
+      const phone = formatPhoneForWhatsApp(representante.telefone)
+      if (!phone) {
+        alert('Representante sem telefone valido')
+        return
+      }
+
+      let message: string
+
+      if (!representante.cadastrado) {
+        // Primeiro acesso - enviar codigo de acesso
+        const loginUrl = `${baseUrl}/representante/login`
+        message = encodeURIComponent(
+          `Ola ${representante.nome}! 👋\n\n` +
+          `Voce foi cadastrado como representante comercial da *${empresaNome}* na plataforma FlowB2B.\n\n` +
+          `📋 *Seu codigo de acesso:* ${representante.codigo_acesso}\n\n` +
+          `🔗 Acesse o sistema pelo link:\n${loginUrl}\n\n` +
+          `Temos um pedido de compra #${pedido.numero_pedido || pedido.pedido_id} no valor de ${formatCurrency(pedido.valor_total)} para o fornecedor ${pedido.fornecedor_nome || ''}.\n\n` +
+          `Use o codigo acima para fazer seu primeiro login, cadastrar sua senha e visualizar o pedido.\n\n` +
+          `Qualquer duvida, estamos a disposicao!`
+        )
+      } else {
+        // Ja cadastrado - mensagem normal com link do pedido
+        const linkPublico = `${baseUrl}/publico/pedido/${pedido.pedido_id}`
+        message = encodeURIComponent(
+          `Ola ${representante.nome}!\n\n` +
+          `Temos um pedido de compra #${pedido.numero_pedido || pedido.pedido_id} no valor de ${formatCurrency(pedido.valor_total)} para o fornecedor ${pedido.fornecedor_nome || ''}.\n\n` +
+          `Acesse o link abaixo para visualizar os detalhes e enviar sua proposta:\n` +
+          `${linkPublico}\n\n` +
+          `Atenciosamente,\n${empresaNome}`
+        )
+      }
+
+      window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
+      return
+    }
+
+    // Se nao tem representante, enviar para o FORNECEDOR (comportamento original)
     const phone = formatPhoneForWhatsApp(pedido.fornecedor_telefone)
     if (!phone) {
       alert('Fornecedor sem telefone cadastrado')
@@ -552,7 +674,6 @@ export default function PedidoCompraPage() {
     }
 
     // Gerar link publico para o fornecedor visualizar o pedido
-    const baseUrl = window.location.origin
     const linkPublico = `${baseUrl}/publico/pedido/${pedido.pedido_id}`
 
     const message = encodeURIComponent(
@@ -560,7 +681,7 @@ export default function PedidoCompraPage() {
       `Tenho um pedido de compra #${pedido.numero_pedido || pedido.pedido_id} no valor de ${formatCurrency(pedido.valor_total)}.\n\n` +
       `Acesse o link abaixo para visualizar os detalhes e enviar sua proposta:\n` +
       `${linkPublico}\n\n` +
-      `Atenciosamente.`
+      `Atenciosamente,\n${empresaNome}`
     )
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
   }
@@ -1071,15 +1192,32 @@ export default function PedidoCompraPage() {
                                   )}
 
                                   {/* WhatsApp */}
-                                  {pedido.status !== 'Rascunho' && pedido.status !== 'Cancelada' && (
-                                    <button
-                                      onClick={() => handleWhatsApp(pedido)}
-                                      className="inline-flex items-center justify-center w-8 h-8 text-green-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                      title={pedido.fornecedor_telefone ? 'Enviar via WhatsApp' : 'Fornecedor sem telefone'}
-                                    >
-                                      <WhatsAppIcon />
-                                    </button>
-                                  )}
+                                  {pedido.status !== 'Rascunho' && pedido.status !== 'Cancelada' && (() => {
+                                    const rep = pedido.fornecedor_id ? representantesPorFornecedor[pedido.fornecedor_id] : null
+                                    const temRepresentante = rep && rep.telefone
+                                    const temTelefone = temRepresentante || pedido.fornecedor_telefone
+
+                                    return (
+                                      <button
+                                        onClick={() => handleWhatsApp(pedido)}
+                                        className={`inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+                                          temTelefone
+                                            ? 'text-green-500 hover:text-green-600 hover:bg-green-50'
+                                            : 'text-gray-300 cursor-not-allowed'
+                                        }`}
+                                        title={
+                                          temRepresentante
+                                            ? `Enviar para representante: ${rep.nome}${!rep.cadastrado ? ' (primeiro acesso)' : ''}`
+                                            : pedido.fornecedor_telefone
+                                            ? 'Enviar para fornecedor'
+                                            : 'Sem telefone cadastrado'
+                                        }
+                                        disabled={!temTelefone}
+                                      >
+                                        <WhatsAppIcon />
+                                      </button>
+                                    )
+                                  })()}
 
                                   {/* Excluir - apenas Rascunho */}
                                   {pedido.status === 'Rascunho' && (
