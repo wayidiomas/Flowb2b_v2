@@ -124,6 +124,24 @@ export async function POST(request: NextRequest) {
     const supabase = createServerSupabaseClient()
     const empresaId = user.empresaId
 
+    // Verificar duplicidade por telefone na mesma empresa
+    if (body.telefone) {
+      const telefoneNormalizado = body.telefone.replace(/\D/g, '')
+      const { data: existentes } = await supabase
+        .from('representantes')
+        .select('id, nome, telefone')
+        .eq('empresa_id', empresaId)
+        .eq('ativo', true)
+
+      const duplicado = existentes?.find(r => r.telefone?.replace(/\D/g, '') === telefoneNormalizado)
+      if (duplicado) {
+        return NextResponse.json(
+          { error: `Ja existe um representante com esse telefone: ${duplicado.nome}` },
+          { status: 409 }
+        )
+      }
+    }
+
     // Verificar se os fornecedores existem e pertencem a empresa
     const { data: fornecedores, error: fornError } = await supabase
       .from('fornecedores')
