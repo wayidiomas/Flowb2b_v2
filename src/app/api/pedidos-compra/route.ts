@@ -403,7 +403,16 @@ export async function POST(request: NextRequest) {
       try {
         const errorJson = JSON.parse(errorText)
         const fields = errorJson.error?.fields || []
+        // Caso 1: Bling exige numeroPedido (numeracao manual obrigatoria)
         needsNumero = fields.some((f: { element?: string }) => f.element === 'numeroPedido')
+        // Caso 2: Auto-numeracao do Bling quebrada (numero ja existe)
+        if (!needsNumero) {
+          const errorMsg = errorJson.error?.message || errorJson.error?.description || ''
+          if (errorMsg.includes('foi lan') && errorMsg.includes('com este n')) {
+            needsNumero = true
+            console.log('Bling com auto-numeracao quebrada, forcando numero manual')
+          }
+        }
       } catch { /* ignore parse error */ }
 
       if (needsNumero) {
