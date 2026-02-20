@@ -3,27 +3,10 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useRepresentanteAuth } from '@/contexts/RepresentanteAuthContext'
+import { RepresentanteLayout } from '@/components/layout/RepresentanteLayout'
 import { CancelamentoModal } from '@/components/pedido/CancelamentoModal'
 import { Button } from '@/components/ui'
-
-// Icons
-function HomeIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-    </svg>
-  )
-}
-
-function LogoutIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-    </svg>
-  )
-}
 
 interface PedidoItem {
   id: number
@@ -153,13 +136,13 @@ const eventoLabels: Record<string, string> = {
 const autorColors: Record<string, string> = {
   lojista: 'bg-blue-500',
   fornecedor: 'bg-amber-500',
-  representante: 'bg-violet-500',
+  representante: 'bg-[#336FB6]',
   sistema: 'bg-gray-400',
 }
 
 export default function RepresentantePedidoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { user, logout, loading: authLoading } = useRepresentanteAuth()
+  const { user, loading: authLoading } = useRepresentanteAuth()
   const [data, setData] = useState<PedidoDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [sugestoes, setSugestoes] = useState<ItemSugestao[]>([])
@@ -445,58 +428,26 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-4">
-                <div className="w-[120px] h-8 bg-gray-200 rounded animate-pulse" />
-                <div className="w-24 h-6 bg-gray-200 rounded animate-pulse" />
-              </div>
-            </div>
-          </div>
-        </header>
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="space-y-6">
-            <div className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
-            <div className="h-48 bg-gray-200 rounded-xl animate-pulse" />
-            <div className="h-96 bg-gray-200 rounded-xl animate-pulse" />
-          </div>
-        </main>
-      </div>
+      <RepresentanteLayout>
+        <div className="space-y-6">
+          <div className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
+          <div className="h-48 bg-gray-200 rounded-2xl animate-pulse" />
+          <div className="h-96 bg-gray-200 rounded-2xl animate-pulse" />
+        </div>
+      </RepresentanteLayout>
     )
   }
 
   if (!data) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-4">
-                <Image
-                  src="/assets/branding/logo.png"
-                  alt="FlowB2B"
-                  width={120}
-                  height={32}
-                  className="object-contain"
-                />
-                <span className="px-2 py-1 bg-violet-100 text-violet-700 text-xs font-medium rounded">
-                  Representante
-                </span>
-              </div>
-            </div>
-          </div>
-        </header>
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center py-12">
-            <p className="text-gray-500">Pedido nao encontrado.</p>
-            <Link href="/representante/pedidos" className="text-violet-600 hover:text-violet-700 mt-2 inline-block">
-              Voltar para pedidos
-            </Link>
-          </div>
-        </main>
-      </div>
+      <RepresentanteLayout>
+        <div className="text-center py-12">
+          <p className="text-gray-500">Pedido nao encontrado.</p>
+          <Link href="/representante/pedidos" className="text-[#336FB6] hover:text-[#2660A5] mt-2 inline-block">
+            Voltar para pedidos
+          </Link>
+        </div>
+      </RepresentanteLayout>
     )
   }
 
@@ -506,47 +457,8 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
   const canCancel = !ESTADOS_FINAIS.includes(pedido.status_interno)
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
-              <Image
-                src="/assets/branding/logo.png"
-                alt="FlowB2B"
-                width={120}
-                height={32}
-                className="object-contain"
-              />
-              <span className="px-2 py-1 bg-violet-100 text-violet-700 text-xs font-medium rounded">
-                Representante
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Link
-                href="/representante/dashboard"
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <HomeIcon />
-                Dashboard
-              </Link>
-              <button
-                onClick={logout}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <LogoutIcon />
-                Sair
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-6">
+    <RepresentanteLayout>
+      <div className="space-y-6">
           {/* Toast */}
           {toast && (
             <div className={`px-4 py-3 rounded-lg text-sm ${
@@ -561,7 +473,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
             <div>
               <button
                 onClick={() => router.push('/representante/pedidos')}
-                className="text-sm text-gray-500 hover:text-violet-600 mb-2 flex items-center gap-1 transition-colors"
+                className="text-sm text-gray-500 hover:text-[#336FB6] mb-2 flex items-center gap-1 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -575,11 +487,11 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                 {pedido.empresa_nome} - {new Date(pedido.data).toLocaleDateString('pt-BR')}
               </p>
               {/* Badge do Fornecedor */}
-              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-violet-50 border border-violet-200 rounded-lg">
-                <svg className="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#336FB6]/5 border border-[#336FB6]/20 rounded-lg">
+                <svg className="w-4 h-4 text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
-                <span className="text-sm font-medium text-violet-700">{pedido.fornecedor_nome}</span>
+                <span className="text-sm font-medium text-[#336FB6]">{pedido.fornecedor_nome}</span>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -705,7 +617,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                     value={observacaoRespostaCP}
                     onChange={(e) => setObservacaoRespostaCP(e.target.value)}
                     rows={2}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                     placeholder="Adicione uma observacao sobre sua decisao..."
                   />
                 </div>
@@ -765,9 +677,9 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                   R$ {(pedido.frete || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               </div>
-              <div className="p-3 bg-violet-100/50 rounded-xl">
-                <p className="text-sm text-violet-600">Total</p>
-                <p className="text-lg font-bold text-violet-700">
+              <div className="p-3 bg-[#336FB6]/10 rounded-xl">
+                <p className="text-sm text-[#336FB6]">Total</p>
+                <p className="text-lg font-bold text-[#336FB6]">
                   R$ {pedido.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               </div>
@@ -777,17 +689,17 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
             {canSuggest && totaisSugeridos && (
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <div className="flex items-center gap-2 mb-3">
-                  <svg className="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
-                  <h3 className="text-sm font-semibold text-violet-600">Preview da sua sugestao</h3>
+                  <h3 className="text-sm font-semibold text-[#336FB6]">Preview da sua sugestao</h3>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-3 bg-violet-50 rounded-xl border border-violet-200">
-                    <p className="text-sm text-violet-600/70">Total c/ sugestao</p>
-                    <p className="text-lg font-semibold text-violet-700">
+                  <div className="p-3 bg-[#336FB6]/5 rounded-xl border border-[#336FB6]/20">
+                    <p className="text-sm text-[#336FB6]/70">Total c/ sugestao</p>
+                    <p className="text-lg font-semibold text-[#336FB6]">
                       R$ {totaisSugeridos.totalSugeridoItens.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
@@ -805,9 +717,9 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                       </p>
                     </div>
                   )}
-                  <div className="p-3 bg-violet-100 rounded-xl border border-violet-300">
-                    <p className="text-sm text-violet-700">Total final sugerido</p>
-                    <p className="text-lg font-bold text-violet-800">
+                  <div className="p-3 bg-[#336FB6]/10 rounded-xl border border-[#336FB6]/30">
+                    <p className="text-sm text-[#336FB6]">Total final sugerido</p>
+                    <p className="text-lg font-bold text-[#336FB6]">
                       R$ {totaisSugeridos.totalFinal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
@@ -942,7 +854,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                         valor_minimo_pedido: Number(e.target.value)
                       }))}
                       placeholder="0,00"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                     />
                   </div>
                   <p className="text-xs text-gray-400 mt-1">Para aplicar desc/bonif geral</p>
@@ -964,7 +876,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                         desconto_geral: Number(e.target.value)
                       }))}
                       placeholder="0"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                     />
                     <span className="text-sm text-gray-500">%</span>
                   </div>
@@ -986,7 +898,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                         bonificacao_quantidade_geral: Number(e.target.value)
                       }))}
                       placeholder="0"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                     />
                     <span className="text-sm text-gray-500">un</span>
                   </div>
@@ -1008,7 +920,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                         prazo_entrega_dias: Number(e.target.value)
                       }))}
                       placeholder="0"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                     />
                     <span className="text-sm text-gray-500">dias</span>
                   </div>
@@ -1026,7 +938,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                       ...prev,
                       validade_proposta: e.target.value
                     }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                   />
                   <p className="text-xs text-gray-400 mt-1">Data limite</p>
                 </div>
@@ -1036,7 +948,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
 
           {/* Itens + Formulario de sugestao */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 bg-violet-50">
+            <div className="px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
               <h2 className="text-lg font-semibold text-gray-900">
                 {canSuggest ? 'Itens - Enviar sugestao' : 'Itens do pedido'}
               </h2>
@@ -1049,7 +961,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-violet-50/50">
+                  <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
                     <th className="px-4 py-3">Produto</th>
                     <th className="px-4 py-3">Codigos</th>
                     <th className="px-4 py-3">Und</th>
@@ -1057,11 +969,11 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                     <th className="px-4 py-3 text-right">Qtd original</th>
                     {canSuggest && (
                       <>
-                        <th className="px-4 py-3 text-right bg-violet-100/50">Qtd sugerida</th>
-                        <th className="px-4 py-3 text-right bg-violet-100/50">Desconto %</th>
-                        <th className="px-4 py-3 text-right bg-violet-100/50">Bonif. un</th>
-                        <th className="px-4 py-3 bg-violet-100/50">Validade</th>
-                        <th className="px-4 py-3 text-right bg-violet-100">Subtotal sugerido</th>
+                        <th className="px-4 py-3 text-right bg-[#336FB6]/10">Qtd sugerida</th>
+                        <th className="px-4 py-3 text-right bg-[#336FB6]/10">Desconto %</th>
+                        <th className="px-4 py-3 text-right bg-[#336FB6]/10">Bonif. un</th>
+                        <th className="px-4 py-3 bg-[#336FB6]/10">Validade</th>
+                        <th className="px-4 py-3 text-right bg-[#336FB6]/10">Subtotal sugerido</th>
                       </>
                     )}
                     <th className="px-4 py-3 text-right">Subtotal original</th>
@@ -1105,16 +1017,16 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                         </td>
                         {canSuggest && sug && (
                           <>
-                            <td className="px-4 py-2 bg-violet-50/30">
+                            <td className="px-4 py-2 bg-[#336FB6]/5">
                               <input
                                 type="number"
                                 min={0}
                                 value={sug.quantidade_sugerida}
                                 onChange={(e) => updateSugestao(item.id, 'quantidade_sugerida', Number(e.target.value))}
-                                className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+                                className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                               />
                             </td>
-                            <td className="px-4 py-2 bg-violet-50/30">
+                            <td className="px-4 py-2 bg-[#336FB6]/5">
                               <input
                                 type="number"
                                 min={0}
@@ -1122,31 +1034,31 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                                 step={0.5}
                                 value={sug.desconto_percentual || ''}
                                 onChange={(e) => updateSugestao(item.id, 'desconto_percentual', Number(e.target.value) || 0)}
-                                className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+                                className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                                 placeholder="0"
                               />
                             </td>
-                            <td className="px-4 py-2 bg-violet-50/30">
+                            <td className="px-4 py-2 bg-[#336FB6]/5">
                               <input
                                 type="number"
                                 min={0}
                                 step={1}
                                 value={sug.bonificacao_quantidade || ''}
                                 onChange={(e) => updateSugestao(item.id, 'bonificacao_quantidade', Number(e.target.value) || 0)}
-                                className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+                                className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                                 placeholder="0"
                               />
                             </td>
-                            <td className="px-4 py-2 bg-violet-50/30">
+                            <td className="px-4 py-2 bg-[#336FB6]/5">
                               <input
                                 id={`validade-${item.id}`}
                                 type="date"
                                 value={sug.validade}
                                 onChange={(e) => updateSugestao(item.id, 'validade', e.target.value)}
-                                className="px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-violet-500 focus:border-violet-500 transition-all"
+                                className="px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] transition-all"
                               />
                             </td>
-                            <td className="px-4 py-3 bg-violet-100/30">
+                            <td className="px-4 py-3 bg-[#336FB6]/10">
                               {(() => {
                                 const subtotalBase = item.valor * sug.quantidade_sugerida
                                 const desconto = subtotalBase * (sug.desconto_percentual / 100)
@@ -1156,7 +1068,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
 
                                 return (
                                   <div className="text-right">
-                                    <p className="text-sm font-semibold text-violet-700">
+                                    <p className="text-sm font-semibold text-[#336FB6]">
                                       R$ {subtotalComDesconto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </p>
                                     {diferenca !== 0 && (
@@ -1194,7 +1106,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                     value={observacao}
                     onChange={(e) => setObservacao(e.target.value)}
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
                     placeholder="Justifique suas sugestoes, informe prazos, condicoes especiais..."
                   />
                 </div>
@@ -1204,7 +1116,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                     size="lg"
                     loading={submitting}
                     onClick={handleSubmitSugestao}
-                    className="bg-violet-600 hover:bg-violet-700"
+                    className="bg-[#336FB6] hover:bg-[#2660A5]"
                   >
                     Enviar sugestao
                   </Button>
@@ -1261,8 +1173,8 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                   Voce sera notificado quando houver uma resposta.
                 </p>
 
-                <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 mb-6">
-                  <p className="text-sm text-violet-700 text-center">
+                <div className="bg-[#336FB6]/5 border border-[#336FB6]/20 rounded-lg p-3 mb-6">
+                  <p className="text-sm text-[#336FB6] text-center">
                     <strong>Aguarde:</strong> O lojista ira analisar sua proposta e podera aceitar,
                     rejeitar ou manter o pedido original.
                   </p>
@@ -1285,7 +1197,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                       router.refresh()
                     }}
                     variant="primary"
-                    className="flex-1 bg-violet-600 hover:bg-violet-700"
+                    className="flex-1 bg-[#336FB6] hover:bg-[#2660A5]"
                   >
                     Continuar
                   </Button>
@@ -1304,7 +1216,6 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
             subtitulo="Informe o motivo do cancelamento. O lojista sera notificado."
           />
         </div>
-      </main>
-    </div>
+    </RepresentanteLayout>
   )
 }
