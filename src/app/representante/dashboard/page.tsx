@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useRepresentanteAuth } from '@/contexts/RepresentanteAuthContext'
+import { RepresentanteLayout } from '@/components/layout/RepresentanteLayout'
 
 // Icons
 function PackageIcon() {
@@ -46,14 +46,6 @@ function ArrowRightIcon() {
   )
 }
 
-function LogoutIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-    </svg>
-  )
-}
-
 interface DashboardStats {
   total_pedidos: number
   pedidos_pendentes: number
@@ -64,7 +56,7 @@ interface DashboardStats {
 }
 
 export default function RepresentanteDashboardPage() {
-  const { user, fornecedoresVinculados, logout, loading: authLoading } = useRepresentanteAuth()
+  const { user, fornecedoresVinculados, loading: authLoading } = useRepresentanteAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -88,69 +80,30 @@ export default function RepresentanteDashboardPage() {
     }
   }, [authLoading, user])
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value)
-  }
-
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-600" />
-      </div>
+      <RepresentanteLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#336FB6]" />
+        </div>
+      </RepresentanteLayout>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
-              <Image
-                src="/assets/branding/logo.png"
-                alt="FlowB2B"
-                width={120}
-                height={32}
-                className="object-contain"
-              />
-              <span className="px-2 py-1 bg-violet-100 text-violet-700 text-xs font-medium rounded">
-                Representante
-              </span>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">
-                Ola, <span className="font-medium text-gray-900">{user?.nome}</span>
-              </span>
-              <button
-                onClick={logout}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <LogoutIcon />
-                Sair
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <RepresentanteLayout>
+      <div className="space-y-6">
         {/* Welcome */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 mt-1">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">
             Visao geral dos seus pedidos e fornecedores
           </p>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">Total de Pedidos</p>
@@ -158,13 +111,13 @@ export default function RepresentanteDashboardPage() {
                   {stats?.total_pedidos || 0}
                 </p>
               </div>
-              <div className="w-12 h-12 bg-violet-100 rounded-lg flex items-center justify-center text-violet-600">
+              <div className="w-12 h-12 bg-[#336FB6]/10 rounded-xl flex items-center justify-center text-[#336FB6]">
                 <PackageIcon />
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">Pendentes</p>
@@ -172,27 +125,27 @@ export default function RepresentanteDashboardPage() {
                   {stats?.pedidos_pendentes || 0}
                 </p>
               </div>
-              <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
+              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
                 <ClockIcon />
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">Aprovados</p>
-                <p className="text-2xl font-bold text-green-600 mt-1">
+                <p className="text-2xl font-bold text-emerald-600 mt-1">
                   {stats?.pedidos_aprovados || 0}
                 </p>
               </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center text-green-600">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600">
                 <CheckCircleIcon />
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">Fornecedores</p>
@@ -200,7 +153,7 @@ export default function RepresentanteDashboardPage() {
                   {stats?.fornecedores_ativos || 0}
                 </p>
               </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+              <div className="w-12 h-12 bg-[#336FB6]/10 rounded-xl flex items-center justify-center text-[#336FB6]">
                 <BuildingIcon />
               </div>
             </div>
@@ -208,15 +161,15 @@ export default function RepresentanteDashboardPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-8">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Acoes Rapidas</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Link
               href="/representante/pedidos"
-              className="flex items-center justify-between p-4 bg-violet-50 rounded-lg hover:bg-violet-100 transition-colors group"
+              className="flex items-center justify-between p-4 bg-[#336FB6]/5 rounded-xl hover:bg-[#336FB6]/10 transition-colors group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center text-violet-600 group-hover:bg-violet-200">
+                <div className="w-10 h-10 bg-[#336FB6]/10 rounded-xl flex items-center justify-center text-[#336FB6] group-hover:bg-[#336FB6]/20">
                   <PackageIcon />
                 </div>
                 <div>
@@ -229,10 +182,10 @@ export default function RepresentanteDashboardPage() {
 
             <Link
               href="/representante/pedidos?status=enviado_ao_fornecedor"
-              className="flex items-center justify-between p-4 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors group"
+              className="flex items-center justify-between p-4 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600 group-hover:bg-amber-200">
+                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600 group-hover:bg-amber-200">
                   <ClockIcon />
                 </div>
                 <div>
@@ -248,7 +201,7 @@ export default function RepresentanteDashboardPage() {
         </div>
 
         {/* Fornecedores Vinculados */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Fornecedores Vinculados
           </h2>
@@ -271,7 +224,7 @@ export default function RepresentanteDashboardPage() {
                   </div>
                   <Link
                     href={`/representante/pedidos?fornecedor_id=${forn.fornecedor_id}`}
-                    className="text-sm text-violet-600 hover:text-violet-700 font-medium"
+                    className="text-sm text-[#336FB6] hover:text-[#2660A5] font-medium"
                   >
                     Ver pedidos
                   </Link>
@@ -280,7 +233,7 @@ export default function RepresentanteDashboardPage() {
             </div>
           )}
         </div>
-      </main>
-    </div>
+      </div>
+    </RepresentanteLayout>
   )
 }

@@ -67,13 +67,12 @@ export async function GET(request: NextRequest) {
         numero,
         data,
         data_prevista,
-        status,
+        status_interno,
         total,
         desconto,
-        valor_frete,
+        frete,
         fornecedor_id,
         empresa_id,
-        created_at,
         updated_at,
         fornecedores (
           id,
@@ -87,11 +86,11 @@ export async function GET(request: NextRequest) {
         )
       `, { count: 'exact' })
       .in('fornecedor_id', fornecedorIds)
-      .in('status', ['enviado_ao_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'cancelado', 'contra_proposta'])
+      .in('status_interno', ['enviado_ao_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'cancelado', 'contra_proposta'])
 
     // Filtros opcionais
     if (status) {
-      query = query.eq('status', status)
+      query = query.eq('status_interno', status)
     }
 
     if (fornecedorId) {
@@ -100,7 +99,7 @@ export async function GET(request: NextRequest) {
 
     // Ordenacao e paginacao
     query = query
-      .order('created_at', { ascending: false })
+      .order('data', { ascending: false })
       .range(offset, offset + limit - 1)
 
     const { data: pedidos, error, count } = await query
@@ -125,16 +124,16 @@ export async function GET(request: NextRequest) {
         numero: p.numero,
         data: p.data,
         data_prevista: p.data_prevista,
-        status: p.status,
+        status: p.status_interno,
         total: p.total,
         desconto: p.desconto,
-        valor_frete: p.valor_frete,
+        frete: p.frete,
         fornecedor_id: p.fornecedor_id,
         fornecedor_nome: forn?.nome || '',
         fornecedor_cnpj: forn?.cnpj,
         empresa_id: p.empresa_id,
         empresa_nome: emp?.nome_fantasia || emp?.razao_social || '',
-        created_at: p.created_at,
+        created_at: p.updated_at,
         updated_at: p.updated_at,
       }
     }) || []
