@@ -137,8 +137,8 @@ async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeo
   return tokens.access_token
 }
 
-// Funcao para obter o proximo numero de pedido de compra
-async function getNextNumeroPedido(empresaId: number, supabase: ReturnType<typeof createServerSupabaseClient>): Promise<number> {
+// Funcao para obter o proximo numero de pedido via banco local (fallback)
+async function getNextNumeroPedidoLocal(empresaId: number, supabase: ReturnType<typeof createServerSupabaseClient>): Promise<number> {
   const { data, error } = await supabase
     .from('pedidos_compra')
     .select('numero')
@@ -152,6 +152,47 @@ async function getNextNumeroPedido(empresaId: number, supabase: ReturnType<typeo
   }
 
   return (parseInt(data.numero, 10) || 0) + 1
+}
+
+// Funcao para obter o proximo numero consultando o Bling (fonte real da numeracao)
+async function getNextNumeroPedido(
+  accessToken: string,
+  empresaId: number,
+  supabase: ReturnType<typeof createServerSupabaseClient>
+): Promise<number> {
+  try {
+    const result = await blingFetch(
+      `${BLING_CONFIG.apiUrl}/pedidos/compras?pagina=1&limite=5`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      },
+      { context: 'buscar ultimo numero pedido compra', maxRetries: 2 }
+    )
+
+    if (result.response.ok) {
+      const json = await result.response.json()
+      const pedidos = json.data || []
+
+      if (pedidos.length > 0) {
+        const maxNumero = Math.max(...pedidos.map((p: { numero?: number }) => p.numero || 0))
+        if (maxNumero > 0) {
+          console.log(`Proximo numero de pedido (via Bling): ${maxNumero + 1}`)
+          return maxNumero + 1
+        }
+      }
+    } else {
+      console.warn('Bling retornou erro ao buscar ultimo pedido:', result.response.status)
+    }
+  } catch (err) {
+    console.warn('Falha ao consultar Bling para numero de pedido, usando fallback local:', err)
+  }
+
+  // Fallback: usar banco local
+  console.log('Usando fallback local para numero de pedido')
+  return getNextNumeroPedidoLocal(empresaId, supabase)
 }
 
 // Funcao para montar o payload do Bling
@@ -366,8 +407,8 @@ export async function POST(request: NextRequest) {
       } catch { /* ignore parse error */ }
 
       if (needsNumero) {
-        console.log('Bling exige numeroPedido, buscando proximo numero...')
-        const nextNumero = await getNextNumeroPedido(empresaId, supabase)
+        console.log('Bling exige numeroPedido, consultando Bling para proximo numero...')
+        const nextNumero = await getNextNumeroPedido(accessToken, empresaId, supabase)
         const retryPayload = { ...blingPayload, numeroPedido: nextNumero }
         console.log('Retry com numeroPedido:', nextNumero)
 
