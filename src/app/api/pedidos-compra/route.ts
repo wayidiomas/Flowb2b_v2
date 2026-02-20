@@ -154,7 +154,7 @@ async function getNextNumeroPedidoLocal(empresaId: number, supabase: ReturnType<
   return (parseInt(data.numero, 10) || 0) + 1
 }
 
-// Funcao para obter o proximo numero consultando o Bling + banco local (usa o MAIOR entre ambos)
+// Funcao para obter o proximo numero consultando o Bling (filtro por data recente) + banco local
 async function getNextNumeroPedido(
   accessToken: string,
   empresaId: number,
@@ -163,27 +163,41 @@ async function getNextNumeroPedido(
   let maxNumeroBling = 0
   let maxNumeroLocal = 0
 
-  // Buscar maior numero no Bling (limite maximo 100 por pagina, sem suporte a ordenacao)
+  // Buscar pedidos recentes no Bling para pegar os numeros mais altos
   try {
-    const result = await blingFetch(
-      `${BLING_CONFIG.apiUrl}/pedidos/compras?pagina=1&limite=100`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      },
-      { context: 'buscar ultimo numero pedido compra', maxRetries: 2 }
-    )
+    const hoje = new Date()
+    const dataFinal = hoje.toISOString().split('T')[0]
 
-    if (result.response.ok) {
-      const json = await result.response.json()
-      const pedidos = json.data || []
-      if (pedidos.length > 0) {
-        maxNumeroBling = Math.max(...pedidos.map((p: { numero?: number }) => p.numero || 0))
+    // Tentar ultima semana primeiro (mais rapido e preciso)
+    for (const dias of [7, 30]) {
+      const inicio = new Date(hoje)
+      inicio.setDate(inicio.getDate() - dias)
+      const dataInicial = inicio.toISOString().split('T')[0]
+
+      const result = await blingFetch(
+        `${BLING_CONFIG.apiUrl}/pedidos/compras?pagina=1&limite=100&dataInicial=${dataInicial}&dataFinal=${dataFinal}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        },
+        { context: 'buscar ultimo numero pedido compra', maxRetries: 2 }
+      )
+
+      if (result.response.ok) {
+        const json = await result.response.json()
+        const pedidos = json.data || []
+        if (pedidos.length > 0) {
+          maxNumeroBling = Math.max(...pedidos.map((p: { numero?: number }) => p.numero || 0))
+          console.log(`Bling: ${pedidos.length} pedidos nos ultimos ${dias} dias, max numero: ${maxNumeroBling}`)
+          break
+        }
+        console.log(`Bling: 0 pedidos nos ultimos ${dias} dias, tentando periodo maior...`)
+      } else {
+        console.warn('Bling retornou erro ao buscar pedidos:', result.response.status)
+        break
       }
-    } else {
-      console.warn('Bling retornou erro ao buscar pedidos:', result.response.status)
     }
   } catch (err) {
     console.warn('Falha ao consultar Bling para numero de pedido:', err)
@@ -425,7 +439,7 @@ export async function POST(request: NextRequest) {
       if (needsNumero) {
         console.log('Bling exige numeroPedido, consultando Bling para proximo numero...')
         let nextNumero = await getNextNumeroPedido(accessToken, empresaId, supabase)
-        const MAX_TENTATIVAS_NUMERO = 5
+        const MAX_TENTATIVAS_NUMERO = 10
 
         for (let tentativa = 1; tentativa <= MAX_TENTATIVAS_NUMERO; tentativa++) {
           const retryPayload = { ...blingPayload, numeroPedido: nextNumero }
