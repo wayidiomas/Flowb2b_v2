@@ -154,15 +154,19 @@ async function getNextNumeroPedidoLocal(empresaId: number, supabase: ReturnType<
   return (parseInt(data.numero, 10) || 0) + 1
 }
 
-// Funcao para obter o proximo numero consultando o Bling (fonte real da numeracao)
+// Funcao para obter o proximo numero consultando o Bling + banco local (usa o MAIOR entre ambos)
 async function getNextNumeroPedido(
   accessToken: string,
   empresaId: number,
   supabase: ReturnType<typeof createServerSupabaseClient>
 ): Promise<number> {
+  let maxNumeroBling = 0
+  let maxNumeroLocal = 0
+
+  // Buscar maior numero no Bling (limite maximo 100 por pagina, sem suporte a ordenacao)
   try {
     const result = await blingFetch(
-      `${BLING_CONFIG.apiUrl}/pedidos/compras?pagina=1&limite=5`,
+      `${BLING_CONFIG.apiUrl}/pedidos/compras?pagina=1&limite=100`,
       {
         method: 'GET',
         headers: {
@@ -175,24 +179,27 @@ async function getNextNumeroPedido(
     if (result.response.ok) {
       const json = await result.response.json()
       const pedidos = json.data || []
-
       if (pedidos.length > 0) {
-        const maxNumero = Math.max(...pedidos.map((p: { numero?: number }) => p.numero || 0))
-        if (maxNumero > 0) {
-          console.log(`Proximo numero de pedido (via Bling): ${maxNumero + 1}`)
-          return maxNumero + 1
-        }
+        maxNumeroBling = Math.max(...pedidos.map((p: { numero?: number }) => p.numero || 0))
       }
     } else {
-      console.warn('Bling retornou erro ao buscar ultimo pedido:', result.response.status)
+      console.warn('Bling retornou erro ao buscar pedidos:', result.response.status)
     }
   } catch (err) {
-    console.warn('Falha ao consultar Bling para numero de pedido, usando fallback local:', err)
+    console.warn('Falha ao consultar Bling para numero de pedido:', err)
   }
 
-  // Fallback: usar banco local
-  console.log('Usando fallback local para numero de pedido')
-  return getNextNumeroPedidoLocal(empresaId, supabase)
+  // Buscar maior numero no banco local (cobre todos os pedidos sincronizados)
+  try {
+    maxNumeroLocal = (await getNextNumeroPedidoLocal(empresaId, supabase)) - 1
+  } catch { /* ignore */ }
+
+  // Usar o MAIOR entre Bling e banco local para evitar conflito
+  const maxNumero = Math.max(maxNumeroBling, maxNumeroLocal)
+  const nextNumero = maxNumero > 0 ? maxNumero + 1 : 1
+
+  console.log(`Proximo numero de pedido: ${nextNumero} (Bling max: ${maxNumeroBling}, Local max: ${maxNumeroLocal})`)
+  return nextNumero
 }
 
 // Funcao para montar o payload do Bling
@@ -417,32 +424,54 @@ export async function POST(request: NextRequest) {
 
       if (needsNumero) {
         console.log('Bling exige numeroPedido, consultando Bling para proximo numero...')
-        const nextNumero = await getNextNumeroPedido(accessToken, empresaId, supabase)
-        const retryPayload = { ...blingPayload, numeroPedido: nextNumero }
-        console.log('Retry com numeroPedido:', nextNumero)
+        let nextNumero = await getNextNumeroPedido(accessToken, empresaId, supabase)
+        const MAX_TENTATIVAS_NUMERO = 5
 
-        try {
-          const retryResult = await blingFetch(
-            `${BLING_CONFIG.apiUrl}/pedidos/compras`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
+        for (let tentativa = 1; tentativa <= MAX_TENTATIVAS_NUMERO; tentativa++) {
+          const retryPayload = { ...blingPayload, numeroPedido: nextNumero }
+          console.log(`Tentativa ${tentativa}/${MAX_TENTATIVAS_NUMERO} com numeroPedido: ${nextNumero}`)
+
+          try {
+            const retryResult = await blingFetch(
+              `${BLING_CONFIG.apiUrl}/pedidos/compras`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify(retryPayload),
               },
-              body: JSON.stringify(retryPayload),
-            },
-            { context: 'criar pedido com numeroPedido', maxRetries: 5 }
-          )
-          blingResponse = retryResult.response
-        } catch (err) {
-          if (err instanceof BlingRateLimitError) {
-            return NextResponse.json(
-              { error: err.message },
-              { status: 503 }
+              { context: 'criar pedido com numeroPedido', maxRetries: 5 }
             )
+            blingResponse = retryResult.response
+          } catch (err) {
+            if (err instanceof BlingRateLimitError) {
+              return NextResponse.json(
+                { error: err.message },
+                { status: 503 }
+              )
+            }
+            throw err
           }
-          throw err
+
+          // Se deu certo ou erro diferente de numero duplicado, sair do loop
+          if (blingResponse.ok) break
+
+          const retryText = await blingResponse.text()
+          const isDuplicateNumero = retryText.includes('foi lan') && retryText.includes('com este n')
+          if (!isDuplicateNumero || tentativa === MAX_TENTATIVAS_NUMERO) {
+            // Remontar uma Response para o fluxo abaixo poder ler
+            blingResponse = new Response(retryText, {
+              status: blingResponse.status,
+              headers: blingResponse.headers,
+            })
+            break
+          }
+
+          // Numero ainda conflita, incrementar e tentar proximo
+          nextNumero++
+          console.log(`Numero ${nextNumero - 1} ja existe no Bling, tentando ${nextNumero}...`)
         }
       }
 
