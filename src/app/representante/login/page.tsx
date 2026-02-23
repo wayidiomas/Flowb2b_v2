@@ -17,7 +17,6 @@ function UserGroupIcon() {
 
 function RepresentanteLoginForm() {
   const [email, setEmail] = useState('')
-  const [codigoAcesso, setCodigoAcesso] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -33,7 +32,7 @@ function RepresentanteLoginForm() {
     setError('')
     setLoading(true)
 
-    const result = await login(email, codigoAcesso, password)
+    const result = await login(email, password)
 
     if (result.success) {
       router.push(redirect)
@@ -77,15 +76,6 @@ function RepresentanteLoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="seu@email.com"
-            />
-
-            <Input
-              label="Codigo de Acesso"
-              type="text"
-              required
-              value={codigoAcesso}
-              onChange={(e) => setCodigoAcesso(e.target.value.toUpperCase())}
-              placeholder="REP-XXXXXX"
             />
 
             <div className="relative">
@@ -138,16 +128,10 @@ function RepresentanteLoginForm() {
             </button>
           </form>
 
-          {/* Register link */}
+          {/* Info */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
-              Nao tem conta?{' '}
-              <Link
-                href={redirect !== '/representante/dashboard' ? `/representante/registro?redirect=${encodeURIComponent(redirect)}` : '/representante/registro'}
-                className="text-violet-600 hover:text-violet-700 font-semibold"
-              >
-                Cadastre-se
-              </Link>
+              Para criar conta, utilize o link de convite enviado pelo lojista.
             </p>
           </div>
 

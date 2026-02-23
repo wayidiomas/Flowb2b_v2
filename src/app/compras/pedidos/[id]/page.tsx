@@ -304,8 +304,8 @@ export default function VisualizarPedidoPage() {
           `*Codigo de Acesso:* ${codigoAcesso}\n\n` +
           `Acesse o link abaixo para visualizar o pedido #${pedido.numero}:\n` +
           `${linkPublico}\n\n` +
-          `Para acessar o portal de representantes, registre-se em:\n` +
-          `${window.location.origin}/representante/registro\n\n` +
+          `Para acessar o portal de representantes, clique no link:\n` +
+          `${window.location.origin}/representante/convite/${codigoAcesso}\n\n` +
           `Atenciosamente.`
         )
         window.open(`https://wa.me/${telefoneWhatsApp}?text=${mensagem}`, '_blank')

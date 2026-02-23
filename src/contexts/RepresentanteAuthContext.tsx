@@ -33,7 +33,7 @@ interface RepresentanteAuthContextType {
   representantes: Representante[]
   fornecedoresVinculados: FornecedorVinculado[]
   loading: boolean
-  login: (email: string, codigoAcesso: string, password: string) => Promise<{ success: boolean; error?: string }>
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
 }
@@ -79,19 +79,19 @@ export function RepresentanteAuthProvider({ children }: { children: ReactNode })
   // Redirecionar se nao autenticado
   useEffect(() => {
     if (!loading && !user) {
-      const publicPaths = ['/representante/login', '/representante/registro']
-      if (!publicPaths.includes(pathname)) {
+      const publicPaths = ['/representante/login', '/representante/registro', '/representante/convite']
+      if (!publicPaths.some(p => pathname.startsWith(p))) {
         router.push('/representante/login')
       }
     }
   }, [loading, user, pathname, router])
 
-  const login = async (email: string, codigoAcesso: string, password: string) => {
+  const login = async (email: string, password: string) => {
     try {
       const response = await fetch('/api/auth/representante/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, codigo_acesso: codigoAcesso, password }),
+        body: JSON.stringify({ email, password }),
       })
 
       const data = await response.json()

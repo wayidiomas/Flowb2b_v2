@@ -47,7 +47,7 @@ export function RepresentanteConviteModal({
   if (!isOpen || !mounted) return null
 
   const loginUrl = `/representante/login?redirect=/representante/pedidos/${pedidoId}`
-  const registroUrl = `/representante/registro?codigo=${codigoAcesso}&redirect=/representante/pedidos/${pedidoId}`
+  const registroUrl = `/representante/convite/${codigoAcesso}`
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center">

@@ -75,14 +75,13 @@ export interface RepresentanteAuthContextType {
   user: RepresentanteUser | null
   fornecedoresVinculados: FornecedorVinculado[]
   loading: boolean
-  login: (email: string, codigoAcesso: string, password: string) => Promise<{ success: boolean; error?: string }>
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
 }
 
 export interface RepresentanteLoginRequest {
   email: string
-  codigo_acesso: string
   password: string
 }
 

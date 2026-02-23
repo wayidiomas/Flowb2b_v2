@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
+import { normalizePhone } from '@/lib/phone'
 import type { CriarRepresentanteRequest } from '@/types/representante'
 
 // Funcao para gerar codigo de acesso unico
@@ -183,6 +184,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Auto-vincular user existente por telefone
+    let autoLinkedUserId: number | null = null
+    if (body.telefone) {
+      const phoneNorm = normalizePhone(body.telefone)
+      if (phoneNorm) {
+        const { data: allUsers } = await supabase
+          .from('users_representante')
+          .select('id, telefone')
+          .eq('ativo', true)
+
+        if (allUsers) {
+          const matchUser = allUsers.find(u => normalizePhone(u.telefone) === phoneNorm)
+          if (matchUser) {
+            autoLinkedUserId = matchUser.id
+          }
+        }
+      }
+    }
+
     // Criar representante
     const { data: representante, error: repError } = await supabase
       .from('representantes')
@@ -191,6 +211,7 @@ export async function POST(request: NextRequest) {
         codigo_acesso: codigoAcesso,
         nome: body.nome,
         telefone: body.telefone || null,
+        user_representante_id: autoLinkedUserId,
         ativo: true,
       })
       .select('id')
@@ -222,7 +243,10 @@ export async function POST(request: NextRequest) {
       success: true,
       representante_id: representante.id,
       codigo_acesso: codigoAcesso,
-      message: 'Representante criado com sucesso',
+      auto_linked: !!autoLinkedUserId,
+      message: autoLinkedUserId
+        ? 'Representante criado e vinculado automaticamente a conta existente'
+        : 'Representante criado com sucesso',
     })
 
   } catch (error) {

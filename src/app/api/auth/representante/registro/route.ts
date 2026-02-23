@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { hashPassword, generateToken, setAuthCookie } from '@/lib/auth'
+import { normalizePhone } from '@/lib/phone'
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Vincular usuario ao representante
+    // Vincular usuario ao representante principal (do codigo_acesso)
     const { error: updateError } = await supabase
       .from('representantes')
       .update({
@@ -102,10 +103,48 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Gerar token JWT
+    // Auto-vincular TODOS os outros representantes orfaos com mesmo telefone
+    let autoLinkedCount = 0
+    try {
+      const phoneNorm = normalizePhone(newUser.telefone)
+      if (phoneNorm) {
+        const { data: orfaos } = await supabase
+          .from('representantes')
+          .select('id, telefone')
+          .is('user_representante_id', null)
+          .eq('ativo', true)
+          .neq('id', representante.id)
+
+        if (orfaos && orfaos.length > 0) {
+          const matchIds = orfaos
+            .filter(r => {
+              const rPhone = normalizePhone(r.telefone)
+              return rPhone === phoneNorm
+            })
+            .map(r => r.id)
+
+          if (matchIds.length > 0) {
+            await supabase
+              .from('representantes')
+              .update({
+                user_representante_id: newUser.id,
+                updated_at: new Date().toISOString(),
+              })
+              .in('id', matchIds)
+
+            autoLinkedCount = matchIds.length
+          }
+        }
+      }
+    } catch (autoLinkError) {
+      // Auto-link e best-effort, nao deve bloquear o registro
+      console.error('Erro ao auto-vincular representantes:', autoLinkError)
+    }
+
+    // Gerar token JWT com empresaId null
     const token = await generateToken({
       userId: String(newUser.id),
-      empresaId: representante.empresa_id,
+      empresaId: null,
       email: newUser.email,
       role: 'user',
       tipo: 'representante',
@@ -124,7 +163,10 @@ export async function POST(request: NextRequest) {
         telefone: newUser.telefone,
         tipo: 'representante',
       },
-      message: 'Conta criada com sucesso',
+      auto_linked: autoLinkedCount,
+      message: autoLinkedCount > 0
+        ? `Conta criada com sucesso. ${autoLinkedCount} vinculo(s) adicional(is) encontrado(s) automaticamente.`
+        : 'Conta criada com sucesso',
     })
   } catch (error) {
     console.error('Representante registro error:', error)

@@ -5,11 +5,11 @@ import { verifyPassword, generateToken, setAuthCookie } from '@/lib/auth'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, codigo_acesso, password } = body
+    const { email, password } = body
 
-    if (!email || !codigo_acesso || !password) {
+    if (!email || !password) {
       return NextResponse.json(
-        { success: false, error: 'Email, codigo de acesso e senha sao obrigatorios' },
+        { success: false, error: 'Email e senha sao obrigatorios' },
         { status: 400 }
       )
     }
@@ -47,25 +47,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar se o codigo de acesso corresponde a algum vinculo do representante
-    const { data: representante, error: repError } = await supabase
-      .from('representantes')
-      .select('id, empresa_id, codigo_acesso')
-      .eq('user_representante_id', user.id)
-      .eq('codigo_acesso', codigo_acesso.toUpperCase())
-      .single()
-
-    if (repError || !representante) {
-      return NextResponse.json(
-        { success: false, error: 'Codigo de acesso invalido para este usuario' },
-        { status: 401 }
-      )
-    }
-
-    // Gerar token JWT com tipo representante
+    // Gerar token JWT com empresaId null (representante acessa todas as empresas via representanteUserId)
     const token = await generateToken({
       userId: String(user.id),
-      empresaId: representante.empresa_id,
+      empresaId: null,
       email: user.email,
       role: 'user',
       tipo: 'representante',

@@ -347,7 +347,7 @@ export default function PedidoPublicoPage() {
                   Ja tenho conta
                 </a>
                 <a
-                  href={`/representante/registro?codigo=${pedido.representante.codigo_acesso}&redirect=/representante/pedidos/${pedidoId}`}
+                  href={`/representante/convite/${pedido.representante.codigo_acesso}`}
                   className="inline-flex items-center gap-2 px-5 py-2 bg-white text-purple-600 hover:bg-purple-50 rounded-lg font-semibold transition-colors"
                 >
                   Criar conta

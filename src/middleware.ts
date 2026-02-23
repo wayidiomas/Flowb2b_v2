@@ -21,6 +21,7 @@ const publicRoutes = [
   '/fornecedor/registro',
   '/representante/login',
   '/representante/registro',
+  '/representante/convite',
   '/publico',
 ]
 
@@ -38,6 +39,7 @@ const publicApiRoutes = [
   '/api/auth/fornecedor/registro',
   '/api/auth/representante/login',
   '/api/auth/representante/registro',
+  '/api/auth/representante/convite',
 ]
 
 // Padroes de API publicas (com regex)
