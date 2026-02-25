@@ -469,39 +469,40 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
           )}
 
           {/* Header */}
-          <div className="flex items-start justify-between">
-            <div>
-              <button
-                onClick={() => router.push('/representante/pedidos')}
-                className="text-sm text-gray-500 hover:text-[#336FB6] mb-2 flex items-center gap-1 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Voltar
-              </button>
-              <h1 className="text-2xl font-semibold text-gray-900">
-                Pedido #{pedido.numero}
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">
-                {pedido.empresa_nome} - {new Date(pedido.data).toLocaleDateString('pt-BR')}
-              </p>
-              {/* Badge do Fornecedor */}
-              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#336FB6]/5 border border-[#336FB6]/20 rounded-lg">
-                <svg className="w-4 h-4 text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <span className="text-sm font-medium text-[#336FB6]">{pedido.fornecedor_nome}</span>
+          <div className="space-y-3">
+            <button
+              onClick={() => router.push('/representante/pedidos')}
+              className="text-sm text-gray-500 hover:text-[#336FB6] flex items-center gap-1 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Voltar
+            </button>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-2xl font-semibold text-gray-900">
+                    Pedido #{pedido.numero}
+                  </h1>
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusColors[pedido.status_interno] || 'bg-gray-100 text-gray-700'}`}>
+                    {statusLabels[pedido.status_interno] || pedido.status_interno}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  {pedido.empresa_nome} - {new Date(pedido.data).toLocaleDateString('pt-BR')}
+                </p>
+                <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#336FB6]/5 border border-[#336FB6]/20 rounded-lg">
+                  <svg className="w-4 h-4 text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  <span className="text-sm font-medium text-[#336FB6]">{pedido.fornecedor_nome}</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusColors[pedido.status_interno] || 'bg-gray-100 text-gray-700'}`}>
-                {statusLabels[pedido.status_interno] || pedido.status_interno}
-              </span>
               {canCancel && (
                 <button
                   onClick={() => setShowCancelamentoModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-red-200"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-red-200"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -556,7 +557,8 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                     <div className="px-4 py-2 bg-gray-50 border-b">
                       <p className="text-sm font-medium text-gray-700">Itens propostos pelo lojista:</p>
                     </div>
-                    <div className="overflow-x-auto">
+                    {/* Desktop: tabela */}
+                    <div className="hidden md:block overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-left text-xs text-gray-500 uppercase bg-gray-50">
@@ -605,6 +607,40 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                           })}
                         </tbody>
                       </table>
+                    </div>
+                    {/* Mobile: cards */}
+                    <div className="md:hidden divide-y divide-gray-100">
+                      {data.sugestaoItens.map((sItem) => {
+                        const item = itens.find(i => i.id === sItem.item_pedido_compra_id)
+                        if (!item) return null
+                        const diferencaQtd = sItem.quantidade_sugerida - item.quantidade
+                        return (
+                          <div key={sItem.item_pedido_compra_id} className="p-3">
+                            <p className="text-sm font-medium text-gray-900 line-clamp-1">{item.descricao}</p>
+                            <div className="grid grid-cols-3 gap-2 mt-2">
+                              <div>
+                                <p className="text-[10px] uppercase text-gray-400">Qtd orig.</p>
+                                <p className="text-sm text-gray-500">{item.quantidade}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] uppercase text-gray-400">Proposta</p>
+                                <p className={`text-sm font-semibold ${diferencaQtd !== 0 ? (diferencaQtd > 0 ? 'text-emerald-600' : 'text-red-600') : 'text-gray-900'}`}>
+                                  {sItem.quantidade_sugerida}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] uppercase text-gray-400">Desc./Bonif.</p>
+                                <p className="text-sm">
+                                  {sItem.desconto_percentual > 0 && <span className="text-emerald-600">{sItem.desconto_percentual}%</span>}
+                                  {sItem.desconto_percentual > 0 && sItem.bonificacao_quantidade > 0 && ' '}
+                                  {sItem.bonificacao_quantidade > 0 && <span className="text-blue-600">+{sItem.bonificacao_quantidade}un</span>}
+                                  {!sItem.desconto_percentual && !sItem.bonificacao_quantidade && <span className="text-gray-400">-</span>}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -837,7 +873,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
               <p className="text-sm text-gray-500 mb-4">
                 Defina condicoes gerais para o pedido. O desconto/bonificacao geral sera aplicado se o total do pedido atingir o valor minimo.
               </p>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Compra acima de
@@ -958,7 +994,8 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                 </p>
               )}
             </div>
-            <div className="overflow-x-auto">
+            {/* Desktop: tabela */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
@@ -1095,6 +1132,116 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
               </table>
             </div>
 
+            {/* Mobile: cards */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {itens.map((item) => {
+                const sug = sugestoes.find(s => s.item_id === item.id)
+                return (
+                  <div key={item.id} className="p-4">
+                    <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.descricao}</p>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                      {item.codigo_fornecedor && <span>SKU: {item.codigo_fornecedor}</span>}
+                      {item.ean && <span>EAN: {item.ean}</span>}
+                      {item.codigo_produto && <span>Lojista: {item.codigo_produto}</span>}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3 mt-3">
+                      <div>
+                        <p className="text-[10px] uppercase text-gray-400 font-medium">Valor unit.</p>
+                        <p className="text-sm text-gray-900">R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase text-gray-400 font-medium">Qtd original</p>
+                        <p className="text-sm font-medium text-gray-900">{item.quantidade} {item.unidade}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase text-gray-400 font-medium">Subtotal</p>
+                        <p className="text-sm font-semibold text-gray-900">R$ {(item.valor * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      </div>
+                    </div>
+
+                    {canSuggest && sug && (
+                      <div className="mt-3 bg-[#336FB6]/5 border border-[#336FB6]/20 rounded-xl p-3">
+                        <p className="text-xs font-semibold text-[#336FB6] mb-2">Sua sugestao</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] uppercase text-gray-500 font-medium mb-1">Qtd</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={sug.quantidade_sugerida}
+                              onChange={(e) => updateSugestao(item.id, 'quantidade_sugerida', Number(e.target.value))}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase text-gray-500 font-medium mb-1">Desconto %</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.5}
+                              value={sug.desconto_percentual || ''}
+                              onChange={(e) => updateSugestao(item.id, 'desconto_percentual', Number(e.target.value) || 0)}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                              placeholder="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase text-gray-500 font-medium mb-1">Bonif. un</label>
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={sug.bonificacao_quantidade || ''}
+                              onChange={(e) => updateSugestao(item.id, 'bonificacao_quantidade', Number(e.target.value) || 0)}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                              placeholder="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase text-gray-500 font-medium mb-1">Validade</label>
+                            <input
+                              id={`validade-${item.id}`}
+                              type="date"
+                              value={sug.validade}
+                              onChange={(e) => updateSugestao(item.id, 'validade', e.target.value)}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                            />
+                          </div>
+                        </div>
+                        {(() => {
+                          const subtotalBase = item.valor * sug.quantidade_sugerida
+                          const desconto = subtotalBase * (sug.desconto_percentual / 100)
+                          const subtotalComDesconto = subtotalBase - desconto
+                          const bonifUnidades = sug.bonificacao_quantidade || 0
+                          const diferenca = subtotalComDesconto - (item.valor * item.quantidade)
+                          return (
+                            <div className="flex items-center justify-between mt-3 pt-2 border-t border-[#336FB6]/20">
+                              <span className="text-xs text-gray-500">Subtotal sugerido</span>
+                              <div className="text-right">
+                                <span className="text-sm font-bold text-[#336FB6]">
+                                  R$ {subtotalComDesconto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                                {diferenca !== 0 && (
+                                  <span className={`text-xs ml-1 ${diferenca > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                    ({diferenca > 0 ? '+' : ''}{diferenca.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                                  </span>
+                                )}
+                                {bonifUnidades > 0 && (
+                                  <span className="text-xs text-blue-500 ml-1">+{bonifUnidades} gratis</span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
             {/* Observacao + Submit */}
             {canSuggest && (
               <div className="px-6 py-4 border-t border-gray-200 space-y-4">
@@ -1110,13 +1257,13 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                     placeholder="Justifique suas sugestoes, informe prazos, condicoes especiais..."
                   />
                 </div>
-                <div className="flex justify-end">
+                <div className="flex sm:justify-end">
                   <Button
                     variant="primary"
                     size="lg"
                     loading={submitting}
                     onClick={handleSubmitSugestao}
-                    className="bg-[#336FB6] hover:bg-[#2660A5]"
+                    className="w-full sm:w-auto bg-[#336FB6] hover:bg-[#2660A5]"
                   >
                     Enviar sugestao
                   </Button>

@@ -271,7 +271,7 @@ function PedidosContent() {
             </button>
           ))}
 
-          <div className="ml-auto">
+          <div className="w-full sm:w-auto sm:ml-auto">
             <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
               <div className="relative">
                 <input
@@ -391,7 +391,8 @@ function PedidosContent() {
                   {/* Accordion Body */}
                   {!isCollapsed && (
                     <div className="border-t border-gray-100">
-                      <div className="overflow-x-auto">
+                      {/* Desktop: tabela */}
+                      <div className="hidden md:block overflow-x-auto">
                         <table className="w-full">
                           <thead>
                             <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
@@ -448,6 +449,38 @@ function PedidosContent() {
                           </tbody>
                         </table>
                       </div>
+
+                      {/* Mobile: cards */}
+                      <div className="md:hidden divide-y divide-gray-100">
+                        {grupo.pedidos.map((pedido) => (
+                          <Link
+                            key={pedido.id}
+                            href={`/representante/pedidos/${pedido.id}`}
+                            className="block p-4 hover:bg-[#336FB6]/5 active:bg-[#336FB6]/10 transition-colors"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <span className="text-sm font-bold text-gray-900">#{pedido.numero || pedido.id}</span>
+                                <p className="text-sm text-gray-600 mt-0.5 truncate">{pedido.empresa_nome}</p>
+                              </div>
+                              <span
+                                className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 ${
+                                  STATUS_LABELS[pedido.status]?.color ||
+                                  'bg-gray-100 text-gray-700'
+                                }`}
+                              >
+                                {STATUS_LABELS[pedido.status]?.label || pedido.status}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                              <span>{formatDate(pedido.data || pedido.created_at)}</span>
+                              <span className="text-sm font-bold text-gray-900">
+                                {formatCurrency(pedido.total || 0)}
+                              </span>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -458,26 +491,26 @@ function PedidosContent() {
 
         {/* Pagination */}
         {!loading && total > limit && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-6 py-4 flex items-center justify-between">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-4 sm:px-6 py-4 flex items-center justify-between gap-2">
             <button
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6]/30 rounded-xl hover:bg-[#336FB6]/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6]/30 rounded-xl hover:bg-[#336FB6]/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeftIcon />
-              Anterior
+              <span className="hidden sm:inline">Anterior</span>
             </button>
 
             <span className="text-sm text-gray-500">
-              Pagina {currentPage} de {totalPages}
+              {currentPage} / {totalPages}
             </span>
 
             <button
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6]/30 rounded-xl hover:bg-[#336FB6]/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6]/30 rounded-xl hover:bg-[#336FB6]/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Proximo
+              <span className="hidden sm:inline">Proximo</span>
               <ChevronRightIcon />
             </button>
           </div>

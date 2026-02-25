@@ -11,7 +11,7 @@ interface RepresentanteLayoutProps {
 }
 
 const navItems = [
-  { href: '/representante/dashboard', label: 'Dashboard', icon: DashboardIcon },
+  { href: '/representante/dashboard', label: 'Inicio', icon: DashboardIcon },
   { href: '/representante/pedidos', label: 'Pedidos', icon: PedidosIcon },
   { href: '/representante/conferencia-estoque', label: 'Conferencia', icon: ConferenciaIcon },
 ]
@@ -135,8 +135,18 @@ export function RepresentanteLayout({ children }: RepresentanteLayoutProps) {
           </div>
         </div>
 
-        {/* Mobile Nav */}
-        <nav className="md:hidden flex items-center gap-1 px-4 pb-3 bg-[#336fb6]">
+      </header>
+
+      {/* Main content */}
+      <main className="p-4 md:p-6 2xl:px-8 3xl:px-12 pb-24 md:pb-6">
+        <div className="max-w-[1800px] 2xl:max-w-[2200px] 3xl:max-w-none mx-auto">
+          {children}
+        </div>
+      </main>
+
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-center justify-around h-16">
           {navItems.map((item) => {
             const isActive = pathname.startsWith(item.href)
             const Icon = item.icon
@@ -144,26 +154,22 @@ export function RepresentanteLayout({ children }: RepresentanteLayoutProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors ${
                   isActive
-                    ? 'bg-[#2660a5] text-white'
-                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                    ? 'text-[#336FB6]'
+                    : 'text-gray-400 active:text-[#336FB6]'
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                {item.label}
+                <Icon className="w-5 h-5" />
+                <span className="text-[10px] font-medium">{item.label}</span>
+                {isActive && (
+                  <div className="absolute top-0 w-12 h-0.5 bg-[#336FB6] rounded-full" />
+                )}
               </Link>
             )
           })}
-        </nav>
-      </header>
-
-      {/* Main content */}
-      <main className="p-4 md:p-6 2xl:px-8 3xl:px-12">
-        <div className="max-w-[1800px] 2xl:max-w-[2200px] 3xl:max-w-none mx-auto">
-          {children}
         </div>
-      </main>
+      </nav>
     </div>
   )
 }
