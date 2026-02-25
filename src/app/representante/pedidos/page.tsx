@@ -138,6 +138,21 @@ function PedidosContent() {
     return new Date(date).toLocaleDateString('pt-BR')
   }
 
+  // Agrupar fornecedores por CNPJ (mesmo fornecedor em lojas diferentes)
+  const fornecedoresAgrupados = useMemo(() => {
+    const map = new Map<string, { nome: string; cnpj?: string; lojas: Array<{ empresa_nome: string; fornecedor_id: number }> }>()
+    fornecedoresVinculados.forEach((f) => {
+      const chave = f.fornecedor_cnpj || f.fornecedor_nome
+      let grupo = map.get(chave)
+      if (!grupo) {
+        grupo = { nome: f.fornecedor_nome, cnpj: f.fornecedor_cnpj, lojas: [] }
+        map.set(chave, grupo)
+      }
+      grupo.lojas.push({ empresa_nome: f.empresa_nome, fornecedor_id: f.fornecedor_id })
+    })
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [fornecedoresVinculados])
+
   // Lojistas unicos extraidos dos vinculos do representante
   const lojistas = useMemo(() => {
     const map = new Map<number, string>()
@@ -266,10 +281,20 @@ function PedidosContent() {
             className="px-4 py-2.5 text-sm text-gray-700 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-colors"
           >
             <option value="">Todos os fornecedores</option>
-            {fornecedoresVinculados.map((f) => (
-              <option key={f.fornecedor_id} value={f.fornecedor_id}>
-                {f.fornecedor_nome}
-              </option>
+            {fornecedoresAgrupados.map((grupo) => (
+              grupo.lojas.length === 1 ? (
+                <option key={grupo.lojas[0].fornecedor_id} value={grupo.lojas[0].fornecedor_id}>
+                  {grupo.nome}
+                </option>
+              ) : (
+                <optgroup key={grupo.cnpj || grupo.nome} label={grupo.nome}>
+                  {grupo.lojas.map((loja) => (
+                    <option key={loja.fornecedor_id} value={loja.fornecedor_id}>
+                      {loja.empresa_nome}
+                    </option>
+                  ))}
+                </optgroup>
+              )
             ))}
           </select>
 

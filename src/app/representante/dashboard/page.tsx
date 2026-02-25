@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRepresentanteAuth } from '@/contexts/RepresentanteAuthContext'
 import { RepresentanteLayout } from '@/components/layout/RepresentanteLayout'
@@ -80,6 +80,22 @@ export default function RepresentanteDashboardPage() {
     }
   }, [authLoading, user])
 
+  // Agrupar fornecedores por CNPJ (ou nome se CNPJ nao existir)
+  // O mesmo fornecedor pode ter IDs diferentes em empresas diferentes (multi-tenant)
+  const fornecedoresAgrupados = useMemo(() => {
+    const map = new Map<string, { nome: string; cnpj?: string; lojas: Array<{ empresa_nome: string; fornecedor_id: number }> }>()
+    fornecedoresVinculados.forEach((f) => {
+      const chave = f.fornecedor_cnpj || f.fornecedor_nome
+      let grupo = map.get(chave)
+      if (!grupo) {
+        grupo = { nome: f.fornecedor_nome, cnpj: f.fornecedor_cnpj, lojas: [] }
+        map.set(chave, grupo)
+      }
+      grupo.lojas.push({ empresa_nome: f.empresa_nome, fornecedor_id: f.fornecedor_id })
+    })
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [fornecedoresVinculados])
+
   if (authLoading || loading) {
     return (
       <RepresentanteLayout>
@@ -150,7 +166,7 @@ export default function RepresentanteDashboardPage() {
               <div>
                 <p className="text-sm text-gray-500">Fornecedores</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {stats?.fornecedores_ativos || 0}
+                  {fornecedoresAgrupados.length}
                 </p>
               </div>
               <div className="w-12 h-12 bg-[#336FB6]/10 rounded-xl flex items-center justify-center text-[#336FB6]">
@@ -205,29 +221,39 @@ export default function RepresentanteDashboardPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Fornecedores Vinculados
           </h2>
-          {fornecedoresVinculados.length === 0 ? (
+          {fornecedoresAgrupados.length === 0 ? (
             <p className="text-gray-500 text-center py-8">
               Nenhum fornecedor vinculado
             </p>
           ) : (
             <div className="divide-y divide-gray-100">
-              {fornecedoresVinculados.map((forn) => (
+              {fornecedoresAgrupados.map((forn) => (
                 <div
-                  key={`${forn.representante_id}-${forn.fornecedor_id}`}
-                  className="py-3 flex items-center justify-between"
+                  key={forn.cnpj || forn.nome}
+                  className="py-3"
                 >
-                  <div>
-                    <p className="font-medium text-gray-900">{forn.fornecedor_nome}</p>
-                    <p className="text-sm text-gray-500">
-                      {forn.empresa_nome} {forn.fornecedor_cnpj && `- ${forn.fornecedor_cnpj}`}
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{forn.nome}</p>
+                      {forn.cnpj && (
+                        <p className="text-xs text-gray-400">{forn.cnpj}</p>
+                      )}
+                    </div>
+                    <span className="text-xs font-medium text-gray-400">
+                      {forn.lojas.length} {forn.lojas.length === 1 ? 'loja' : 'lojas'}
+                    </span>
                   </div>
-                  <Link
-                    href={`/representante/pedidos?fornecedor_id=${forn.fornecedor_id}`}
-                    className="text-sm text-[#336FB6] hover:text-[#2660A5] font-medium"
-                  >
-                    Ver pedidos
-                  </Link>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {forn.lojas.map((loja) => (
+                      <Link
+                        key={loja.fornecedor_id}
+                        href={`/representante/pedidos?fornecedor_id=${loja.fornecedor_id}`}
+                        className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-[#336FB6] bg-[#336FB6]/5 rounded-lg hover:bg-[#336FB6]/10 transition-colors"
+                      >
+                        {loja.empresa_nome}
+                      </Link>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
