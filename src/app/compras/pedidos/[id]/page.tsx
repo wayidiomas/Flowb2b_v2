@@ -228,16 +228,22 @@ export default function VisualizarPedidoPage() {
       setStatusInterno('enviado_fornecedor')
       setShowRepresentanteSelectModal(false)
 
-      // Se fornecedor nao cadastrado, abrir WhatsApp
-      if (!data.fornecedorCadastrado && data.linkPublico) {
-        setFornecedorEnvio(data.fornecedor)
-        setLinkPublicoEnvio(data.linkPublico)
-        setNumeroPedidoEnvio(data.numeroPedido)
-
-        if (data.fornecedor.telefone) {
-          abrirWhatsAppFornecedor(data.fornecedor.telefone, data.linkPublico, data.numeroPedido, data.fornecedor.nome)
-        } else {
-          setShowEnvioWhatsAppModal(true)
+      // Se representante nao cadastrado na Flow, enviar link de convite via WhatsApp
+      if (data.representanteCadastrado === false && data.representante) {
+        const repData = data.representante
+        if (repData.telefone) {
+          const telefoneFormatado = repData.telefone.replace(/\D/g, '')
+          const telefoneWhatsApp = telefoneFormatado.startsWith('55') ? telefoneFormatado : `55${telefoneFormatado}`
+          const linkPublico = data.linkPublico || `${window.location.origin}/publico/pedido/${pedido.id}`
+          const conviteUrl = `${window.location.origin}/representante/convite/${repData.codigo_acesso}`
+          const mensagem = encodeURIComponent(
+            `Ola ${repData.nome}!\n\n` +
+            `Voce recebeu o pedido de compra #${data.numeroPedido || pedido.numero} para analise.\n\n` +
+            `🔗 Visualizar pedido:\n${linkPublico}\n\n` +
+            `📋 Para acessar o portal e gerenciar pedidos, crie sua conta:\n${conviteUrl}\n\n` +
+            `Atenciosamente.`
+          )
+          window.open(`https://wa.me/${telefoneWhatsApp}?text=${mensagem}`, '_blank')
         }
       }
     } catch (err) {
@@ -292,20 +298,18 @@ export default function VisualizarPedidoPage() {
       setStatusInterno('enviado_fornecedor')
       setShowRepresentanteSelectModal(false)
 
-      // Se tem telefone do representante, pode abrir WhatsApp direto para ele
+      // Se tem telefone do representante, enviar WhatsApp com link de convite
       if (dados.telefone) {
         const telefoneFormatado = dados.telefone.replace(/\D/g, '')
         const telefoneWhatsApp = telefoneFormatado.startsWith('55') ? telefoneFormatado : `55${telefoneFormatado}`
         const linkPublico = data.linkPublico || `${window.location.origin}/publico/pedido/${pedido.id}`
         const codigoAcesso = representante.codigo_acesso || ''
+        const conviteUrl = `${window.location.origin}/representante/convite/${codigoAcesso}`
         const mensagem = encodeURIComponent(
           `Ola ${dados.nome}!\n\n` +
-          `Voce foi cadastrado como representante para receber pedidos de compra.\n\n` +
-          `*Codigo de Acesso:* ${codigoAcesso}\n\n` +
-          `Acesse o link abaixo para visualizar o pedido #${pedido.numero}:\n` +
-          `${linkPublico}\n\n` +
-          `Para acessar o portal de representantes, clique no link:\n` +
-          `${window.location.origin}/representante/convite/${codigoAcesso}\n\n` +
+          `Voce recebeu o pedido de compra #${pedido.numero} para analise.\n\n` +
+          `🔗 Visualizar pedido:\n${linkPublico}\n\n` +
+          `📋 Para acessar o portal e gerenciar pedidos, crie sua conta:\n${conviteUrl}\n\n` +
           `Atenciosamente.`
         )
         window.open(`https://wa.me/${telefoneWhatsApp}?text=${mensagem}`, '_blank')

@@ -715,15 +715,15 @@ export default function PedidoCompraPage() {
       let message: string
 
       if (!representante.cadastrado) {
-        // Primeiro acesso - enviar codigo de acesso
-        const loginUrl = `${baseUrl}/representante/login`
+        // Primeiro acesso - enviar link de convite direto
+        const conviteUrl = `${baseUrl}/representante/convite/${representante.codigo_acesso}`
+        const linkPublico = `${baseUrl}/publico/pedido/${pedido.pedido_id}`
         message = encodeURIComponent(
           `Ola ${representante.nome}! 👋\n\n` +
           `Voce foi cadastrado como representante comercial da *${empresaNome}* na plataforma FlowB2B.\n\n` +
-          `📋 *Seu codigo de acesso:* ${representante.codigo_acesso}\n\n` +
-          `🔗 Acesse o sistema pelo link:\n${loginUrl}\n\n` +
           `Temos um pedido de compra #${pedido.numero_pedido || pedido.pedido_id} no valor de ${formatCurrency(pedido.valor_total)} para o fornecedor ${pedido.fornecedor_nome || ''}.\n\n` +
-          `Use o codigo acima para fazer seu primeiro login, cadastrar sua senha e visualizar o pedido.\n\n` +
+          `🔗 Visualizar pedido:\n${linkPublico}\n\n` +
+          `📋 Crie sua conta para gerenciar pedidos:\n${conviteUrl}\n\n` +
           `Qualquer duvida, estamos a disposicao!`
         )
       } else {
