@@ -92,13 +92,15 @@ export default function ConferenciaEstoqueDetalhePage() {
 
       const data = await res.json()
 
+      // Verificar duplicado (API retorna 200 com duplicado=true)
+      if (data.duplicado && data.item_existente) {
+        setDuplicadoInfo({ item: data.item_existente, gtin: ean.trim() })
+        setQtdInput(String(quantidade))
+        setShowDuplicadoModal(true)
+        return
+      }
+
       if (!res.ok) {
-        if (data.duplicado && data.item_existente) {
-          setDuplicadoInfo({ item: data.item_existente, gtin: ean.trim() })
-          setQtdInput(String(quantidade))
-          setShowDuplicadoModal(true)
-          return
-        }
         setScanError(data.error || 'Produto nao encontrado')
         refocusEan()
         return

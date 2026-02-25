@@ -91,13 +91,15 @@ function NovaConferenciaEstoqueContent() {
 
       const data = await res.json()
 
+      // Verificar duplicado (API retorna 200 com duplicado=true)
+      if (data.duplicado && data.item_existente) {
+        setDuplicadoInfo({ item: data.item_existente, produto: data.item_existente })
+        setQtdInput(String(quantidade))
+        setShowDuplicadoModal(true)
+        return
+      }
+
       if (!res.ok) {
-        if (data.duplicado && data.item_existente && data.produto) {
-          setDuplicadoInfo({ item: data.item_existente, produto: data.produto })
-          setQtdInput(String(quantidade))
-          setShowDuplicadoModal(true)
-          return
-        }
         setError(data.error || 'Produto nao encontrado')
         refocusEan()
         return
