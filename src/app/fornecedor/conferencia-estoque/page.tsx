@@ -1,0 +1,252 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useFornecedorAuth } from '@/contexts/FornecedorAuthContext'
+import { FornecedorLayout } from '@/components/layout/FornecedorLayout'
+import { LojistaSelectorDropdown } from '@/components/fornecedor/LojistaSelectorDropdown'
+import { Button, Skeleton, Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter } from '@/components/ui'
+import type { ConferenciaEstoque, ConferenciaStatus } from '@/types/conferencia-estoque'
+
+const statusColors: Record<ConferenciaStatus, string> = {
+  em_andamento: 'bg-blue-100 text-blue-700',
+  enviada: 'bg-amber-100 text-amber-700',
+  aceita: 'bg-emerald-100 text-emerald-700',
+  rejeitada: 'bg-red-100 text-red-700',
+  parcialmente_aceita: 'bg-orange-100 text-orange-700',
+}
+
+const statusLabels: Record<ConferenciaStatus, string> = {
+  em_andamento: 'Em andamento',
+  enviada: 'Enviada',
+  aceita: 'Aceita',
+  rejeitada: 'Rejeitada',
+  parcialmente_aceita: 'Parcial',
+}
+
+const statusFilters = [
+  { value: '', label: 'Todos' },
+  { value: 'em_andamento', label: 'Em andamento' },
+  { value: 'enviada', label: 'Enviada' },
+  { value: 'aceita', label: 'Aceita' },
+  { value: 'rejeitada', label: 'Rejeitada' },
+]
+
+export default function FornecedorConferenciaEstoquePage() {
+  const { loading: authLoading, empresasVinculadas } = useFornecedorAuth()
+  const router = useRouter()
+  const [conferencias, setConferencias] = useState<ConferenciaEstoque[]>([])
+  const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [showNovaModal, setShowNovaModal] = useState(false)
+  const [empresaIdNova, setEmpresaIdNova] = useState<number | null>(null)
+
+  const fetchConferencias = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (statusFilter) params.set('status', statusFilter)
+      const res = await fetch(`/api/fornecedor/conferencia-estoque?${params}`)
+      if (res.ok) {
+        const data = await res.json()
+        setConferencias(data.conferencias || [])
+      }
+    } catch (err) {
+      console.error('Erro ao carregar conferencias:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter])
+
+  useEffect(() => {
+    if (!authLoading) fetchConferencias()
+  }, [fetchConferencias, authLoading])
+
+  const handleNovaConferencia = () => {
+    if (empresasVinculadas.length === 1) {
+      router.push(`/fornecedor/conferencia-estoque/nova?empresa_id=${empresasVinculadas[0].empresaId}`)
+    } else {
+      setEmpresaIdNova(empresasVinculadas[0]?.empresaId ?? null)
+      setShowNovaModal(true)
+    }
+  }
+
+  const handleConfirmarNova = () => {
+    if (empresaIdNova) {
+      router.push(`/fornecedor/conferencia-estoque/nova?empresa_id=${empresaIdNova}`)
+    }
+  }
+
+  if (authLoading) {
+    return (
+      <FornecedorLayout>
+        <Skeleton className="h-96" />
+      </FornecedorLayout>
+    )
+  }
+
+  return (
+    <FornecedorLayout>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Conferencia de Estoque</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Gerencie as conferencias de estoque realizadas nos lojistas
+            </p>
+          </div>
+          <Button
+            onClick={handleNovaConferencia}
+            className="bg-[#336FB6] hover:bg-[#2660a5] text-white"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Nova Conferencia
+          </Button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {statusFilters.map((filter) => (
+            <button
+              key={filter.value}
+              onClick={() => setStatusFilter(filter.value)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                statusFilter === filter.value
+                  ? 'bg-[#336FB6] text-white shadow-md'
+                  : 'bg-white text-gray-600 hover:bg-[#336FB6]/10 hover:text-[#336FB6] border border-gray-200 hover:border-[#336FB6]/30'
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Table */}
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          {loading ? (
+            <div className="p-6 space-y-3">
+              <Skeleton className="h-10" />
+              <Skeleton className="h-10" />
+              <Skeleton className="h-10" />
+              <Skeleton className="h-10" />
+            </div>
+          ) : conferencias.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
+                    <th className="px-6 py-4">#</th>
+                    <th className="px-6 py-4">Lojista</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Data Inicio</th>
+                    <th className="px-6 py-4">Data Envio</th>
+                    <th className="px-6 py-4 text-right">Itens</th>
+                    <th className="px-6 py-4 text-right">Divergencias</th>
+                    <th className="px-6 py-4"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {conferencias.map((conf) => (
+                    <tr key={conf.id} className="hover:bg-[#336FB6]/5 transition-colors">
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">#{conf.id}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700 font-medium">{conf.empresa_nome || '-'}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusColors[conf.status] || 'bg-gray-100 text-gray-700'}`}>
+                          {statusLabels[conf.status] || conf.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {new Date(conf.data_inicio).toLocaleDateString('pt-BR')}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {conf.data_envio ? new Date(conf.data_envio).toLocaleDateString('pt-BR') : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-right text-gray-900 font-semibold">{conf.total_itens}</td>
+                      <td className="px-6 py-4 text-sm text-right">
+                        <span className={conf.total_divergencias > 0 ? 'text-amber-600 font-semibold' : 'text-gray-500'}>
+                          {conf.total_divergencias}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Link href={`/fornecedor/conferencia-estoque/${conf.id}`}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-[#FFAA11] text-[#FFAA11] hover:bg-[#FFAA11] hover:text-white"
+                          >
+                            {conf.status === 'em_andamento' ? 'Continuar' : 'Ver detalhes'}
+                          </Button>
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-12 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-[#336FB6]/10 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.35 3.836c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15a2.25 2.25 0 0 1 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m8.9-4.414c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0 1 18 18.75h-2.25m-7.5-10.5H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m-7.5-10.5h6.375c.621 0 1.125.504 1.125 1.125v9.375m-8.25-3 1.5 1.5 3-3.75" />
+                </svg>
+              </div>
+              <p className="text-gray-500 font-medium">Nenhuma conferencia encontrada.</p>
+              <p className="text-sm text-gray-400 mt-1">Clique em &quot;Nova Conferencia&quot; para iniciar.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal para selecionar lojista */}
+      <Modal isOpen={showNovaModal} onClose={() => setShowNovaModal(false)} size="sm">
+        <ModalHeader onClose={() => setShowNovaModal(false)}>
+          <ModalTitle>Selecionar Lojista</ModalTitle>
+        </ModalHeader>
+        <ModalBody>
+          <p className="text-sm text-gray-500 mb-4">
+            Selecione o lojista para iniciar a conferencia de estoque.
+          </p>
+          <div className="space-y-2">
+            {empresasVinculadas.map((empresa) => (
+              <button
+                key={empresa.empresaId}
+                onClick={() => setEmpresaIdNova(empresa.empresaId)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition-all ${
+                  empresaIdNova === empresa.empresaId
+                    ? 'border-[#336FB6] bg-[#336FB6]/5 text-[#336FB6] font-medium'
+                    : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <div className="w-8 h-8 rounded-full bg-[#336FB6]/10 flex items-center justify-center shrink-0">
+                  <span className="text-xs font-semibold text-[#336FB6]">
+                    {(empresa.nomeFantasia || empresa.razaoSocial).charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <span>{empresa.nomeFantasia || empresa.razaoSocial}</span>
+                {empresaIdNova === empresa.empresaId && (
+                  <svg className="w-4 h-4 ml-auto text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" onClick={() => setShowNovaModal(false)}>Cancelar</Button>
+          <Button
+            onClick={handleConfirmarNova}
+            disabled={!empresaIdNova}
+            className="bg-[#336FB6] hover:bg-[#2660a5] text-white"
+          >
+            Iniciar Conferencia
+          </Button>
+        </ModalFooter>
+      </Modal>
+    </FornecedorLayout>
+  )
+}

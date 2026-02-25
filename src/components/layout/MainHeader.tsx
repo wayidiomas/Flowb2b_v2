@@ -80,7 +80,9 @@ const navigation: NavItem[] = [
     children: [
       { label: 'Pedido de compras', href: '/compras/pedidos', permission: 'pedidos' },
       { label: 'Compras por Curva', href: '/compras/curva', permission: 'pedidos' },
+      { label: 'Tabelas de Preco', href: '/compras/tabelas-preco', permission: 'pedidos' },
       { label: 'Controle de estoque', href: '/estoque/produtos', permission: 'estoque' },
+      { label: 'Sugestoes de Estoque', href: '/estoque/sugestoes', permission: 'estoque' },
       { label: 'Notas de entrada', href: '/fiscal/notas', permission: 'financeiro' },
       { label: 'Politica de compra', href: '/suprimentos/politica-compra', permission: 'cadastros' },
       { label: 'Relatorios', href: '/relatorios', permission: 'relatorios', comingSoon: true },
