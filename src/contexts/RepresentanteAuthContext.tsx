@@ -81,7 +81,9 @@ export function RepresentanteAuthProvider({ children }: { children: ReactNode })
     if (!loading && !user) {
       const publicPaths = ['/representante/login', '/representante/registro', '/representante/convite']
       if (!publicPaths.some(p => pathname.startsWith(p))) {
-        router.push('/representante/login')
+        // Sanitizar redirect para evitar open redirect (apenas paths internos do representante)
+        const redirectPath = pathname.startsWith('/representante/') ? pathname : '/representante/dashboard'
+        router.push(`/representante/login?redirect=${encodeURIComponent(redirectPath)}`)
       }
     }
   }, [loading, user, pathname, router])

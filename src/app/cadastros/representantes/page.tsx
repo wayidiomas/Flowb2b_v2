@@ -157,15 +157,13 @@ export default function RepresentantesPage() {
   // Abrir WhatsApp com a mensagem
   const openWhatsAppWithMessage = (rep: RepresentanteComDetalhes, phone: string) => {
     const baseUrl = window.location.origin
-    const loginUrl = `${baseUrl}/representante/login`
+    const conviteUrl = `${baseUrl}/representante/convite/${rep.codigo_acesso}`
     const empresaNome = empresa?.nome_fantasia || empresa?.razao_social || 'nossa empresa'
 
     const message = encodeURIComponent(
       `Ola ${rep.nome}! 👋\n\n` +
       `Voce foi cadastrado como representante comercial da *${empresaNome}* na plataforma FlowB2B.\n\n` +
-      `📋 *Seu codigo de acesso:* ${rep.codigo_acesso}\n\n` +
-      `🔗 Acesse o sistema pelo link:\n${loginUrl}\n\n` +
-      `Use o codigo acima para fazer seu primeiro login e cadastrar sua senha.\n\n` +
+      `🔗 Clique no link abaixo para criar sua conta e acessar o portal:\n${conviteUrl}\n\n` +
       `Qualquer duvida, estamos a disposicao!`
     )
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank')

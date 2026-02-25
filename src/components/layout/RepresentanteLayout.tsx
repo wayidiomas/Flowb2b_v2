@@ -117,6 +117,7 @@ export function RepresentanteLayout({ children }: RepresentanteLayoutProps) {
               onClick={logout}
               className="flex items-center gap-2 text-sm text-white/80 hover:text-white px-3 py-2 rounded-md hover:bg-white/10 transition-colors"
               title="Sair"
+              aria-label="Sair da conta"
             >
               <LogoutIcon className="w-5 h-5" />
               <span className="hidden sm:inline">Sair</span>

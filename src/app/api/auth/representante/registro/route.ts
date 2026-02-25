@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { hashPassword, generateToken, setAuthCookie } from '@/lib/auth'
-import { normalizePhone } from '@/lib/phone'
 
 export async function POST(request: NextRequest) {
   try {
@@ -85,60 +84,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Vincular usuario ao representante principal (do codigo_acesso)
-    const { error: updateError } = await supabase
+    // .is('user_representante_id', null) previne race condition (outro registro simultâneo)
+    const { error: updateError, count: updateCount } = await supabase
       .from('representantes')
       .update({
         user_representante_id: newUser.id,
         updated_at: new Date().toISOString(),
       })
       .eq('id', representante.id)
+      .is('user_representante_id', null)
 
-    if (updateError) {
-      console.error('Erro ao vincular representante:', updateError)
+    if (updateError || updateCount === 0) {
+      console.error('Erro ao vincular representante:', updateError || 'codigo ja utilizado (race condition)')
       // Rollback - deletar usuario criado
       await supabase.from('users_representante').delete().eq('id', newUser.id)
       return NextResponse.json(
-        { success: false, error: 'Erro ao vincular conta' },
-        { status: 500 }
+        { success: false, error: 'Este codigo de acesso ja foi utilizado' },
+        { status: 400 }
       )
-    }
-
-    // Auto-vincular TODOS os outros representantes orfaos com mesmo telefone
-    let autoLinkedCount = 0
-    try {
-      const phoneNorm = normalizePhone(newUser.telefone)
-      if (phoneNorm) {
-        const { data: orfaos } = await supabase
-          .from('representantes')
-          .select('id, telefone')
-          .is('user_representante_id', null)
-          .eq('ativo', true)
-          .neq('id', representante.id)
-
-        if (orfaos && orfaos.length > 0) {
-          const matchIds = orfaos
-            .filter(r => {
-              const rPhone = normalizePhone(r.telefone)
-              return rPhone === phoneNorm
-            })
-            .map(r => r.id)
-
-          if (matchIds.length > 0) {
-            await supabase
-              .from('representantes')
-              .update({
-                user_representante_id: newUser.id,
-                updated_at: new Date().toISOString(),
-              })
-              .in('id', matchIds)
-
-            autoLinkedCount = matchIds.length
-          }
-        }
-      }
-    } catch (autoLinkError) {
-      // Auto-link e best-effort, nao deve bloquear o registro
-      console.error('Erro ao auto-vincular representantes:', autoLinkError)
     }
 
     // Gerar token JWT com empresaId null
@@ -163,10 +126,7 @@ export async function POST(request: NextRequest) {
         telefone: newUser.telefone,
         tipo: 'representante',
       },
-      auto_linked: autoLinkedCount,
-      message: autoLinkedCount > 0
-        ? `Conta criada com sucesso. ${autoLinkedCount} vinculo(s) adicional(is) encontrado(s) automaticamente.`
-        : 'Conta criada com sucesso',
+      message: 'Conta criada com sucesso',
     })
   } catch (error) {
     console.error('Representante registro error:', error)

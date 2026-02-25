@@ -114,11 +114,11 @@ export async function POST(request: NextRequest) {
 
     const body: CriarRepresentanteRequest = await request.json()
 
-    if (!body.nome) {
-      return NextResponse.json({ error: 'Nome do representante e obrigatorio' }, { status: 400 })
+    if (!body.nome || typeof body.nome !== 'string' || body.nome.trim().length < 2) {
+      return NextResponse.json({ error: 'Nome do representante deve ter pelo menos 2 caracteres' }, { status: 400 })
     }
 
-    if (!body.fornecedor_ids || body.fornecedor_ids.length === 0) {
+    if (!Array.isArray(body.fornecedor_ids) || body.fornecedor_ids.length === 0 || !body.fornecedor_ids.every((id: unknown) => typeof id === 'number')) {
       return NextResponse.json({ error: 'Selecione pelo menos um fornecedor' }, { status: 400 })
     }
 
@@ -127,14 +127,14 @@ export async function POST(request: NextRequest) {
 
     // Verificar duplicidade por telefone na mesma empresa
     if (body.telefone) {
-      const telefoneNormalizado = body.telefone.replace(/\D/g, '')
+      const telefoneNormalizado = normalizePhone(body.telefone)
       const { data: existentes } = await supabase
         .from('representantes')
         .select('id, nome, telefone')
         .eq('empresa_id', empresaId)
         .eq('ativo', true)
 
-      const duplicado = existentes?.find(r => r.telefone?.replace(/\D/g, '') === telefoneNormalizado)
+      const duplicado = existentes?.find(r => normalizePhone(r.telefone) === telefoneNormalizado)
       if (duplicado) {
         return NextResponse.json(
           { error: `Ja existe um representante com esse telefone: ${duplicado.nome}` },
@@ -184,34 +184,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Auto-vincular user existente por telefone
-    let autoLinkedUserId: number | null = null
-    if (body.telefone) {
-      const phoneNorm = normalizePhone(body.telefone)
-      if (phoneNorm) {
-        const { data: allUsers } = await supabase
-          .from('users_representante')
-          .select('id, telefone')
-          .eq('ativo', true)
-
-        if (allUsers) {
-          const matchUser = allUsers.find(u => normalizePhone(u.telefone) === phoneNorm)
-          if (matchUser) {
-            autoLinkedUserId = matchUser.id
-          }
-        }
-      }
-    }
-
     // Criar representante
     const { data: representante, error: repError } = await supabase
       .from('representantes')
       .insert({
         empresa_id: empresaId,
         codigo_acesso: codigoAcesso,
-        nome: body.nome,
+        nome: body.nome.trim(),
         telefone: body.telefone || null,
-        user_representante_id: autoLinkedUserId,
         ativo: true,
       })
       .select('id')
@@ -243,10 +223,7 @@ export async function POST(request: NextRequest) {
       success: true,
       representante_id: representante.id,
       codigo_acesso: codigoAcesso,
-      auto_linked: !!autoLinkedUserId,
-      message: autoLinkedUserId
-        ? 'Representante criado e vinculado automaticamente a conta existente'
-        : 'Representante criado com sucesso',
+      message: 'Representante criado com sucesso',
     })
 
   } catch (error) {

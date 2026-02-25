@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
-import { normalizePhone } from '@/lib/phone'
 
 // GET - Buscar representante por codigo_acesso (publico, para pagina de convite)
 export async function GET(request: NextRequest) {
@@ -21,7 +20,6 @@ export async function GET(request: NextRequest) {
       .select(`
         id,
         nome,
-        telefone,
         empresa_id,
         user_representante_id,
         codigo_acesso,
@@ -62,31 +60,13 @@ export async function GET(request: NextRequest) {
       return { id: f?.id ?? 0, nome: f?.nome ?? '' }
     }).filter(f => f.id > 0) || []
 
-    // Verificar se ja existe user com mesmo telefone (para auto-link)
-    let existingUserMatch = false
-    if (!representante.user_representante_id && representante.telefone) {
-      const phoneNorm = normalizePhone(representante.telefone)
-      if (phoneNorm) {
-        const { data: users } = await supabase
-          .from('users_representante')
-          .select('id, telefone')
-          .eq('ativo', true)
-
-        if (users) {
-          existingUserMatch = users.some(u => normalizePhone(u.telefone) === phoneNorm)
-        }
-      }
-    }
-
     return NextResponse.json({
       success: true,
       representante: {
         id: representante.id,
         nome: representante.nome,
-        telefone: representante.telefone,
         empresa_nome: emp?.nome_fantasia || emp?.razao_social || '',
         ja_vinculado: !!representante.user_representante_id,
-        existing_user_match: existingUserMatch,
       },
       fornecedores,
     })
@@ -99,7 +79,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Auto-vincular representante a user existente por telefone
+// POST - Vincular representante a usuario autenticado
+// Requer que o usuario ja esteja logado como representante
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -112,11 +93,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Importar getCurrentUser para validar autenticacao
+    const { getCurrentUser } = await import('@/lib/auth')
+    const user = await getCurrentUser()
+
+    if (!user || user.tipo !== 'representante' || !user.representanteUserId) {
+      return NextResponse.json(
+        { success: false, error: 'Voce precisa estar logado como representante para vincular um novo codigo' },
+        { status: 401 }
+      )
+    }
+
     const supabase = createServerSupabaseClient()
 
     const { data: representante } = await supabase
       .from('representantes')
-      .select('id, telefone, user_representante_id')
+      .select('id, user_representante_id')
       .eq('codigo_acesso', codigo_acesso.toUpperCase())
       .single()
 
@@ -129,46 +121,35 @@ export async function POST(request: NextRequest) {
 
     if (representante.user_representante_id) {
       return NextResponse.json(
-        { success: false, error: 'Ja vinculado' },
+        { success: false, error: 'Este codigo ja foi vinculado a outra conta' },
         { status: 400 }
       )
     }
 
-    const phoneNorm = normalizePhone(representante.telefone)
-    if (!phoneNorm) {
-      return NextResponse.json(
-        { success: false, error: 'Representante sem telefone valido' },
-        { status: 400 }
-      )
-    }
-
-    const { data: users } = await supabase
-      .from('users_representante')
-      .select('id, telefone')
-      .eq('ativo', true)
-
-    const matchUser = users?.find(u => normalizePhone(u.telefone) === phoneNorm)
-    if (!matchUser) {
-      return NextResponse.json(
-        { success: false, error: 'Nenhum usuario encontrado com este telefone' },
-        { status: 404 }
-      )
-    }
-
-    await supabase
+    // Vincular ao usuario autenticado (consentimento explicito)
+    const { error: updateError } = await supabase
       .from('representantes')
       .update({
-        user_representante_id: matchUser.id,
+        user_representante_id: user.representanteUserId,
         updated_at: new Date().toISOString(),
       })
       .eq('id', representante.id)
+      .is('user_representante_id', null)  // Previne race condition
+
+    if (updateError) {
+      console.error('Erro ao vincular representante:', updateError)
+      return NextResponse.json(
+        { success: false, error: 'Erro ao vincular conta' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Conta vinculada automaticamente',
+      message: 'Codigo vinculado a sua conta com sucesso',
     })
   } catch (error) {
-    console.error('Convite auto-link error:', error)
+    console.error('Convite link error:', error)
     return NextResponse.json(
       { success: false, error: 'Erro interno do servidor' },
       { status: 500 }

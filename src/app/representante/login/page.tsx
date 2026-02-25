@@ -25,7 +25,9 @@ function RepresentanteLoginForm() {
   const searchParams = useSearchParams()
   const { login } = useRepresentanteAuth()
 
-  const redirect = searchParams.get('redirect') || '/representante/dashboard'
+  // Validar redirect para prevenir open redirect — apenas paths internos
+  const rawRedirect = searchParams.get('redirect') || '/representante/dashboard'
+  const redirect = rawRedirect.startsWith('/representante/') ? rawRedirect : '/representante/dashboard'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

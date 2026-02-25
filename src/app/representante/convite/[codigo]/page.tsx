@@ -26,10 +26,8 @@ interface ConviteData {
   representante: {
     id: number
     nome: string
-    telefone?: string
     empresa_nome: string
     ja_vinculado: boolean
-    existing_user_match: boolean
   }
   fornecedores: Array<{ id: number; nome: string }>
 }
@@ -50,10 +48,6 @@ export default function RepresentanteConvitePage() {
   const [showPassword, setShowPassword] = useState(false)
   const [formError, setFormError] = useState('')
   const [formLoading, setFormLoading] = useState(false)
-
-  // Auto-link state
-  const [autoLinking, setAutoLinking] = useState(false)
-  const [autoLinked, setAutoLinked] = useState(false)
 
   useEffect(() => {
     async function fetchConvite() {
@@ -78,27 +72,6 @@ export default function RepresentanteConvitePage() {
     }
   }, [codigo])
 
-  const handleAutoLink = async () => {
-    setAutoLinking(true)
-    try {
-      const response = await fetch('/api/auth/representante/convite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo_acesso: codigo }),
-      })
-      const data = await response.json()
-      if (data.success) {
-        setAutoLinked(true)
-      } else {
-        setFormError(data.error || 'Erro ao vincular conta')
-      }
-    } catch {
-      setFormError('Erro ao vincular conta')
-    } finally {
-      setAutoLinking(false)
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError('')
@@ -122,7 +95,6 @@ export default function RepresentanteConvitePage() {
         body: JSON.stringify({
           nome: conviteData?.representante.nome,
           email,
-          telefone: conviteData?.representante.telefone || undefined,
           codigo_acesso: codigo,
           password,
         }),
@@ -204,98 +176,7 @@ export default function RepresentanteConvitePage() {
     )
   }
 
-  // Caso 2: Telefone bate com user existente - auto-vincular
-  if (representante.existing_user_match && !autoLinked) {
-    return (
-      <RepresentanteAuthLayout>
-        <Card shadow="lg" rounded="xl" className="w-full max-w-[420px]">
-          <CardContent className="p-8">
-            <div className="text-center mb-6">
-              <div className="mx-auto w-14 h-14 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-violet-500/25">
-                <UserGroupIcon />
-              </div>
-              <h1 className="text-xl font-semibold text-gray-800 mb-1">Conta encontrada!</h1>
-              <p className="text-sm text-gray-500">
-                Encontramos uma conta existente com seu telefone.
-              </p>
-            </div>
-
-            {/* Info do convite */}
-            <div className="bg-violet-50 border border-violet-100 rounded-xl p-4 mb-4">
-              <p className="text-sm text-violet-700">
-                <span className="font-semibold">{representante.empresa_nome}</span> te adicionou como representante.
-              </p>
-              {fornecedores.length > 0 && (
-                <p className="text-xs text-violet-600 mt-1">
-                  Fornecedores: {fornecedores.map(f => f.nome).join(', ')}
-                </p>
-              )}
-            </div>
-
-            {formError && (
-              <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm mb-4 border border-red-100">
-                {formError}
-              </div>
-            )}
-
-            <button
-              onClick={handleAutoLink}
-              disabled={autoLinking}
-              className="w-full py-3 px-4 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg shadow-violet-500/25 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {autoLinking ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Vinculando...
-                </>
-              ) : (
-                'Vincular a minha conta'
-              )}
-            </button>
-
-            <div className="mt-4 text-center">
-              <Link
-                href="/representante/login"
-                className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                Ja tenho conta? Fazer login
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </RepresentanteAuthLayout>
-    )
-  }
-
-  // Caso 2b: Auto-vinculado com sucesso
-  if (autoLinked) {
-    return (
-      <RepresentanteAuthLayout>
-        <Card shadow="lg" rounded="xl" className="w-full max-w-[420px]">
-          <CardContent className="p-8 text-center">
-            <div className="mx-auto w-14 h-14 bg-gradient-to-br from-green-400 to-emerald-500 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-green-500/25">
-              <CheckIcon />
-            </div>
-            <h1 className="text-xl font-semibold text-gray-800 mb-2">Conta vinculada!</h1>
-            <p className="text-sm text-gray-500 mb-6">
-              Sua conta foi vinculada a {representante.empresa_nome}. Faca login para acessar.
-            </p>
-            <Link
-              href="/representante/login"
-              className="inline-flex items-center justify-center w-full py-3 px-4 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg shadow-violet-500/25 transition-all duration-200"
-            >
-              Fazer login
-            </Link>
-          </CardContent>
-        </Card>
-      </RepresentanteAuthLayout>
-    )
-  }
-
-  // Caso 3: Novo usuario - formulario de registro
+  // Caso 2: Novo usuario - formulario de registro
   return (
     <RepresentanteAuthLayout>
       <Card shadow="lg" rounded="xl" className="w-full max-w-[420px]">
@@ -340,15 +221,6 @@ export default function RepresentanteConvitePage() {
               value={representante.nome}
               disabled
             />
-
-            {representante.telefone && (
-              <Input
-                label="Telefone"
-                type="text"
-                value={representante.telefone}
-                disabled
-              />
-            )}
 
             <Input
               label="Email"
