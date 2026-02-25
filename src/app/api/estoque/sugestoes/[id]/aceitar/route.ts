@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
+import { getBlingToken, atualizarEstoquesBling } from '@/lib/bling-estoque'
 
 export async function POST(
   request: NextRequest,
@@ -37,10 +38,10 @@ export async function POST(
       return NextResponse.json({ error: 'Sugestao nao encontrada ou ja processada' }, { status: 404 })
     }
 
-    // Buscar todos os itens
+    // Buscar todos os itens com id_produto_bling do produto
     const { data: itens, error: itensError } = await supabase
       .from('itens_conferencia_estoque')
-      .select('id, produto_id, estoque_conferido, estoque_sistema')
+      .select('id, produto_id, estoque_conferido, estoque_sistema, produtos(id_produto_bling)')
       .eq('conferencia_id', conferenciaId)
 
     if (itensError || !itens || itens.length === 0) {
@@ -100,6 +101,42 @@ export async function POST(
         .eq('id', item.id)
     }
 
+    // Sincronizar com Bling (se empresa tiver integração)
+    let blingSync: { sucessos: number; erros: number; detalhes: Array<{ id: number; success: boolean; error?: string }> } | null = null
+    if (atualizados > 0) {
+      try {
+        const blingToken = await getBlingToken(supabase, user.empresaId)
+        if (blingToken) {
+          // Montar lista de itens aceitos com divergência que têm id_produto_bling
+          const itensParaBling = itens
+            .filter((item) => {
+              if (!itensAceitosSet.has(item.id)) return false
+              if (item.estoque_conferido === item.estoque_sistema) return false
+              const produto = item.produtos as unknown as { id_produto_bling: string | null } | null
+              return produto?.id_produto_bling
+            })
+            .map((item) => {
+              const produto = item.produtos as unknown as { id_produto_bling: string }
+              return {
+                idProdutoBling: Number(produto.id_produto_bling),
+                quantidade: item.estoque_conferido,
+                observacao: `Conferencia de Estoque #${conferenciaId} - ${fornecedorNome}`,
+              }
+            })
+
+          if (itensParaBling.length > 0) {
+            blingSync = await atualizarEstoquesBling(blingToken, itensParaBling)
+            console.log(
+              `[Bling Estoque] Conferencia #${conferenciaId}: ${blingSync.sucessos} sucessos, ${blingSync.erros} erros de ${itensParaBling.length} itens`
+            )
+          }
+        }
+      } catch (error) {
+        console.error('[Bling Estoque] Erro ao sincronizar com Bling:', error)
+        // Não bloquear o aceite — Supabase já foi atualizado
+      }
+    }
+
     // Determinar status final
     const todosAceitos = itens.every(i => itensAceitosSet.has(i.id))
     const nenhumAceito = itensAceitosSet.size === 0
@@ -130,6 +167,7 @@ export async function POST(
       itens_aceitos: itensAceitosSet.size,
       itens_rejeitados: itens.length - itensAceitosSet.size,
       produtos_atualizados: atualizados,
+      bling_sync: blingSync,
     })
   } catch (error) {
     console.error('Erro ao aceitar sugestao:', error)
