@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
@@ -28,6 +28,18 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }>
   'Registrada': { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Registrada' },
   'Aguardando Entrega': { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Aguardando Entrega' },
   'Rascunho': { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Rascunho' },
+}
+
+// Mapeamento situacao (numero DB) -> label (replica o CASE da view_pedidos_compra_detalhados)
+const situacaoToLabel = (situacao: number | null | undefined): string => {
+  switch (situacao) {
+    case 1: return 'Emitida'
+    case 2: return 'Cancelada'
+    case 3: return 'Registrada'
+    case 4: return 'Aguardando Entrega'
+    case 5: return 'Rascunho'
+    default: return 'Rascunho' // situacao=0, null → mesmo fallback do frontend atual
+  }
 }
 
 // Workflow status filter tabs
@@ -337,7 +349,7 @@ export default function PedidoCompraPage() {
     fetchRepresentantesPorFornecedor()
   }, [user?.id, user?.empresa_id, empresa?.id])
 
-  // Buscar pedidos
+  // Buscar pedidos - query direta com TODOS os filtros server-side
   const fetchPedidos = async () => {
     if (!user?.id) {
       setLoading(false)
@@ -353,50 +365,9 @@ export default function PedidoCompraPage() {
         return
       }
 
-      const offset = (currentPage - 1) * itemsPerPage
+      const rangeStart = (currentPage - 1) * itemsPerPage
 
-      // Query para obter count total e resumo (server-side)
-      let countQuery = supabase
-        .from('pedidos_compra')
-        .select('id, total, situacao', { count: 'exact' })
-        .eq('empresa_id', empresaId)
-
-      // Aplicar filtros na query de count
-      if (fornecedorFilter) {
-        countQuery = countQuery.eq('fornecedor_id', parseInt(fornecedorFilter))
-      }
-      if (dataInicioFilter) {
-        countQuery = countQuery.gte('data', dataInicioFilter)
-      }
-      if (dataFimFilter) {
-        countQuery = countQuery.lte('data', dataFimFilter)
-      }
-      if (situacaoFilter) {
-        // Mapear label para numero
-        const situacaoMap: Record<string, number> = {
-          'Emitida': 1,
-          'Cancelada': 2,
-          'Registrada': 3,
-          'Aguardando Entrega': 4,
-          'Rascunho': 5
-        }
-        if (situacaoMap[situacaoFilter]) {
-          countQuery = countQuery.eq('situacao', situacaoMap[situacaoFilter])
-        }
-      }
-      if (debouncedSearch) {
-        countQuery = countQuery.or(`numero.ilike.%${debouncedSearch}%`)
-      }
-
-      const countResult = await countQuery
-
-      // Calcular resumo a partir do count query
-      const totalPedidos = countResult.count || 0
-      const valorTotalGeral = countResult.data?.reduce((acc, p) => acc + (p.total || 0), 0) || 0
-      setTotalCount(totalPedidos)
-      setResumo({ qtd: totalPedidos, valorTotal: valorTotalGeral })
-
-      // Buscar contagens por workflow status
+      // 1. Buscar contagens por workflow status (sem filtro de workflow, para popular todos os tabs)
       const { data: workflowData } = await supabase
         .from('pedidos_compra')
         .select('status_interno')
@@ -423,33 +394,100 @@ export default function PedidoCompraPage() {
         setWorkflowCounts(counts)
       }
 
-      // Agora buscar dados paginados via RPC
-      let data: PedidoCompraListItem[] | null = null
-      let error = null
+      // 2. Query principal com TODOS os filtros aplicados server-side
+      let query = supabase
+        .from('pedidos_compra')
+        .select(`
+          id,
+          numero,
+          data,
+          observacoes_internas,
+          total,
+          situacao,
+          status_interno,
+          empresa_id,
+          fornecedor_id,
+          fornecedores(nome, celular, telefone),
+          itens_pedido_compra(id, descricao, quantidade, valor)
+        `, { count: 'exact' })
+        .eq('empresa_id', empresaId)
+        .order('data', { ascending: false })
+        .order('id', { ascending: false })
 
-      // Se ha busca, usa RPC de search
-      if (debouncedSearch) {
-        const result = await supabase.rpc('flowb2b_search_pedidos_compra_detalhados_usernobling', {
-          p_empresa_id: empresaId,
-          p_search_term: debouncedSearch,
-          p_limit: itemsPerPage,
-          p_offset: offset
-        })
-        data = result.data
-        error = result.error
-      } else {
-        // Senao usa RPC de filter
-        const result = await supabase.rpc('flowb2b_filter_pedidos_compra_detalhados_usernobling', {
-          p_empresa_id: empresaId,
-          p_fornecedor_id: fornecedorFilter ? parseInt(fornecedorFilter) : null,
-          p_data_inicio: dataInicioFilter || null,
-          p_data_fim: dataFimFilter || null,
-          p_limit: itemsPerPage,
-          p_offset: offset
-        })
-        data = result.data
-        error = result.error
+      // Filtro por fornecedor
+      if (fornecedorFilter) {
+        query = query.eq('fornecedor_id', parseInt(fornecedorFilter))
       }
+
+      // Filtro por data
+      if (dataInicioFilter) {
+        query = query.gte('data', dataInicioFilter)
+      }
+      if (dataFimFilter) {
+        query = query.lte('data', dataFimFilter)
+      }
+
+      // Filtro por situacao (status Bling) - mapeia label do dropdown para valores reais no DB
+      if (situacaoFilter) {
+        if (situacaoFilter === 'Rascunho') {
+          // situacao=0 (Bling 'Em aberto' → VIEW 'Desconhecido' → fallback 'Rascunho'),
+          // situacao=5 (VIEW 'Rascunho' explícito), ou null
+          query = query.or('situacao.eq.0,situacao.eq.5,situacao.is.null')
+        } else {
+          const situacaoMap: Record<string, number> = {
+            'Emitida': 1,
+            'Cancelada': 2,
+            'Registrada': 3,
+            'Aguardando Entrega': 4,
+          }
+          const val = situacaoMap[situacaoFilter]
+          if (val !== undefined) {
+            query = query.eq('situacao', val)
+          }
+        }
+      }
+
+      // Filtro por workflow (status_interno) - tabs do topo
+      if (workflowFilter !== 'todos') {
+        if (workflowFilter === 'rascunho') {
+          query = query.or('status_interno.eq.rascunho,status_interno.is.null')
+        } else {
+          query = query.eq('status_interno', workflowFilter)
+        }
+      }
+
+      // Filtro por busca (numero é bigint, precisa de tratamento especial)
+      if (debouncedSearch) {
+        const searchConditions: string[] = []
+
+        // 1. Busca por numero do pedido (bigint → match exato se for numero)
+        const searchNum = parseInt(debouncedSearch.trim())
+        if (!isNaN(searchNum) && String(searchNum) === debouncedSearch.trim()) {
+          searchConditions.push(`numero.eq.${searchNum}`)
+        }
+
+        // 2. Busca por observacoes_internas (campo text)
+        searchConditions.push(`observacoes_internas.ilike.%${debouncedSearch}%`)
+
+        // 3. Busca por nome do fornecedor (pre-lookup nos IDs)
+        const { data: matchingFornecedores } = await supabase
+          .from('fornecedores')
+          .select('id')
+          .eq('empresa_id', empresaId)
+          .ilike('nome', `%${debouncedSearch}%`)
+
+        if (matchingFornecedores && matchingFornecedores.length > 0) {
+          const ids = matchingFornecedores.map(f => f.id)
+          searchConditions.push(`fornecedor_id.in.(${ids.join(',')})`)
+        }
+
+        query = query.or(searchConditions.join(','))
+      }
+
+      // Paginacao
+      query = query.range(rangeStart, rangeStart + itemsPerPage - 1)
+
+      const { data, error, count } = await query
 
       if (error) {
         console.error('Erro ao buscar pedidos:', error)
@@ -457,41 +495,88 @@ export default function PedidoCompraPage() {
         return
       }
 
-      if (data) {
-        // Filtrar por situacao no frontend se necessario (RPC nao filtra por situacao)
-        let filteredData = data
-        if (situacaoFilter) {
-          filteredData = data.filter(p => p.status === situacaoFilter)
-        }
+      const totalPedidos = count || 0
+      setTotalCount(totalPedidos)
 
-        // Ordenar por data mais recente primeiro
-        filteredData.sort((a, b) => {
-          const dateA = new Date(a.data_pedido).getTime()
-          const dateB = new Date(b.data_pedido).getTime()
-          return dateB - dateA
+      if (data && data.length > 0) {
+        // Mapear para o formato PedidoCompraListItem
+        const mappedPedidos: PedidoCompraListItem[] = data.map(p => {
+          const fornecedor = p.fornecedores as unknown as { nome: string; celular: string | null; telefone: string | null } | null
+          return {
+            pedido_id: p.id,
+            numero_pedido: p.numero,
+            data_pedido: p.data,
+            fornecedor_nome: fornecedor?.nome || '',
+            fornecedor_id: p.fornecedor_id,
+            fornecedor_telefone: fornecedor?.celular || fornecedor?.telefone || undefined,
+            observacoes_internas: p.observacoes_internas,
+            valor_total: p.total || 0,
+            status: situacaoToLabel(p.situacao),
+            empresa_id: p.empresa_id,
+            itens_produtos: (p.itens_pedido_compra || []) as unknown as import('@/types/pedido-compra').ItemPedidoResumo[],
+          }
         })
 
-        setPedidos(filteredData)
+        setPedidos(mappedPedidos)
 
-        // Buscar status_interno dos pedidos retornados
-        const pedidoIds = filteredData.map(p => p.pedido_id)
-        if (pedidoIds.length > 0) {
-          const { data: statusData } = await supabase
-            .from('pedidos_compra')
-            .select('id, status_interno')
-            .in('id', pedidoIds)
-
-          if (statusData) {
-            const map: Record<number, StatusInterno> = {}
-            statusData.forEach(s => {
-              if (s.status_interno) map[s.id] = s.status_interno as StatusInterno
-            })
-            setStatusInternoMap(map)
-          }
-        }
+        // Construir mapa de status_interno a partir dos dados ja retornados (sem query extra)
+        const map: Record<number, StatusInterno> = {}
+        data.forEach(p => {
+          if (p.status_interno) map[p.id] = p.status_interno as StatusInterno
+        })
+        setStatusInternoMap(map)
       } else {
         setPedidos([])
+        setStatusInternoMap({})
       }
+
+      // 3. Calcular resumo (valor total com os mesmos filtros, sem paginacao)
+      let resumoQuery = supabase
+        .from('pedidos_compra')
+        .select('total')
+        .eq('empresa_id', empresaId)
+
+      if (fornecedorFilter) resumoQuery = resumoQuery.eq('fornecedor_id', parseInt(fornecedorFilter))
+      if (dataInicioFilter) resumoQuery = resumoQuery.gte('data', dataInicioFilter)
+      if (dataFimFilter) resumoQuery = resumoQuery.lte('data', dataFimFilter)
+      if (situacaoFilter) {
+        if (situacaoFilter === 'Rascunho') {
+          resumoQuery = resumoQuery.or('situacao.eq.0,situacao.eq.5,situacao.is.null')
+        } else {
+          const situacaoMap: Record<string, number> = { 'Emitida': 1, 'Cancelada': 2, 'Registrada': 3, 'Aguardando Entrega': 4 }
+          const val = situacaoMap[situacaoFilter]
+          if (val !== undefined) resumoQuery = resumoQuery.eq('situacao', val)
+        }
+      }
+      if (workflowFilter !== 'todos') {
+        if (workflowFilter === 'rascunho') {
+          resumoQuery = resumoQuery.or('status_interno.eq.rascunho,status_interno.is.null')
+        } else {
+          resumoQuery = resumoQuery.eq('status_interno', workflowFilter)
+        }
+      }
+      if (debouncedSearch) {
+        const resumoSearchConditions: string[] = []
+        const sNum = parseInt(debouncedSearch.trim())
+        if (!isNaN(sNum) && String(sNum) === debouncedSearch.trim()) {
+          resumoSearchConditions.push(`numero.eq.${sNum}`)
+        }
+        resumoSearchConditions.push(`observacoes_internas.ilike.%${debouncedSearch}%`)
+        // Reutilizar os IDs de fornecedores ja buscados acima (mesma execucao)
+        const { data: resumoFornecedores } = await supabase
+          .from('fornecedores')
+          .select('id')
+          .eq('empresa_id', empresaId)
+          .ilike('nome', `%${debouncedSearch}%`)
+        if (resumoFornecedores && resumoFornecedores.length > 0) {
+          resumoSearchConditions.push(`fornecedor_id.in.(${resumoFornecedores.map(f => f.id).join(',')})`)
+        }
+        resumoQuery = resumoQuery.or(resumoSearchConditions.join(','))
+      }
+
+      const { data: resumoData } = await resumoQuery
+      const valorTotalGeral = resumoData?.reduce((acc, p) => acc + (p.total || 0), 0) || 0
+      setResumo({ qtd: totalPedidos, valorTotal: valorTotalGeral })
     } catch (err) {
       console.error('Erro:', err)
     } finally {
@@ -499,19 +584,10 @@ export default function PedidoCompraPage() {
     }
   }
 
-  // Buscar quando mudar filtros
+  // Buscar quando mudar filtros (inclui workflowFilter agora que eh server-side)
   useEffect(() => {
     fetchPedidos()
-  }, [user?.id, user?.empresa_id, empresa?.id, currentPage, debouncedSearch, fornecedorFilter, dataInicioFilter, dataFimFilter, situacaoFilter])
-
-  // Filtrar pedidos por workflow status
-  const filteredPedidos = useMemo(() => {
-    if (workflowFilter === 'todos') return pedidos
-    return pedidos.filter(p => {
-      const status = statusInternoMap[p.pedido_id] || 'rascunho'
-      return status === workflowFilter
-    })
-  }, [pedidos, statusInternoMap, workflowFilter])
+  }, [user?.id, user?.empresa_id, empresa?.id, currentPage, debouncedSearch, fornecedorFilter, dataInicioFilter, dataFimFilter, situacaoFilter, workflowFilter])
 
   // Verificar se ha filtros ativos
   const hasActiveFilters = fornecedorFilter !== '' || dataInicioFilter !== '' || dataFimFilter !== '' || situacaoFilter !== ''
@@ -538,10 +614,10 @@ export default function PedidoCompraPage() {
 
   // Selecao
   const handleSelectAll = () => {
-    if (selectedPedidos.length === filteredPedidos.length) {
+    if (selectedPedidos.length === pedidos.length) {
       setSelectedPedidos([])
     } else {
-      setSelectedPedidos(filteredPedidos.map((p) => p.pedido_id))
+      setSelectedPedidos(pedidos.map((p) => p.pedido_id))
     }
   }
 
@@ -953,7 +1029,7 @@ export default function PedidoCompraPage() {
                     <th className="px-4 py-3 text-left w-12">
                       <input
                         type="checkbox"
-                        checked={filteredPedidos.length > 0 && selectedPedidos.length === filteredPedidos.length}
+                        checked={pedidos.length > 0 && selectedPedidos.length === pedidos.length}
                         onChange={handleSelectAll}
                         className="w-5 h-5 text-[#336FB6] bg-white border-[#DCDCDC] rounded focus:ring-[#336FB6]"
                       />
@@ -990,7 +1066,7 @@ export default function PedidoCompraPage() {
                 <tbody>
                   {loading ? (
                     <TableSkeleton columns={8} rows={5} showCheckbox showActions />
-                  ) : filteredPedidos.length === 0 ? (
+                  ) : pedidos.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="px-6 py-12 text-center">
                         {searchTerm || hasActiveFilters || workflowFilter !== 'todos' ? (
@@ -1057,7 +1133,7 @@ export default function PedidoCompraPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredPedidos.map((pedido, index) => {
+                    pedidos.map((pedido, index) => {
                       const statusConfig = STATUS_CONFIG[pedido.status] || STATUS_CONFIG['Rascunho']
                       const statusInterno = statusInternoMap[pedido.pedido_id] || 'rascunho'
                       const hasPendingSuggestion = statusInterno === 'sugestao_pendente'
