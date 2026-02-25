@@ -132,55 +132,112 @@ export default function FornecedorEstoquePage() {
                 <Skeleton className="h-10" />
               </div>
             ) : produtosFiltrados.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
-                      <th className="px-6 py-4">Codigo</th>
-                      <th className="px-6 py-4">Nome</th>
-                      <th className="px-6 py-4">Marca</th>
-                      <th className="px-6 py-4">EAN</th>
-                      <th className="px-6 py-4 text-right">Estoque Atual</th>
-                      <th className="px-6 py-4 text-right">Estoque Min</th>
-                      <th className="px-6 py-4 text-center">Curva</th>
-                      <th className="px-6 py-4 text-right">Preco Compra</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {produtosFiltrados.map((produto) => {
-                      const estoqueAbaixo = produto.estoque_minimo != null && produto.estoque_atual < produto.estoque_minimo
-                      return (
-                        <tr key={produto.id} className="hover:bg-[#336FB6]/5 transition-colors">
-                          <td className="px-6 py-4 text-sm font-mono text-gray-700">{produto.codigo || '-'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 font-medium max-w-xs truncate">{produto.nome}</td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{produto.marca || '-'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-500 font-mono">{produto.gtin || '-'}</td>
-                          <td className={`px-6 py-4 text-sm text-right font-semibold ${estoqueAbaixo ? 'text-red-600' : 'text-gray-900'}`}>
-                            {produto.estoque_atual}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-right text-gray-500">{produto.estoque_minimo ?? '-'}</td>
-                          <td className="px-6 py-4 text-center">
-                            {produto.curva ? (
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                produto.curva === 'A' ? 'bg-emerald-100 text-emerald-700' :
-                                produto.curva === 'B' ? 'bg-amber-100 text-amber-700' :
-                                'bg-gray-100 text-gray-600'
-                              }`}>
-                                {produto.curva}
-                              </span>
-                            ) : '-'}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-right text-gray-900">
-                            {produto.valor_de_compra != null
-                              ? `R$ ${produto.valor_de_compra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                              : '-'}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Desktop: tabela */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
+                        <th className="px-6 py-4">Codigo</th>
+                        <th className="px-6 py-4">Nome</th>
+                        <th className="px-6 py-4">Marca</th>
+                        <th className="px-6 py-4">EAN</th>
+                        <th className="px-6 py-4 text-right">Estoque Atual</th>
+                        <th className="px-6 py-4 text-right">Estoque Min</th>
+                        <th className="px-6 py-4 text-center">Curva</th>
+                        <th className="px-6 py-4 text-right">Preco Compra</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {produtosFiltrados.map((produto) => {
+                        const estoqueAbaixo = produto.estoque_minimo != null && produto.estoque_atual < produto.estoque_minimo
+                        return (
+                          <tr key={produto.id} className="hover:bg-[#336FB6]/5 transition-colors">
+                            <td className="px-6 py-4 text-sm font-mono text-gray-700">{produto.codigo || '-'}</td>
+                            <td className="px-6 py-4 text-sm text-gray-900 font-medium max-w-xs truncate">{produto.nome}</td>
+                            <td className="px-6 py-4 text-sm text-gray-500">{produto.marca || '-'}</td>
+                            <td className="px-6 py-4 text-sm text-gray-500 font-mono">{produto.gtin || '-'}</td>
+                            <td className={`px-6 py-4 text-sm text-right font-semibold ${estoqueAbaixo ? 'text-red-600' : 'text-gray-900'}`}>
+                              {produto.estoque_atual}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-right text-gray-500">{produto.estoque_minimo ?? '-'}</td>
+                            <td className="px-6 py-4 text-center">
+                              {produto.curva ? (
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                  produto.curva === 'A' ? 'bg-emerald-100 text-emerald-700' :
+                                  produto.curva === 'B' ? 'bg-amber-100 text-amber-700' :
+                                  'bg-gray-100 text-gray-600'
+                                }`}>
+                                  {produto.curva}
+                                </span>
+                              ) : '-'}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-right text-gray-900">
+                              {produto.valor_de_compra != null
+                                ? `R$ ${produto.valor_de_compra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                : '-'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile: cards */}
+                <div className="md:hidden divide-y divide-gray-100">
+                  {produtosFiltrados.map((produto) => {
+                    const estoqueAbaixo = produto.estoque_minimo != null && produto.estoque_atual < produto.estoque_minimo
+                    return (
+                      <div key={produto.id} className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 line-clamp-2">{produto.nome}</p>
+                            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                              <span className="font-mono">{produto.codigo || '-'}</span>
+                              {produto.marca && (
+                                <>
+                                  <span className="text-gray-300">|</span>
+                                  <span>{produto.marca}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {produto.curva && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${
+                              produto.curva === 'A' ? 'bg-emerald-100 text-emerald-700' :
+                              produto.curva === 'B' ? 'bg-amber-100 text-amber-700' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>
+                              {produto.curva}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 mt-3">
+                          <div>
+                            <p className="text-[10px] uppercase text-gray-400 font-medium">Estoque</p>
+                            <p className={`text-sm font-semibold ${estoqueAbaixo ? 'text-red-600' : 'text-gray-900'}`}>
+                              {produto.estoque_atual}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase text-gray-400 font-medium">Min</p>
+                            <p className="text-sm text-gray-600">{produto.estoque_minimo ?? '-'}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] uppercase text-gray-400 font-medium">Preco</p>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {produto.valor_de_compra != null
+                                ? `R$ ${produto.valor_de_compra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                : '-'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
             ) : (
               <div className="p-12 text-center">
                 <div className="w-16 h-16 mx-auto mb-4 bg-[#336FB6]/10 rounded-full flex items-center justify-center">

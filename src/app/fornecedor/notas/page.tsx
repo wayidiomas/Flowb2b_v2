@@ -157,48 +157,91 @@ export default function FornecedorNotasPage() {
                 <Skeleton className="h-10" />
               </div>
             ) : notasFiltradas.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
-                      <th className="px-6 py-4">Numero</th>
-                      <th className="px-6 py-4">Serie</th>
-                      <th className="px-6 py-4">Tipo</th>
-                      <th className="px-6 py-4">Situacao</th>
-                      <th className="px-6 py-4">Data Emissao</th>
-                      <th className="px-6 py-4">Chave de Acesso</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {notasFiltradas.map((nota) => (
-                      <tr key={nota.id} className="hover:bg-[#336FB6]/5 transition-colors">
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">{nota.numero || '-'}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{nota.serie || '-'}</td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                            nota.tipo === 'E'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : nota.tipo === 'S'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-gray-100 text-gray-600'
-                          }`}>
-                            {nota.tipo === 'E' ? 'Entrada' : nota.tipo === 'S' ? 'Saida' : nota.tipo || '-'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{nota.situacao || '-'}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
+              <>
+                {/* Desktop: tabela */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
+                        <th className="px-6 py-4">Numero</th>
+                        <th className="px-6 py-4">Serie</th>
+                        <th className="px-6 py-4">Tipo</th>
+                        <th className="px-6 py-4">Situacao</th>
+                        <th className="px-6 py-4">Data Emissao</th>
+                        <th className="px-6 py-4">Chave de Acesso</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {notasFiltradas.map((nota) => (
+                        <tr key={nota.id} className="hover:bg-[#336FB6]/5 transition-colors">
+                          <td className="px-6 py-4 text-sm font-semibold text-gray-900">{nota.numero || '-'}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{nota.serie || '-'}</td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                              nota.tipo === 'E'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : nota.tipo === 'S'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {nota.tipo === 'E' ? 'Entrada' : nota.tipo === 'S' ? 'Saida' : nota.tipo || '-'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{nota.situacao || '-'}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {nota.data_emissao
+                              ? new Date(nota.data_emissao).toLocaleDateString('pt-BR')
+                              : '-'}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-gray-400 font-mono max-w-[200px] truncate" title={nota.chave_acesso || ''}>
+                            {nota.chave_acesso || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile: cards */}
+                <div className="md:hidden divide-y divide-gray-100">
+                  {notasFiltradas.map((nota) => (
+                    <div key={nota.id} className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-gray-900">NF {nota.numero || '-'}</span>
+                            {nota.serie && (
+                              <span className="text-xs text-gray-400">Serie {nota.serie}</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">{nota.situacao || '-'}</p>
+                        </div>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 ${
+                          nota.tipo === 'E'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : nota.tipo === 'S'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {nota.tipo === 'E' ? 'Entrada' : nota.tipo === 'S' ? 'Saida' : nota.tipo || '-'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                        <span>
                           {nota.data_emissao
                             ? new Date(nota.data_emissao).toLocaleDateString('pt-BR')
                             : '-'}
-                        </td>
-                        <td className="px-6 py-4 text-xs text-gray-400 font-mono max-w-[200px] truncate" title={nota.chave_acesso || ''}>
-                          {nota.chave_acesso || '-'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        </span>
+                        {nota.chave_acesso && (
+                          <span className="font-mono text-[10px] text-gray-400 truncate max-w-[180px]" title={nota.chave_acesso}>
+                            {nota.chave_acesso}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="p-12 text-center">
                 <div className="w-16 h-16 mx-auto mb-4 bg-[#336FB6]/10 rounded-full flex items-center justify-center">

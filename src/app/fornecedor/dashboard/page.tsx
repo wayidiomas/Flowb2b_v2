@@ -211,7 +211,7 @@ export default function FornecedorDashboardPage() {
                 <ArrowRightIcon />
               </Link>
             </div>
-            <div className="overflow-x-auto">
+            <div>
               {loading ? (
                 <div className="p-6 space-y-3">
                   <Skeleton className="h-12" />
@@ -219,45 +219,77 @@ export default function FornecedorDashboardPage() {
                   <Skeleton className="h-12" />
                 </div>
               ) : data?.pedidosRecentes && data.pedidosRecentes.length > 0 ? (
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      <th className="px-6 py-3">Numero</th>
-                      <th className="px-6 py-3">Lojista</th>
-                      <th className="px-6 py-3">Data</th>
-                      <th className="px-6 py-3">Total</th>
-                      <th className="px-6 py-3">Status</th>
-                      <th className="px-6 py-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
+                <>
+                  {/* Desktop: tabela */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          <th className="px-6 py-3">Numero</th>
+                          <th className="px-6 py-3">Lojista</th>
+                          <th className="px-6 py-3">Data</th>
+                          <th className="px-6 py-3">Total</th>
+                          <th className="px-6 py-3">Status</th>
+                          <th className="px-6 py-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {data.pedidosRecentes.map((pedido) => (
+                          <tr key={pedido.id} className="hover:bg-[#336FB6]/5 transition-colors">
+                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">#{pedido.numero}</td>
+                            <td className="px-6 py-4 text-sm text-gray-700 font-medium">{pedido.empresa_nome}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600">
+                              {new Date(pedido.data).toLocaleDateString('pt-BR')}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900 font-semibold">
+                              R$ {pedido.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusColors[pedido.status_interno] || 'bg-gray-100 text-gray-700'}`}>
+                                {statusLabels[pedido.status_interno] || pedido.status_interno}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <Link
+                                href={`/fornecedor/pedidos/${pedido.id}`}
+                                className="text-sm text-[#336FB6] hover:text-[#2660A5] font-semibold"
+                              >
+                                Ver
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile: cards */}
+                  <div className="md:hidden divide-y divide-gray-100">
                     {data.pedidosRecentes.map((pedido) => (
-                      <tr key={pedido.id} className="hover:bg-[#336FB6]/5 transition-colors">
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">#{pedido.numero}</td>
-                        <td className="px-6 py-4 text-sm text-gray-700 font-medium">{pedido.empresa_nome}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {new Date(pedido.data).toLocaleDateString('pt-BR')}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900 font-semibold">
-                          R$ {pedido.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusColors[pedido.status_interno] || 'bg-gray-100 text-gray-700'}`}>
+                      <Link
+                        key={pedido.id}
+                        href={`/fornecedor/pedidos/${pedido.id}`}
+                        className="block p-4 hover:bg-[#336FB6]/5 active:bg-[#336FB6]/10 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <span className="text-sm font-bold text-gray-900">#{pedido.numero}</span>
+                            <p className="text-sm text-gray-600 mt-0.5 truncate">{pedido.empresa_nome}</p>
+                          </div>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 ${statusColors[pedido.status_interno] || 'bg-gray-100 text-gray-700'}`}>
                             {statusLabels[pedido.status_interno] || pedido.status_interno}
                           </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <Link
-                            href={`/fornecedor/pedidos/${pedido.id}`}
-                            className="text-sm text-[#336FB6] hover:text-[#2660A5] font-semibold"
-                          >
-                            Ver
-                          </Link>
-                        </td>
-                      </tr>
+                        </div>
+                        <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                          <span>{new Date(pedido.data).toLocaleDateString('pt-BR')}</span>
+                          <span className="text-sm font-bold text-gray-900">
+                            R$ {pedido.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </Link>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                </>
               ) : (
                 <div className="p-12 text-center">
                   <div className="w-16 h-16 mx-auto mb-4 bg-[#336FB6]/10 rounded-full flex items-center justify-center">

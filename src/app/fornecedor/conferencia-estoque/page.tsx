@@ -135,58 +135,98 @@ export default function FornecedorConferenciaEstoquePage() {
               <Skeleton className="h-10" />
             </div>
           ) : conferencias.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
-                    <th className="px-6 py-4">#</th>
-                    <th className="px-6 py-4">Lojista</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">Data Inicio</th>
-                    <th className="px-6 py-4">Data Envio</th>
-                    <th className="px-6 py-4 text-right">Itens</th>
-                    <th className="px-6 py-4 text-right">Divergencias</th>
-                    <th className="px-6 py-4"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {conferencias.map((conf) => (
-                    <tr key={conf.id} className="hover:bg-[#336FB6]/5 transition-colors">
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">#{conf.id}</td>
-                      <td className="px-6 py-4 text-sm text-gray-700 font-medium">{conf.empresa_nome || '-'}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusColors[conf.status] || 'bg-gray-100 text-gray-700'}`}>
-                          {statusLabels[conf.status] || conf.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {new Date(conf.data_inicio).toLocaleDateString('pt-BR')}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {conf.data_envio ? new Date(conf.data_envio).toLocaleDateString('pt-BR') : '-'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-right text-gray-900 font-semibold">{conf.total_itens}</td>
-                      <td className="px-6 py-4 text-sm text-right">
-                        <span className={conf.total_divergencias > 0 ? 'text-amber-600 font-semibold' : 'text-gray-500'}>
-                          {conf.total_divergencias}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Link href={`/fornecedor/conferencia-estoque/${conf.id}`}>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-[#FFAA11] text-[#FFAA11] hover:bg-[#FFAA11] hover:text-white"
-                          >
-                            {conf.status === 'em_andamento' ? 'Continuar' : 'Ver detalhes'}
-                          </Button>
-                        </Link>
-                      </td>
+            <>
+              {/* Desktop: tabela */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
+                      <th className="px-6 py-4">#</th>
+                      <th className="px-6 py-4">Lojista</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4">Data Inicio</th>
+                      <th className="px-6 py-4">Data Envio</th>
+                      <th className="px-6 py-4 text-right">Itens</th>
+                      <th className="px-6 py-4 text-right">Divergencias</th>
+                      <th className="px-6 py-4"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {conferencias.map((conf) => (
+                      <tr key={conf.id} className="hover:bg-[#336FB6]/5 transition-colors">
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">#{conf.id}</td>
+                        <td className="px-6 py-4 text-sm text-gray-700 font-medium">{conf.empresa_nome || '-'}</td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusColors[conf.status] || 'bg-gray-100 text-gray-700'}`}>
+                            {statusLabels[conf.status] || conf.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {new Date(conf.data_inicio).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {conf.data_envio ? new Date(conf.data_envio).toLocaleDateString('pt-BR') : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-right text-gray-900 font-semibold">{conf.total_itens}</td>
+                        <td className="px-6 py-4 text-sm text-right">
+                          <span className={conf.total_divergencias > 0 ? 'text-amber-600 font-semibold' : 'text-gray-500'}>
+                            {conf.total_divergencias}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <Link href={`/fornecedor/conferencia-estoque/${conf.id}`}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-[#FFAA11] text-[#FFAA11] hover:bg-[#FFAA11] hover:text-white"
+                            >
+                              {conf.status === 'em_andamento' ? 'Continuar' : 'Ver detalhes'}
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: cards */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {conferencias.map((conf) => (
+                  <Link
+                    key={conf.id}
+                    href={`/fornecedor/conferencia-estoque/${conf.id}`}
+                    className="block p-4 hover:bg-[#336FB6]/5 active:bg-[#336FB6]/10 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-sm font-bold text-gray-900">#{conf.id}</span>
+                        <p className="text-sm text-gray-600 mt-0.5 truncate">{conf.empresa_nome || '-'}</p>
+                      </div>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 ${statusColors[conf.status] || 'bg-gray-100 text-gray-700'}`}>
+                        {statusLabels[conf.status] || conf.status}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 mt-2.5">
+                      <div>
+                        <p className="text-[10px] uppercase text-gray-400 font-medium">Inicio</p>
+                        <p className="text-xs text-gray-600">{new Date(conf.data_inicio).toLocaleDateString('pt-BR')}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase text-gray-400 font-medium">Itens</p>
+                        <p className="text-xs font-semibold text-gray-900">{conf.total_itens}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase text-gray-400 font-medium">Diverg.</p>
+                        <p className={`text-xs font-semibold ${conf.total_divergencias > 0 ? 'text-amber-600' : 'text-gray-500'}`}>
+                          {conf.total_divergencias}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </>
           ) : (
             <div className="p-12 text-center">
               <div className="w-16 h-16 mx-auto mb-4 bg-[#336FB6]/10 rounded-full flex items-center justify-center">

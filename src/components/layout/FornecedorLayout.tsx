@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode } from 'react'
+import { ReactNode, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -10,15 +10,23 @@ interface FornecedorLayoutProps {
   children: ReactNode
 }
 
-const navItems = [
-  { href: '/fornecedor/dashboard', label: 'Dashboard', icon: DashboardIcon },
+// Itens principais (bottom tab bar no mobile)
+const bottomTabItems = [
+  { href: '/fornecedor/dashboard', label: 'Inicio', icon: DashboardIcon },
   { href: '/fornecedor/pedidos', label: 'Pedidos', icon: PedidosIcon },
   { href: '/fornecedor/estoque', label: 'Estoque', icon: EstoqueIcon },
-  { href: '/fornecedor/notas', label: 'Notas Fiscais', icon: NotasIcon },
-  { href: '/fornecedor/conferencia-estoque', label: 'Conferencia', icon: ConferenciaIcon },
+  { href: '/fornecedor/notas', label: 'Notas', icon: NotasIcon },
+]
+
+// Itens secundarios (menu "Mais" no mobile)
+const moreMenuItems = [
+  { href: '/fornecedor/conferencia-estoque', label: 'Conferencia de Estoque', icon: ConferenciaIcon },
   { href: '/fornecedor/tabelas-preco', label: 'Tabelas de Preco', icon: TabelaPrecoIcon },
   { href: '/fornecedor/representantes', label: 'Representantes', icon: RepresentantesIcon },
 ]
+
+// Todos os itens para desktop nav
+const allNavItems = [...bottomTabItems, ...moreMenuItems]
 
 // Icone Dashboard
 function DashboardIcon({ className }: { className?: string }) {
@@ -93,11 +101,20 @@ function LogoutIcon({ className }: { className?: string }) {
   )
 }
 
-// Icone de seta para baixo
-function ChevronDownIcon({ className = 'w-3 h-3' }: { className?: string }) {
+// Icone Mais (3 pontos horizontal)
+function MoreIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+    </svg>
+  )
+}
+
+// Icone X (fechar)
+function CloseIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   )
 }
@@ -105,12 +122,34 @@ function ChevronDownIcon({ className = 'w-3 h-3' }: { className?: string }) {
 export function FornecedorLayout({ children }: FornecedorLayoutProps) {
   const { user, logout } = useFornecedorAuth()
   const pathname = usePathname()
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
+
+  // Fechar menu "Mais" ao navegar
+  useEffect(() => {
+    setMoreMenuOpen(false)
+  }, [pathname])
+
+  // Fechar menu "Mais" ao clicar fora
+  useEffect(() => {
+    if (!moreMenuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [moreMenuOpen])
+
+  // Verifica se algum item do menu "Mais" esta ativo
+  const isMoreActive = moreMenuItems.some(item => pathname.startsWith(item.href))
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header azul - igual ao lojista */}
+      {/* Header azul */}
       <header className="bg-[#336fb6] h-[60px] w-full shadow-md z-50 relative">
-        <div className="h-full flex items-center px-6 md:px-12 gap-6">
+        <div className="h-full flex items-center px-4 md:px-12 gap-4 md:gap-6">
           {/* Logo FlowB2B + Badge Fornecedor */}
           <Link href="/fornecedor/dashboard" className="shrink-0 flex items-center gap-3">
             <Image
@@ -126,9 +165,9 @@ export function FornecedorLayout({ children }: FornecedorLayoutProps) {
             </span>
           </Link>
 
-          {/* Navigation */}
+          {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-1 ml-4">
-            {navItems.map((item) => {
+            {allNavItems.map((item) => {
               const isActive = pathname.startsWith(item.href)
               const Icon = item.icon
               return (
@@ -152,7 +191,7 @@ export function FornecedorLayout({ children }: FornecedorLayoutProps) {
           <div className="flex-1" />
 
           {/* User info + Logout */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             {/* User info */}
             <div className="flex items-center gap-3">
               {/* Avatar */}
@@ -161,7 +200,7 @@ export function FornecedorLayout({ children }: FornecedorLayoutProps) {
                   {user?.nome?.charAt(0).toUpperCase() || 'F'}
                 </span>
               </div>
-              {/* Info */}
+              {/* Info - desktop only */}
               <div className="text-left hidden md:block">
                 <p className="text-white text-sm font-medium leading-tight">
                   {user?.nome || 'Fornecedor'}
@@ -177,42 +216,111 @@ export function FornecedorLayout({ children }: FornecedorLayoutProps) {
               onClick={logout}
               className="flex items-center gap-2 text-sm text-white/80 hover:text-white px-3 py-2 rounded-md hover:bg-white/10 transition-colors"
               title="Sair"
+              aria-label="Sair da conta"
             >
               <LogoutIcon className="w-5 h-5" />
               <span className="hidden sm:inline">Sair</span>
             </button>
           </div>
         </div>
+      </header>
 
-        {/* Mobile Nav */}
-        <nav className="md:hidden flex items-center gap-1 px-4 pb-3 bg-[#336fb6]">
-          {navItems.map((item) => {
+      {/* Main content - pb-20 no mobile para nao ficar atras do bottom tab */}
+      <main className="p-4 md:p-6 2xl:px-8 3xl:px-12 pb-24 md:pb-6">
+        <div className="max-w-[1800px] 2xl:max-w-[2200px] 3xl:max-w-none mx-auto">
+          {children}
+        </div>
+      </main>
+
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
+        <div className="flex items-stretch h-16 px-1 pb-[env(safe-area-inset-bottom)]">
+          {/* 4 itens principais */}
+          {bottomTabItems.map((item) => {
             const isActive = pathname.startsWith(item.href)
             const Icon = item.icon
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
                   isActive
-                    ? 'bg-[#2660a5] text-white'
-                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                    ? 'text-[#336FB6]'
+                    : 'text-gray-400 active:text-gray-600'
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                {item.label}
+                <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2]' : ''}`} />
+                <span>{item.label}</span>
+                {isActive && (
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#336FB6] rounded-b-full" />
+                )}
               </Link>
             )
           })}
-        </nav>
-      </header>
 
-      {/* Main content */}
-      <main className="p-4 md:p-6 2xl:px-8 3xl:px-12">
-        <div className="max-w-[1800px] 2xl:max-w-[2200px] 3xl:max-w-none mx-auto">
-          {children}
+          {/* Botao "Mais" */}
+          <div className="flex-1 relative" ref={moreMenuRef}>
+            <button
+              onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+              className={`w-full h-full flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors ${
+                isMoreActive || moreMenuOpen
+                  ? 'text-[#336FB6]'
+                  : 'text-gray-400 active:text-gray-600'
+              }`}
+              aria-label="Mais opcoes"
+              aria-expanded={moreMenuOpen}
+            >
+              <MoreIcon className={`w-5 h-5 ${isMoreActive ? 'stroke-[2]' : ''}`} />
+              <span>Mais</span>
+              {isMoreActive && (
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#336FB6] rounded-b-full" />
+              )}
+            </button>
+
+            {/* Menu popup acima do botao "Mais" */}
+            {moreMenuOpen && (
+              <div className="absolute bottom-full right-0 mb-2 w-56 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Mais opcoes</span>
+                  <button
+                    onClick={() => setMoreMenuOpen(false)}
+                    className="p-1 text-gray-400 hover:text-gray-600 rounded-md"
+                    aria-label="Fechar menu"
+                  >
+                    <CloseIcon className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {moreMenuItems.map((item) => {
+                  const isActive = pathname.startsWith(item.href)
+                  const Icon = item.icon
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-[#336FB6]/10 text-[#336FB6]'
+                          : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'
+                      }`}
+                    >
+                      <Icon className="w-5 h-5 flex-shrink-0" />
+                      {item.label}
+                    </Link>
+                  )
+                })}
+
+                {/* Divider + Info do usuario no mobile */}
+                <div className="border-t border-gray-100 px-4 py-3">
+                  <p className="text-xs text-gray-500 truncate">{user?.nome}</p>
+                  <p className="text-xs text-gray-400 font-mono truncate">
+                    {user?.cnpj?.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </main>
+      </nav>
     </div>
   )
 }

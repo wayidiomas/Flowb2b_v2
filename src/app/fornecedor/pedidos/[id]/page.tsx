@@ -487,45 +487,46 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         )}
 
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <button
-              onClick={() => router.push('/fornecedor/pedidos')}
-              className="text-sm text-gray-500 hover:text-[#336FB6] mb-2 flex items-center gap-1 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Voltar
-            </button>
-            <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-3">
-              Pedido #{pedido.numero}
-              {pedido.representante && (
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-700" title={`Via representante: ${pedido.representante.nome}`}>
-                  <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  Via Representante
+        <div className="space-y-3">
+          <button
+            onClick={() => router.push('/fornecedor/pedidos')}
+            className="text-sm text-gray-500 hover:text-[#336FB6] flex items-center gap-1 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Voltar
+          </button>
+
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 flex flex-wrap items-center gap-2">
+                Pedido #{pedido.numero}
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${statusColors[pedido.status_interno] || 'bg-gray-100 text-gray-700'}`}>
+                  {statusLabels[pedido.status_interno] || pedido.status_interno}
                 </span>
-              )}
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {pedido.empresa_nome} - {new Date(pedido.data).toLocaleDateString('pt-BR')}
-              {pedido.representante && (
-                <span className="ml-2 text-violet-600">
-                  (Rep: {pedido.representante.nome})
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusColors[pedido.status_interno] || 'bg-gray-100 text-gray-700'}`}>
-              {statusLabels[pedido.status_interno] || pedido.status_interno}
-            </span>
+                {pedido.representante && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
+                    <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Rep
+                  </span>
+                )}
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                {pedido.empresa_nome} - {new Date(pedido.data).toLocaleDateString('pt-BR')}
+                {pedido.representante && (
+                  <span className="ml-2 text-violet-600">
+                    (Rep: {pedido.representante.nome})
+                  </span>
+                )}
+              </p>
+            </div>
             {canCancel && (
               <button
                 onClick={() => setShowCancelamentoModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-red-200"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-red-200 w-full sm:w-auto shrink-0"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -582,7 +583,9 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   <div className="px-4 py-2 bg-gray-50 border-b">
                     <p className="text-sm font-medium text-gray-700">Itens propostos pelo lojista:</p>
                   </div>
-                  <div className="overflow-x-auto">
+
+                  {/* Desktop: tabela */}
+                  <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-xs text-gray-500 uppercase bg-gray-50">
@@ -631,6 +634,47 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                         })}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Mobile: cards */}
+                  <div className="md:hidden divide-y divide-gray-100">
+                    {data.sugestaoItens.map((sItem) => {
+                      const item = itens.find(i => i.id === sItem.item_pedido_compra_id)
+                      if (!item) return null
+                      const diferencaQtd = sItem.quantidade_sugerida - item.quantidade
+                      return (
+                        <div key={sItem.item_pedido_compra_id} className="p-3 space-y-2">
+                          <p className="text-sm font-medium text-gray-900">{item.descricao}</p>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <p className="text-gray-400">Qtd orig.</p>
+                              <p className="text-gray-600 font-medium">{item.quantidade}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-400">Qtd proposta</p>
+                              <p className={`font-semibold ${diferencaQtd !== 0 ? (diferencaQtd > 0 ? 'text-emerald-600' : 'text-red-600') : 'text-gray-900'}`}>
+                                {sItem.quantidade_sugerida}
+                                {diferencaQtd !== 0 && <span className="ml-0.5">({diferencaQtd > 0 ? '+' : ''}{diferencaQtd})</span>}
+                              </p>
+                            </div>
+                            <div className="flex gap-3">
+                              {sItem.desconto_percentual > 0 && (
+                                <div>
+                                  <p className="text-gray-400">Desc.</p>
+                                  <p className="text-emerald-600 font-medium">{sItem.desconto_percentual}%</p>
+                                </div>
+                              )}
+                              {sItem.bonificacao_quantidade > 0 && (
+                                <div>
+                                  <p className="text-gray-400">Bonif.</p>
+                                  <p className="text-blue-600 font-medium">+{sItem.bonificacao_quantidade}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -867,7 +911,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             <p className="text-sm text-gray-500 mb-4">
               Defina condicoes gerais para o pedido. O desconto/bonificacao geral sera aplicado se o total do pedido atingir o valor minimo.
             </p>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {/* Valor minimo */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -983,7 +1027,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
 
         {/* Itens + Formulario de sugestao */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
             <h2 className="text-lg font-semibold text-gray-900">
               {canSuggest ? 'Itens - Enviar sugestao' : 'Itens do pedido'}
             </h2>
@@ -993,7 +1037,9 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               </p>
             )}
           </div>
-          <div className="overflow-x-auto">
+
+          {/* Desktop: tabela completa */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
@@ -1006,7 +1052,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                     <>
                       <th className="px-4 py-3 text-right bg-[#FFAA11]/10">Qtd sugerida</th>
                       <th className="px-4 py-3 text-right bg-[#FFAA11]/10">Desconto %</th>
-                      <th className="px-4 py-3 text-right bg-[#FFAA11]/10">Bonif. %</th>
+                      <th className="px-4 py-3 text-right bg-[#FFAA11]/10">Bonif.</th>
                       <th className="px-4 py-3 bg-[#FFAA11]/10">Validade</th>
                       <th className="px-4 py-3 text-right bg-[#336FB6]/10">Subtotal sugerido</th>
                     </>
@@ -1093,16 +1139,13 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                               className="px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] transition-all"
                             />
                           </td>
-                          {/* Subtotal sugerido calculado em tempo real */}
                           <td className="px-4 py-3 bg-[#336FB6]/5">
                             {(() => {
                               const subtotalBase = item.valor * sug.quantidade_sugerida
                               const desconto = subtotalBase * (sug.desconto_percentual / 100)
                               const subtotalComDesconto = subtotalBase - desconto
-                              // bonificacao_quantidade eh quantidade direta de unidades, nao percentual
                               const bonifUnidades = sug.bonificacao_quantidade || 0
                               const diferenca = subtotalComDesconto - (item.valor * item.quantidade)
-
                               return (
                                 <div className="text-right">
                                   <p className="text-sm font-semibold text-[#336FB6]">
@@ -1132,9 +1175,131 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             </table>
           </div>
 
+          {/* Mobile: cards por item */}
+          <div className="md:hidden divide-y divide-gray-200">
+            {itens.map((item) => {
+              const sug = sugestoes.find(s => s.item_id === item.id)
+              const subtotalOriginal = item.valor * item.quantidade
+
+              // Calculo do subtotal sugerido
+              let subtotalSugerido = subtotalOriginal
+              let diferenca = 0
+              let bonifUnidades = 0
+              if (canSuggest && sug) {
+                const subtotalBase = item.valor * sug.quantidade_sugerida
+                const desconto = subtotalBase * (sug.desconto_percentual / 100)
+                subtotalSugerido = subtotalBase - desconto
+                diferenca = subtotalSugerido - subtotalOriginal
+                bonifUnidades = sug.bonificacao_quantidade || 0
+              }
+
+              return (
+                <div key={item.id} className="p-4 space-y-3">
+                  {/* Nome do produto */}
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 leading-tight">{item.descricao}</p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+                      {item.codigo_fornecedor && <span>SKU: {item.codigo_fornecedor}</span>}
+                      {item.ean && <span>EAN: {item.ean}</span>}
+                      {item.codigo_produto && <span>Lojista: {item.codigo_produto}</span>}
+                    </div>
+                  </div>
+
+                  {/* Info basica: valor, qtd, subtotal */}
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-gray-400">Valor unit.</p>
+                      <p className="text-gray-900 font-medium">R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-gray-400">Qtd original</p>
+                      <p className="text-gray-900 font-semibold">{item.quantidade} {item.unidade}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-gray-400">Subtotal</p>
+                      <p className="text-gray-900 font-semibold">R$ {subtotalOriginal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                  </div>
+
+                  {/* Campos de sugestao */}
+                  {canSuggest && sug && (
+                    <div className="bg-[#FFAA11]/5 border border-[#FFAA11]/20 rounded-xl p-3 space-y-3">
+                      <p className="text-xs font-semibold text-[#FFAA11] uppercase tracking-wider">Sua sugestao</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Qtd sugerida</label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={sug.quantidade_sugerida}
+                            onChange={(e) => updateSugestao(item.id, 'quantidade_sugerida', Number(e.target.value))}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Desconto %</label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.5}
+                            value={sug.desconto_percentual || ''}
+                            onChange={(e) => updateSugestao(item.id, 'desconto_percentual', Number(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Bonificacao (un)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={sug.bonificacao_quantidade || ''}
+                            onChange={(e) => updateSugestao(item.id, 'bonificacao_quantidade', Number(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Validade</label>
+                          <input
+                            id={`validade-${item.id}`}
+                            type="date"
+                            value={sug.validade}
+                            onChange={(e) => updateSugestao(item.id, 'validade', e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Subtotal sugerido */}
+                      <div className="flex items-center justify-between pt-2 border-t border-[#FFAA11]/20">
+                        <span className="text-xs text-gray-500">Subtotal sugerido</span>
+                        <div className="text-right">
+                          <span className="text-sm font-bold text-[#336FB6]">
+                            R$ {subtotalSugerido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                          {diferenca !== 0 && (
+                            <span className={`text-xs ml-1.5 ${diferenca > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              ({diferenca > 0 ? '+' : ''}{diferenca.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                            </span>
+                          )}
+                          {bonifUnidades > 0 && (
+                            <span className="text-xs text-blue-500 ml-1.5">+{bonifUnidades} gratis</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
           {/* Observacao + Submit */}
           {canSuggest && (
-            <div className="px-6 py-4 border-t border-gray-200 space-y-4">
+            <div className="px-4 sm:px-6 py-4 border-t border-gray-200 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Observacao para o lojista (opcional)
@@ -1153,6 +1318,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   size="lg"
                   loading={submitting}
                   onClick={handleSubmitSugestao}
+                  className="w-full sm:w-auto"
                 >
                   Enviar sugestao
                 </Button>
