@@ -95,6 +95,7 @@ function PedidosContent() {
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
   const [fornecedorFilter, setFornecedorFilter] = useState(searchParams.get('fornecedor_id') || '')
   const [lojistaFilter, setLojistaFilter] = useState('')
+  const [apenasFlowB2B, setApenasFlowB2B] = useState(true)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
   const [total, setTotal] = useState(0)
@@ -108,6 +109,7 @@ function PedidosContent() {
         params.set('limit', String(limit))
         if (statusFilter) params.set('status', statusFilter)
         if (fornecedorFilter) params.set('fornecedor_id', fornecedorFilter)
+        params.set('origem', apenasFlowB2B ? 'flowb2b' : 'todos')
 
         const response = await fetch(`/api/representante/pedidos?${params.toString()}`)
         const data = await response.json()
@@ -125,7 +127,7 @@ function PedidosContent() {
     if (!authLoading && user) {
       fetchPedidos()
     }
-  }, [authLoading, user, currentPage, statusFilter, fornecedorFilter])
+  }, [authLoading, user, currentPage, statusFilter, fornecedorFilter, apenasFlowB2B])
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -268,6 +270,22 @@ function PedidosContent() {
               {filter.label}
             </button>
           ))}
+
+          <div className="ml-auto">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={apenasFlowB2B}
+                  onChange={(e) => setApenasFlowB2B(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+              </div>
+              Apenas pedidos FlowB2B
+            </label>
+          </div>
         </div>
 
         {/* Dropdown Filters */}

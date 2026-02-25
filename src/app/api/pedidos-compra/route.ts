@@ -601,6 +601,8 @@ export async function POST(request: NextRequest) {
       p_politica_compra_id: body.politicaId || null,
       p_itens: itensRPC,
       p_parcelas: parcelasRPC,
+      p_origem: 'flowb2b',
+      p_created_by_user_id: user.userId || null,
     })
 
     if (error) {

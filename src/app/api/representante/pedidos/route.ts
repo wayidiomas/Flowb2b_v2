@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const fornecedorId = searchParams.get('fornecedor_id')
+    const origemFilter = searchParams.get('origem') || 'flowb2b'
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = (page - 1) * limit
@@ -89,6 +90,10 @@ export async function GET(request: NextRequest) {
       .in('status_interno', ['enviado_ao_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'cancelado', 'contra_proposta'])
 
     // Filtros opcionais
+    if (origemFilter !== 'todos') {
+      query = query.eq('origem', origemFilter)
+    }
+
     if (status) {
       query = query.eq('status_interno', status)
     }

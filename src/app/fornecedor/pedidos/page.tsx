@@ -77,6 +77,7 @@ export default function FornecedorPedidosPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [apenasFlowB2B, setApenasFlowB2B] = useState(true)
 
   // Debounce da busca
   useEffect(() => {
@@ -94,6 +95,7 @@ export default function FornecedorPedidosPage() {
       const params = new URLSearchParams()
       if (statusFilter) params.set('status', statusFilter)
       if (debouncedSearch) params.set('search', debouncedSearch)
+      params.set('origem', apenasFlowB2B ? 'flowb2b' : 'todos')
 
       const res = await fetch(`/api/fornecedor/pedidos?${params}`)
       if (res.ok) {
@@ -105,7 +107,7 @@ export default function FornecedorPedidosPage() {
     } finally {
       setLoading(false)
     }
-  }, [user, statusFilter, debouncedSearch])
+  }, [user, statusFilter, debouncedSearch, apenasFlowB2B])
 
   useEffect(() => {
     fetchPedidos()
@@ -161,9 +163,25 @@ export default function FornecedorPedidosPage() {
               {filter.label}
             </button>
           ))}
+
+          <div className="ml-auto">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={apenasFlowB2B}
+                  onChange={(e) => setApenasFlowB2B(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+              </div>
+              Apenas pedidos FlowB2B
+            </label>
+          </div>
         </div>
 
-        {/* Table */}
+        {/* Lista de pedidos */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
           {loading ? (
             <div className="p-6 space-y-3">
@@ -174,85 +192,128 @@ export default function FornecedorPedidosPage() {
               <Skeleton className="h-10" />
             </div>
           ) : pedidos.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
-                    <th className="px-6 py-4">Numero</th>
-                    <th className="px-6 py-4">Lojista</th>
-                    <th className="px-6 py-4">CNPJ</th>
-                    <th className="px-6 py-4">Data</th>
-                    <th className="px-6 py-4">Previsao</th>
-                    <th className="px-6 py-4">Itens</th>
-                    <th className="px-6 py-4">Total</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {pedidos.map((pedido) => (
-                    <tr key={pedido.id} className="hover:bg-[#336FB6]/5 transition-colors">
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                        <div className="flex items-center gap-2">
-                          #{pedido.numero}
+            <>
+              {/* Desktop: tabela */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
+                      <th className="px-6 py-4">Numero</th>
+                      <th className="px-6 py-4">Lojista</th>
+                      <th className="px-6 py-4">CNPJ</th>
+                      <th className="px-6 py-4">Data</th>
+                      <th className="px-6 py-4">Previsao</th>
+                      <th className="px-6 py-4">Itens</th>
+                      <th className="px-6 py-4">Total</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {pedidos.map((pedido) => (
+                      <tr key={pedido.id} className="hover:bg-[#336FB6]/5 transition-colors">
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                          <div className="flex items-center gap-2">
+                            #{pedido.numero}
+                            {pedido.representante && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700" title={`Via representante: ${pedido.representante.nome}`}>
+                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                Rep
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700 font-medium">
+                          <div>
+                            {pedido.empresa_nome}
+                            {pedido.representante && (
+                              <p className="text-xs text-violet-600 mt-0.5">
+                                via {pedido.representante.nome}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500 font-mono">
+                          {formatCNPJ(pedido.empresa_cnpj)}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {new Date(pedido.data).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {pedido.data_prevista
+                            ? new Date(pedido.data_prevista).toLocaleDateString('pt-BR')
+                            : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {pedido.itens_count}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                          R$ {pedido.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusColors[pedido.status_interno] || 'bg-gray-100 text-gray-700'}`}>
+                            {statusLabels[pedido.status_interno] || pedido.status_interno}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <Link href={`/fornecedor/pedidos/${pedido.id}`}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-[#FFAA11] text-[#FFAA11] hover:bg-[#FFAA11] hover:text-white"
+                            >
+                              Ver detalhes
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: cards */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {pedidos.map((pedido) => (
+                  <Link
+                    key={pedido.id}
+                    href={`/fornecedor/pedidos/${pedido.id}`}
+                    className="block p-4 hover:bg-[#336FB6]/5 active:bg-[#336FB6]/10 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-gray-900">#{pedido.numero}</span>
                           {pedido.representante && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700" title={`Via representante: ${pedido.representante.nome}`}>
-                              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                              </svg>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-violet-100 text-violet-700">
                               Rep
                             </span>
                           )}
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700 font-medium">
-                        <div>
-                          {pedido.empresa_nome}
-                          {pedido.representante && (
-                            <p className="text-xs text-violet-600 mt-0.5">
-                              via {pedido.representante.nome}
-                            </p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500 font-mono">
-                        {formatCNPJ(pedido.empresa_cnpj)}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {new Date(pedido.data).toLocaleDateString('pt-BR')}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {pedido.data_prevista
-                          ? new Date(pedido.data_prevista).toLocaleDateString('pt-BR')
-                          : '-'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {pedido.itens_count}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                        <p className="text-sm text-gray-600 mt-0.5 truncate">{pedido.empresa_nome}</p>
+                        {pedido.representante && (
+                          <p className="text-xs text-violet-600">via {pedido.representante.nome}</p>
+                        )}
+                      </div>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 ${statusColors[pedido.status_interno] || 'bg-gray-100 text-gray-700'}`}>
+                        {statusLabels[pedido.status_interno] || pedido.status_interno}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-2.5 text-xs text-gray-500">
+                      <div className="flex items-center gap-3">
+                        <span>{new Date(pedido.data).toLocaleDateString('pt-BR')}</span>
+                        <span>{pedido.itens_count} itens</span>
+                      </div>
+                      <span className="text-sm font-bold text-gray-900">
                         R$ {pedido.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusColors[pedido.status_interno] || 'bg-gray-100 text-gray-700'}`}>
-                          {statusLabels[pedido.status_interno] || pedido.status_interno}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Link href={`/fornecedor/pedidos/${pedido.id}`}>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-[#FFAA11] text-[#FFAA11] hover:bg-[#FFAA11] hover:text-white"
-                          >
-                            Ver detalhes
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </>
           ) : (
             <div className="p-12 text-center">
               <div className="w-16 h-16 mx-auto mb-4 bg-[#336FB6]/10 rounded-full flex items-center justify-center">
