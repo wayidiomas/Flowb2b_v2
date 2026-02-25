@@ -41,7 +41,7 @@ export default function RepresentanteConferenciaEstoquePage() {
   const [showNovaModal, setShowNovaModal] = useState(false)
   const [fornecedorIdNovo, setFornecedorIdNovo] = useState<number | null>(null)
   const [empresaIdNovo, setEmpresaIdNovo] = useState<number | null>(null)
-  const [step, setStep] = useState<'fornecedor' | 'lojista'>('fornecedor')
+  const [step, setStep] = useState<'lojista' | 'fornecedor'>('lojista')
 
   const fetchConferencias = useCallback(async () => {
     setLoading(true)
@@ -64,45 +64,65 @@ export default function RepresentanteConferenciaEstoquePage() {
     if (!authLoading && user) fetchConferencias()
   }, [fetchConferencias, authLoading, user])
 
-  // Fornecedores unicos
-  const fornecedoresUnicos = useMemo(() => {
+  // Lojistas unicos (o representante seleciona primeiro o lojista)
+  const lojistasUnicos = useMemo(() => {
     const map = new Map<number, string>()
     fornecedoresVinculados.forEach((f) => {
-      if (!map.has(f.fornecedor_id)) {
-        map.set(f.fornecedor_id, f.fornecedor_nome)
+      if (!map.has(f.empresa_id)) {
+        map.set(f.empresa_id, f.empresa_nome)
       }
     })
-    return Array.from(map, ([id, nome]) => ({ fornecedor_id: id, fornecedor_nome: nome }))
+    return Array.from(map, ([id, nome]) => ({ empresa_id: id, empresa_nome: nome }))
   }, [fornecedoresVinculados])
 
-  // Lojistas para o fornecedor selecionado
-  const lojistasDoFornecedor = useMemo(() => {
-    if (!fornecedorIdNovo) return []
-    return fornecedoresVinculados
-      .filter((f) => f.fornecedor_id === fornecedorIdNovo)
-      .map((f) => ({ empresa_id: f.empresa_id, empresa_nome: f.empresa_nome }))
-  }, [fornecedoresVinculados, fornecedorIdNovo])
+  // Fornecedores vinculados ao lojista selecionado
+  const fornecedoresDoLojista = useMemo(() => {
+    if (!empresaIdNovo) return []
+    const map = new Map<number, string>()
+    fornecedoresVinculados
+      .filter((f) => f.empresa_id === empresaIdNovo)
+      .forEach((f) => {
+        if (!map.has(f.fornecedor_id)) {
+          map.set(f.fornecedor_id, f.fornecedor_nome)
+        }
+      })
+    return Array.from(map, ([id, nome]) => ({ fornecedor_id: id, fornecedor_nome: nome }))
+  }, [fornecedoresVinculados, empresaIdNovo])
 
   const handleNovaConferencia = () => {
     setFornecedorIdNovo(null)
     setEmpresaIdNovo(null)
-    setStep('fornecedor')
-    setShowNovaModal(true)
+    setStep('lojista')
+    if (lojistasUnicos.length === 1) {
+      // Se so tem um lojista, selecionar automaticamente
+      handleSelecionarLojista(lojistasUnicos[0].empresa_id)
+    } else {
+      setShowNovaModal(true)
+    }
   }
 
-  const handleSelecionarFornecedor = (fornecedorId: number) => {
-    setFornecedorIdNovo(fornecedorId)
-    setEmpresaIdNovo(null)
-    // Pegar lojistas para este fornecedor
-    const lojistas = fornecedoresVinculados
-      .filter((f) => f.fornecedor_id === fornecedorId)
-      .map((f) => ({ empresa_id: f.empresa_id, empresa_nome: f.empresa_nome }))
-    if (lojistas.length === 1) {
-      // Se so tem um lojista, pular direto
-      setEmpresaIdNovo(lojistas[0].empresa_id)
-      setStep('lojista')
+  const handleSelecionarLojista = (empresaId: number) => {
+    setEmpresaIdNovo(empresaId)
+    setFornecedorIdNovo(null)
+    // Pegar fornecedores para este lojista
+    const fornecedores = fornecedoresVinculados
+      .filter((f) => f.empresa_id === empresaId)
+    // Deduplicate by fornecedor_id
+    const uniqueFornecedores = new Map<number, string>()
+    fornecedores.forEach((f) => uniqueFornecedores.set(f.fornecedor_id, f.fornecedor_nome))
+    if (uniqueFornecedores.size === 1) {
+      // Se so tem um fornecedor nessa loja, pular direto
+      const [fId] = uniqueFornecedores.keys()
+      setFornecedorIdNovo(fId)
+      // Se veio de 1 lojista unico, ir direto sem modal
+      if (lojistasUnicos.length === 1) {
+        router.push(`/representante/conferencia-estoque/nova?empresa_id=${empresaId}&fornecedor_id=${fId}`)
+        return
+      }
+      setStep('fornecedor')
     } else {
-      setStep('lojista')
+      setStep('fornecedor')
+      setShowNovaModal(true)
     }
   }
 
@@ -278,55 +298,24 @@ export default function RepresentanteConferenciaEstoquePage() {
         </div>
       </div>
 
-      {/* Modal para selecionar fornecedor e lojista */}
+      {/* Modal para selecionar lojista e fornecedor */}
       <Modal isOpen={showNovaModal} onClose={() => setShowNovaModal(false)} size="sm">
         <ModalHeader onClose={() => setShowNovaModal(false)}>
           <ModalTitle>
-            {step === 'fornecedor' ? 'Selecionar Fornecedor' : 'Selecionar Lojista'}
+            {step === 'lojista' ? 'Selecionar Lojista' : 'Selecionar Fornecedor'}
           </ModalTitle>
         </ModalHeader>
         <ModalBody>
-          {step === 'fornecedor' ? (
-            <>
-              <p className="text-sm text-gray-500 mb-4">
-                Qual fornecedor voce vai representar nesta conferencia?
-              </p>
-              <div className="space-y-2">
-                {fornecedoresUnicos.map((f) => (
-                  <button
-                    key={f.fornecedor_id}
-                    onClick={() => handleSelecionarFornecedor(f.fornecedor_id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition-all ${
-                      fornecedorIdNovo === f.fornecedor_id
-                        ? 'border-[#336FB6] bg-[#336FB6]/5 text-[#336FB6] font-medium'
-                        : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-[#336FB6]/10 flex items-center justify-center shrink-0">
-                      <span className="text-xs font-semibold text-[#336FB6]">
-                        {f.fornecedor_nome.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <span>{f.fornecedor_nome}</span>
-                    {fornecedorIdNovo === f.fornecedor_id && (
-                      <svg className="w-4 h-4 ml-auto text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : (
+          {step === 'lojista' ? (
             <>
               <p className="text-sm text-gray-500 mb-4">
                 Em qual lojista sera realizada a conferencia?
               </p>
               <div className="space-y-2">
-                {lojistasDoFornecedor.map((l) => (
+                {lojistasUnicos.map((l) => (
                   <button
                     key={l.empresa_id}
-                    onClick={() => setEmpresaIdNovo(l.empresa_id)}
+                    onClick={() => handleSelecionarLojista(l.empresa_id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition-all ${
                       empresaIdNovo === l.empresa_id
                         ? 'border-[#336FB6] bg-[#336FB6]/5 text-[#336FB6] font-medium'
@@ -348,14 +337,45 @@ export default function RepresentanteConferenciaEstoquePage() {
                 ))}
               </div>
             </>
+          ) : (
+            <>
+              <p className="text-sm text-gray-500 mb-4">
+                Qual fornecedor voce representa nesta conferencia?
+              </p>
+              <div className="space-y-2">
+                {fornecedoresDoLojista.map((f) => (
+                  <button
+                    key={f.fornecedor_id}
+                    onClick={() => setFornecedorIdNovo(f.fornecedor_id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left text-sm transition-all ${
+                      fornecedorIdNovo === f.fornecedor_id
+                        ? 'border-[#336FB6] bg-[#336FB6]/5 text-[#336FB6] font-medium'
+                        : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-[#336FB6]/10 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-semibold text-[#336FB6]">
+                        {f.fornecedor_nome.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <span>{f.fornecedor_nome}</span>
+                    {fornecedorIdNovo === f.fornecedor_id && (
+                      <svg className="w-4 h-4 ml-auto text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </ModalBody>
         <ModalFooter>
-          {step === 'lojista' && (
-            <Button variant="outline" onClick={() => setStep('fornecedor')}>Voltar</Button>
+          {step === 'fornecedor' && (
+            <Button variant="outline" onClick={() => { setStep('lojista'); setFornecedorIdNovo(null) }}>Voltar</Button>
           )}
           <Button variant="outline" onClick={() => setShowNovaModal(false)}>Cancelar</Button>
-          {step === 'lojista' && (
+          {step === 'fornecedor' && (
             <Button
               onClick={handleConfirmarNova}
               disabled={!empresaIdNovo || !fornecedorIdNovo}
