@@ -8,7 +8,7 @@ interface RepresentanteAuthLayoutProps {
   description?: string
 }
 
-// Animated wave component with purple theme
+// Animated wave component with amber/orange theme
 function AnimatedWaves() {
   const wave1 = "M0,160 C320,220 480,100 720,160 C960,220 1120,100 1440,160 L1440,320 L0,320 Z"
   const wave2 = "M0,200 C240,140 480,260 720,200 C960,140 1200,260 1440,200 L1440,320 L0,320 Z"
@@ -78,7 +78,7 @@ function AnimatedWaves() {
 
 export function RepresentanteAuthLayout({ children, description }: RepresentanteAuthLayoutProps) {
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700 relative overflow-hidden">
+    <div className="min-h-screen flex bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600 relative overflow-hidden">
       {/* Animated waves background */}
       <AnimatedWaves />
 

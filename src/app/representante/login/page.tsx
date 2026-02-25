@@ -51,7 +51,7 @@ function RepresentanteLoginForm() {
         <CardContent className="p-8">
           {/* Header */}
           <div className="text-center mb-6">
-            <div className="mx-auto w-14 h-14 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-violet-500/25">
+            <div className="mx-auto w-14 h-14 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-amber-500/25">
               <UserGroupIcon />
             </div>
             <h1 className="text-2xl font-semibold text-gray-800">
@@ -114,7 +114,7 @@ function RepresentanteLoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg shadow-violet-500/25 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl shadow-lg shadow-amber-500/25 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -154,7 +154,7 @@ function RepresentanteLoginForm() {
 
 function LoginFallback() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600">
       <div className="flex flex-col items-center gap-3">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white" />
         <p className="text-sm text-white/90 font-medium">Carregando...</p>

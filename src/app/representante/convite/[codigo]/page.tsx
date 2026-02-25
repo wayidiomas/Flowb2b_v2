@@ -116,7 +116,7 @@ export default function RepresentanteConvitePage() {
 
   if (pageLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600">
         <div className="flex flex-col items-center gap-3">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white" />
           <p className="text-sm text-white/90 font-medium">Carregando convite...</p>
@@ -139,7 +139,7 @@ export default function RepresentanteConvitePage() {
             <p className="text-sm text-gray-500 mb-6">{pageError || 'Este link de convite nao e valido ou expirou.'}</p>
             <Link
               href="/representante/login"
-              className="text-violet-600 hover:text-violet-700 font-semibold text-sm"
+              className="text-amber-600 hover:text-amber-700 font-semibold text-sm"
             >
               Ir para o login
             </Link>
@@ -166,7 +166,7 @@ export default function RepresentanteConvitePage() {
             </p>
             <Link
               href="/representante/login"
-              className="inline-flex items-center justify-center w-full py-3 px-4 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg shadow-violet-500/25 transition-all duration-200"
+              className="inline-flex items-center justify-center w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl shadow-lg shadow-amber-500/25 transition-all duration-200"
             >
               Fazer login
             </Link>
@@ -183,7 +183,7 @@ export default function RepresentanteConvitePage() {
         <CardContent className="p-8">
           {/* Header */}
           <div className="text-center mb-6">
-            <div className="mx-auto w-14 h-14 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-violet-500/25">
+            <div className="mx-auto w-14 h-14 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-amber-500/25">
               <UserGroupIcon />
             </div>
             <h1 className="text-2xl font-semibold text-gray-800">
@@ -195,12 +195,12 @@ export default function RepresentanteConvitePage() {
           </div>
 
           {/* Info do convite */}
-          <div className="bg-violet-50 border border-violet-100 rounded-xl p-4 mb-4">
-            <p className="text-sm text-violet-700">
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-4">
+            <p className="text-sm text-amber-700">
               <span className="font-semibold">{representante.empresa_nome}</span> te convidou como representante.
             </p>
             {fornecedores.length > 0 && (
-              <p className="text-xs text-violet-600 mt-1">
+              <p className="text-xs text-amber-600 mt-1">
                 Fornecedores: {fornecedores.map(f => f.nome).join(', ')}
               </p>
             )}
@@ -274,7 +274,7 @@ export default function RepresentanteConvitePage() {
             <button
               type="submit"
               disabled={formLoading}
-              className="w-full py-3 px-4 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg shadow-violet-500/25 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl shadow-lg shadow-amber-500/25 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {formLoading ? (
                 <>
@@ -296,7 +296,7 @@ export default function RepresentanteConvitePage() {
               Ja tem conta?{' '}
               <Link
                 href="/representante/login"
-                className="text-violet-600 hover:text-violet-700 font-semibold"
+                className="text-amber-600 hover:text-amber-700 font-semibold"
               >
                 Entrar
               </Link>

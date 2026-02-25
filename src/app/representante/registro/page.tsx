@@ -20,7 +20,7 @@ function RegistroRedirect() {
   }, [codigo, router])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600">
       <div className="flex flex-col items-center gap-3">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white" />
         <p className="text-sm text-white/90 font-medium">Redirecionando...</p>
@@ -33,7 +33,7 @@ export default function RepresentanteRegistroPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600">
           <div className="flex flex-col items-center gap-3">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white" />
             <p className="text-sm text-white/90 font-medium">Carregando...</p>
