@@ -88,16 +88,16 @@ export async function POST(
 
     const produto = produtos[0]
 
-    // Verificar se produto e do fornecedor
-    const { data: vinculoProduto, error: vincError } = await supabase
+    // Verificar se produto pertence a algum fornecedor do representante
+    const { data: vinculoProduto } = await supabase
       .from('fornecedores_produtos')
       .select('produto_id')
       .eq('produto_id', produto.id)
-      .eq('fornecedor_id', conferencia.fornecedor_id)
-      .single()
+      .in('fornecedor_id', fornecedorIds)
+      .limit(1)
 
-    if (vincError || !vinculoProduto) {
-      return NextResponse.json({ error: 'Produto nao pertence a este fornecedor' }, { status: 400 })
+    if (!vinculoProduto || vinculoProduto.length === 0) {
+      return NextResponse.json({ error: 'Produto nao pertence aos seus fornecedores' }, { status: 400 })
     }
 
     // Verificar se ja foi bipado
