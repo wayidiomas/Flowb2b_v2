@@ -370,7 +370,7 @@ export default function PedidoCompraPage() {
       // 1. Buscar contagens por workflow status (sem filtro de workflow, para popular todos os tabs)
       const { data: workflowData } = await supabase
         .from('pedidos_compra')
-        .select('status_interno')
+        .select('status_interno, situacao')
         .eq('empresa_id', empresaId)
 
       if (workflowData) {
@@ -386,9 +386,16 @@ export default function PedidoCompraPage() {
           cancelado: 0,
         }
         workflowData.forEach(p => {
-          const status = p.status_interno || 'rascunho'
-          if (counts[status] !== undefined) {
-            counts[status]++
+          const sit = p.situacao as number | null
+          const isRascunhoBling = sit === null || sit === 0 || sit === 5
+          if (p.status_interno === 'rascunho' || !p.status_interno) {
+            // So conta como rascunho se situacao do Bling tambem indica rascunho
+            if (isRascunhoBling) {
+              counts.rascunho++
+            }
+            // Pedidos com situacao 1,2,3,4 (Emitida/Cancelada/Registrada/Aguardando) so aparecem em "Todos"
+          } else if (counts[p.status_interno] !== undefined) {
+            counts[p.status_interno]++
           }
         })
         setWorkflowCounts(counts)
@@ -451,6 +458,8 @@ export default function PedidoCompraPage() {
       if (workflowFilter !== 'todos') {
         if (workflowFilter === 'rascunho') {
           query = query.or('status_interno.eq.rascunho,status_interno.is.null')
+          // Excluir pedidos do Bling que nao sao rascunho (Emitida=1, Cancelada=2, Registrada=3, Aguardando=4)
+          query = query.or('situacao.eq.0,situacao.eq.5,situacao.is.null')
         } else {
           query = query.eq('status_interno', workflowFilter)
         }
@@ -551,6 +560,7 @@ export default function PedidoCompraPage() {
       if (workflowFilter !== 'todos') {
         if (workflowFilter === 'rascunho') {
           resumoQuery = resumoQuery.or('status_interno.eq.rascunho,status_interno.is.null')
+          resumoQuery = resumoQuery.or('situacao.eq.0,situacao.eq.5,situacao.is.null')
         } else {
           resumoQuery = resumoQuery.eq('status_interno', workflowFilter)
         }
