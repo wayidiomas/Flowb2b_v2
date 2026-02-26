@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { TableSkeleton } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
@@ -80,6 +81,7 @@ interface Fornecedor {
 }
 
 export default function RepresentantesPage() {
+  const router = useRouter()
   const { user, empresa } = useAuth()
   const [representantes, setRepresentantes] = useState<RepresentanteComDetalhes[]>([])
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
@@ -499,7 +501,10 @@ export default function RepresentantesPage() {
       <RepresentanteSelectModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        onSelectExistente={() => {}}
+        onSelectExistente={(rep) => {
+          setShowModal(false)
+          router.push(`/cadastros/representantes/${rep.id}`)
+        }}
         onCreateNovo={handleCreateRepresentante}
         representantes={representantes.map(r => ({
           id: r.id,

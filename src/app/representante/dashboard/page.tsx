@@ -197,7 +197,7 @@ export default function RepresentanteDashboardPage() {
             </Link>
 
             <Link
-              href="/representante/pedidos?status=enviado_ao_fornecedor"
+              href="/representante/pedidos?status=enviado_fornecedor"
               className="flex items-center justify-between p-4 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors group"
             >
               <div className="flex items-center gap-3">

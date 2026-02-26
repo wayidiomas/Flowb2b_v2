@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
         )
       `, { count: 'exact' })
       .in('fornecedor_id', fornecedorIds)
-      .in('status_interno', ['enviado_ao_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'cancelado', 'contra_proposta'])
+      .in('status_interno', ['enviado_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'cancelado', 'contra_proposta'])
 
     // Filtros opcionais
     if (origemFilter !== 'todos') {

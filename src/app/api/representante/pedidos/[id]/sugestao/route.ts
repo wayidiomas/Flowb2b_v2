@@ -69,7 +69,7 @@ export async function POST(
     // Verificar se pedido existe e pertence a um fornecedor vinculado
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
-      .select('id, status, fornecedor_id')
+      .select('id, status_interno, fornecedor_id')
       .eq('id', pedidoId)
       .in('fornecedor_id', fornecedorIds)
       .single()
@@ -82,7 +82,7 @@ export async function POST(
     }
 
     // Verificar status do pedido
-    if (!['enviado_ao_fornecedor', 'contra_proposta'].includes(pedido.status)) {
+    if (!['enviado_fornecedor', 'contra_proposta'].includes(pedido.status_interno)) {
       return NextResponse.json(
         { success: false, error: 'Pedido nao pode receber sugestoes neste status' },
         { status: 400 }
@@ -120,7 +120,7 @@ export async function POST(
     const { error: updateError } = await supabase
       .from('pedidos_compra')
       .update({
-        status: 'sugestao_enviada',
+        status_interno: 'sugestao_enviada',
         observacao: observacao_geral || null,
         updated_at: new Date().toISOString(),
       })

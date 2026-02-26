@@ -52,7 +52,7 @@ export async function POST(
     // Verificar se pedido existe e pertence a um fornecedor vinculado
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
-      .select('id, status, fornecedor_id')
+      .select('id, status_interno, fornecedor_id')
       .eq('id', pedidoId)
       .in('fornecedor_id', fornecedorIds)
       .single()
@@ -65,8 +65,8 @@ export async function POST(
     }
 
     // Verificar status do pedido - so pode cancelar se estiver em alguns status
-    const statusPermitidos = ['enviado_ao_fornecedor', 'sugestao_enviada', 'contra_proposta']
-    if (!statusPermitidos.includes(pedido.status)) {
+    const statusPermitidos = ['enviado_fornecedor', 'sugestao_enviada', 'contra_proposta']
+    if (!statusPermitidos.includes(pedido.status_interno)) {
       return NextResponse.json(
         { success: false, error: 'Pedido nao pode ser cancelado neste status' },
         { status: 400 }
@@ -77,7 +77,7 @@ export async function POST(
     const { error: updateError } = await supabase
       .from('pedidos_compra')
       .update({
-        status: 'cancelado',
+        status_interno: 'cancelado',
         observacao: motivo ? `Cancelado pelo representante: ${motivo}` : 'Cancelado pelo representante',
         updated_at: new Date().toISOString(),
       })
