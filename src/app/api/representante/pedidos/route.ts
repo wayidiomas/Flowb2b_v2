@@ -90,8 +90,10 @@ export async function GET(request: NextRequest) {
       .in('status_interno', ['enviado_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'cancelado', 'contra_proposta'])
 
     // Filtros opcionais
+    // Mostrar pedidos da origem selecionada OU pedidos enviados diretamente a este representante
     if (origemFilter !== 'todos') {
-      query = query.eq('origem', origemFilter)
+      const repIdsStr = representanteIds.join(',')
+      query = query.or(`origem.eq.${origemFilter},representante_id.in.(${repIdsStr})`)
     }
 
     if (status) {
