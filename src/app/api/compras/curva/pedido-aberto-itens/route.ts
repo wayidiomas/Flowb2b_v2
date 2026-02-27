@@ -40,13 +40,15 @@ export async function GET(request: NextRequest) {
     const dataLimiteStr = dataLimite.toISOString().split('T')[0]
 
     // Buscar pedidos em aberto/andamento do fornecedor (situacao 0=aberto, 3=parcial)
+    // Excluir pedidos cancelados no FlowB2B (status_interno = cancelado)
     // Filtrar apenas pedidos dos ultimos 30 dias
     const { data: pedidosAbertos, error: pedidosError } = await supabase
       .from('pedidos_compra')
-      .select('id, numero, data, total, situacao')
+      .select('id, numero, data, total, situacao, status_interno')
       .eq('fornecedor_id', parseInt(fornecedorId))
       .eq('empresa_id', user.empresaId)
       .in('situacao', [0, 3])
+      .not('status_interno', 'in', '("cancelado","recusado")')
       .gte('data', dataLimiteStr)
       .order('data', { ascending: false })
 

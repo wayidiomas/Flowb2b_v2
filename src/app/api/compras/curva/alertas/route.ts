@@ -69,12 +69,14 @@ export async function GET(request: NextRequest) {
     })
 
     // Buscar fornecedores com pedidos em aberto/andamento (situacao 0=aberto, 3=parcial)
+    // Excluir pedidos cancelados no FlowB2B (status_interno = cancelado/recusado)
     // Esses fornecedores NAO devem aparecer nos alertas pois ja tem pedido em processo
     const { data: pedidosEmAberto } = await supabase
       .from('pedidos_compra')
       .select('fornecedor_id')
       .eq('empresa_id', user.empresaId)
       .in('situacao', [0, 3])
+      .not('status_interno', 'in', '("cancelado","recusado")')
 
     const fornecedoresComPedidoEmAberto = new Set<number>()
     pedidosEmAberto?.forEach(p => {
