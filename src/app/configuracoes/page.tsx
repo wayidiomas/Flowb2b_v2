@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 
 // Numero de WhatsApp para contratacao de planos
 const WHATSAPP_CONTRATACAO = '5511999999999' // TODO: Substituir pelo numero real
@@ -697,6 +698,7 @@ export default function ConfiguracoesPage() {
   const pagamentoItems = menuItems.filter((item) => item.section === 'pagamento')
 
   return (
+    <RequirePermission permission="configuracoes">
     <DashboardLayout>
       <PageHeader title="Configuracoes" />
 
@@ -776,5 +778,6 @@ export default function ConfiguracoesPage() {
         </div>
       </div>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

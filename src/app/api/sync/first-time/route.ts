@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
+import { requirePermission } from '@/lib/permissions'
 
 const FLOWB2BAPI_URL = process.env.FLOWB2BAPI_URL
 
@@ -51,6 +52,9 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+
+    const permCheck = await requirePermission(user, 'configuracoes')
+    if (!permCheck.allowed) return permCheck.response
 
     const body = await request.json()
     const { empresa_id } = body

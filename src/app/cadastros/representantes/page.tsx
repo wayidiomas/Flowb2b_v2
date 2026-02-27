@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { TableSkeleton } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import { RepresentanteSelectModal } from '@/components/representante/RepresentanteSelectModal'
@@ -277,6 +278,7 @@ export default function RepresentantesPage() {
   }
 
   return (
+    <RequirePermission permission="cadastros">
     <DashboardLayout>
       <PageHeader
         title="Representantes"
@@ -577,5 +579,6 @@ export default function RepresentantesPage() {
         </div>
       )}
     </DashboardLayout>
+    </RequirePermission>
   )
 }

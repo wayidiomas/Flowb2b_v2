@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { LogoMark } from '@/components/ui'
 import type { ProdutoFormData } from '@/types/produto'
 import {
@@ -141,6 +142,7 @@ export default function NovoProdutoPage() {
   }
 
   return (
+    <RequirePermission permission="cadastros">
     <DashboardLayout>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
@@ -529,5 +531,6 @@ export default function NovoProdutoPage() {
         </div>
       </div>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

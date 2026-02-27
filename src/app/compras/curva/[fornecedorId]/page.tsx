@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { DashboardLayout } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import {
   CurvaToggle,
   CurvaBadge,
@@ -377,13 +378,16 @@ export default function FornecedorCurvaPage() {
   // Loading inicial com logo animada
   if (loading) {
     return (
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <PageLoader message="Carregando produtos do fornecedor..." />
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   return (
+    <RequirePermission permission="pedidos">
     <DashboardLayout>
       <div className="max-w-[1600px] mx-auto">
         {/* Breadcrumb */}
@@ -689,5 +693,6 @@ export default function FornecedorCurvaPage() {
         />
       </div>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

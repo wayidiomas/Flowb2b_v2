@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDashboardData, useProdutosCurva } from '@/hooks'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { Card, TableSkeleton, ChartSkeleton, Skeleton } from '@/components/ui'
 import {
   LineChart,
@@ -117,6 +118,7 @@ export default function Home() {
   ]
 
   return (
+    <RequirePermission permission="relatorios" redirectTo="/compras/pedidos">
     <DashboardLayout>
       <PageHeader title="Dashboard" />
 
@@ -443,6 +445,7 @@ export default function Home() {
         )}
       </Card>
     </DashboardLayout>
+    </RequirePermission>
   )
 }
 

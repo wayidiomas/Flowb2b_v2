@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -512,16 +513,19 @@ export default function EditarPedidoCompraPage() {
 
   if (loading) {
     return (
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#336FB6]"></div>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   if (!fornecedorId) {
     return (
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <div className="bg-white rounded-[20px] p-8 text-center">
           <p className="text-gray-600 mb-4">Pedido nao encontrado.</p>
@@ -530,12 +534,14 @@ export default function EditarPedidoCompraPage() {
           </Link>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   const statusConfig = STATUS_CONFIG[SITUACAO_MAP[situacao]] || STATUS_CONFIG['Rascunho']
 
   return (
+    <RequirePermission permission="pedidos">
     <DashboardLayout>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
@@ -1134,5 +1140,6 @@ export default function EditarPedidoCompraPage() {
         </ModalFooter>
       </Modal>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

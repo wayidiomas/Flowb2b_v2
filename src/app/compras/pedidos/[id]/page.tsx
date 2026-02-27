@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { FornecedorSelectModal } from '@/components/pedido-compra/FornecedorSelectModal'
 import { PedidoTimeline } from '@/components/pedido/PedidoTimeline'
 import { WorkflowStepper } from '@/components/pedido/WorkflowStepper'
@@ -656,28 +657,33 @@ export default function VisualizarPedidoPage() {
 
   if (loading) {
     return (
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   if (!pedido) {
     return (
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <div className="text-center py-12">
           <p className="text-gray-500">Pedido nao encontrado</p>
           <Link href="/compras/pedidos" className="text-primary-600 hover:underline mt-2 inline-block">Voltar para lista</Link>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   const statusConfig = STATUS_CONFIG[pedido.situacao] || STATUS_CONFIG[0]
 
   return (
+    <RequirePermission permission="pedidos">
     <DashboardLayout>
       {/* Aviso de estorno */}
       {avisoEstorno && (
@@ -1166,5 +1172,6 @@ export default function VisualizarPedidoPage() {
         }
       `}</style>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { Button, Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import type { ConferenciaEstoque, ConferenciaStatus, ItemConferenciaEstoque } from '@/types/conferencia-estoque'
@@ -165,6 +166,7 @@ export default function SugestaoDetalhePage() {
 
   if (loading) {
     return (
+      <RequirePermission permission="estoque">
       <DashboardLayout>
         <PageHeader title="Sugestao de Estoque" />
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
@@ -175,11 +177,13 @@ export default function SugestaoDetalhePage() {
           </div>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   if (!sugestao) {
     return (
+      <RequirePermission permission="estoque">
       <DashboardLayout>
         <PageHeader title="Sugestao de Estoque" />
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
@@ -192,6 +196,7 @@ export default function SugestaoDetalhePage() {
           </button>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
@@ -199,6 +204,7 @@ export default function SugestaoDetalhePage() {
   const fornecedorNome = sugestao.fornecedor_nome || 'Fornecedor'
 
   return (
+    <RequirePermission permission="estoque">
     <DashboardLayout>
       <PageHeader title="Sugestao de Estoque" />
 
@@ -504,5 +510,6 @@ export default function SugestaoDetalhePage() {
         </ModalFooter>
       </Modal>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

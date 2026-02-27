@@ -19,6 +19,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 
 // Icons
 function SearchIcon() {
@@ -326,6 +327,7 @@ export default function NotasEntradaPage() {
   }
 
   return (
+    <RequirePermission permission="financeiro">
     <DashboardLayout>
       {/* Page Header */}
       <PageHeader
@@ -743,5 +745,6 @@ export default function NotasEntradaPage() {
         )}
       </div>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

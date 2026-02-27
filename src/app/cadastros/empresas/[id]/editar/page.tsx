@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { EmpresaForm, EmpresaFormData } from '@/components/empresas/EmpresaForm'
 import { supabase } from '@/lib/supabase'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 
 export default function EditarEmpresaPage() {
   const params = useParams()
@@ -76,6 +77,7 @@ export default function EditarEmpresaPage() {
 
   if (loading) {
     return (
+      <RequirePermission permission="configuracoes">
       <DashboardLayout>
         <div className="flex items-center justify-center py-12">
           <svg className="animate-spin h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24">
@@ -85,11 +87,13 @@ export default function EditarEmpresaPage() {
           <span className="ml-3 text-gray-600">Carregando...</span>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   if (error || !empresa) {
     return (
+      <RequirePermission permission="configuracoes">
       <DashboardLayout>
         <div className="text-center py-12">
           <p className="text-red-600 mb-4">{error || 'Empresa nao encontrada'}</p>
@@ -98,10 +102,12 @@ export default function EditarEmpresaPage() {
           </Link>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   return (
+    <RequirePermission permission="configuracoes">
     <DashboardLayout>
       {/* Breadcrumb */}
       <div className="mb-6">
@@ -126,5 +132,6 @@ export default function EditarEmpresaPage() {
 
       <EmpresaForm initialData={empresa} isEditing conectadaBling={conectadaBling} />
     </DashboardLayout>
+    </RequirePermission>
   )
 }

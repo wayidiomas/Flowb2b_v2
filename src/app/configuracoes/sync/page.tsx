@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 
 // Etapas da sincronizacao
 const SYNC_STEPS = [
@@ -457,8 +458,10 @@ function SyncStatusLoading() {
 // Componente principal exportado com Suspense
 export default function SyncStatusPage() {
   return (
-    <Suspense fallback={<SyncStatusLoading />}>
-      <SyncStatusContent />
-    </Suspense>
+    <RequirePermission permission="configuracoes">
+      <Suspense fallback={<SyncStatusLoading />}>
+        <SyncStatusContent />
+      </Suspense>
+    </RequirePermission>
   )
 }

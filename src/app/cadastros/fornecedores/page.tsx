@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { TableSkeleton } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -289,6 +290,7 @@ export default function FornecedoresPage() {
   }
 
   return (
+    <RequirePermission permission="cadastros">
     <DashboardLayout>
       {/* Page Header com seletor de empresa */}
       <PageHeader
@@ -627,5 +629,6 @@ export default function FornecedoresPage() {
         )}
       </div>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

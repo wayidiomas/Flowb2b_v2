@@ -20,6 +20,7 @@ const bottomTabItems = [
 
 // Itens secundarios (menu "Mais" no mobile)
 const moreMenuItems = [
+  { href: '/fornecedor/catalogo', label: 'Catalogo', icon: TabelaPrecoIcon },
   { href: '/fornecedor/conferencia-estoque', label: 'Conferencia de Estoque', icon: ConferenciaIcon },
   { href: '/fornecedor/tabelas-preco', label: 'Tabelas de Preco', icon: TabelaPrecoIcon },
   { href: '/fornecedor/representantes', label: 'Representantes', icon: RepresentantesIcon },

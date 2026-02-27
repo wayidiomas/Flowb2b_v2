@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { TableSkeleton } from '@/components/ui'
 import { SidebarAcoes } from '@/components/pedido-compra/SidebarAcoes'
 import { FornecedorSelectModal } from '@/components/pedido-compra/FornecedorSelectModal'
@@ -795,6 +796,7 @@ export default function PedidoCompraPage() {
   }
 
   return (
+    <RequirePermission permission="pedidos">
     <DashboardLayout>
       {/* Page Header */}
       <PageHeader
@@ -1400,5 +1402,6 @@ export default function PedidoCompraPage() {
         loading={loadingFornecedores}
       />
     </DashboardLayout>
+    </RequirePermission>
   )
 }

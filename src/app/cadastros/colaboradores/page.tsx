@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { TableSkeleton } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
-import { usePermissions } from '@/hooks/usePermissions'
 import { supabase } from '@/lib/supabase'
 
 // Icons
@@ -101,7 +101,6 @@ interface ColaboradorListItem {
 
 export default function ColaboradoresPage() {
   const { user, empresa } = useAuth()
-  const { hasPermission, isAdmin, loading: permissionsLoading } = usePermissions()
   const [colaboradores, setColaboradores] = useState<ColaboradorListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -348,32 +347,10 @@ export default function ColaboradoresPage() {
     }
   }
 
-  // Verificar permissao de acesso
-  if (!permissionsLoading && !isAdmin && !hasPermission('cadastros')) {
-    return (
-      <DashboardLayout>
-        <div className="flex flex-col items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Acesso Negado</h2>
-            <p className="text-gray-500 mb-4">Voce nao tem permissao para acessar esta pagina.</p>
-            <Link
-              href="/"
-              className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
-            >
-              Voltar ao inicio
-            </Link>
-          </div>
-        </div>
-      </DashboardLayout>
-    )
-  }
+
 
   return (
+    <RequirePermission permission="cadastros">
     <DashboardLayout>
       {/* Page Header com seletor de empresa */}
       <PageHeader
@@ -709,5 +686,6 @@ export default function ColaboradoresPage() {
         )}
       </div>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

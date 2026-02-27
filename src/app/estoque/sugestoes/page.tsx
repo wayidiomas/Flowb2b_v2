@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { TableSkeleton } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import type { ConferenciaEstoque, ConferenciaStatus } from '@/types/conferencia-estoque'
@@ -82,6 +83,7 @@ export default function SugestoesEstoquePage() {
   const pendentes = sugestoes.filter((s) => s.status === 'enviada').length
 
   return (
+    <RequirePermission permission="estoque">
     <DashboardLayout>
       <PageHeader title="Sugestoes de Estoque" subtitle="Conferencias recebidas de fornecedores" />
 
@@ -239,5 +241,6 @@ export default function SugestoesEstoquePage() {
         </div>
       </div>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

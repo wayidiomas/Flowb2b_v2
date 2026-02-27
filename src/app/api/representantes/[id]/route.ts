@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
+import { requirePermission } from '@/lib/permissions'
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -110,6 +111,9 @@ export async function PUT(
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
+    const permCheck = await requirePermission(user, 'cadastros')
+    if (!permCheck.allowed) return permCheck.response
+
     const params = await context.params
     const representanteId = parseInt(params.id)
 
@@ -173,6 +177,9 @@ export async function DELETE(
     if (!user || !user.empresaId) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
+
+    const permCheck = await requirePermission(user, 'cadastros')
+    if (!permCheck.allowed) return permCheck.response
 
     const params = await context.params
     const representanteId = parseInt(params.id)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
+import { requirePermission } from '@/lib/permissions'
 import { getBlingToken, atualizarEstoquesBling } from '@/lib/bling-estoque'
 
 export async function POST(
@@ -12,6 +13,9 @@ export async function POST(
     if (!user || user.tipo !== 'lojista' || !user.empresaId) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
+
+    const permCheck = await requirePermission(user, 'estoque')
+    if (!permCheck.allowed) return permCheck.response
 
     const { id } = await params
     const conferenciaId = Number(id)

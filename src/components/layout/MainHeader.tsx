@@ -71,7 +71,7 @@ const navigation: NavItem[] = [
       { label: 'Cadastro de fornecedores', href: '/cadastros/fornecedores', permission: 'cadastros' },
       { label: 'Cadastro de produtos', href: '/cadastros/produtos', permission: 'cadastros' },
       { label: 'Representantes', href: '/cadastros/representantes', permission: 'cadastros' },
-      { label: 'Minhas empresas', href: '/cadastros/empresas', permission: 'cadastros' },
+      { label: 'Minhas empresas', href: '/cadastros/empresas', permission: 'configuracoes' },
     ],
   },
   {
@@ -81,6 +81,7 @@ const navigation: NavItem[] = [
       { label: 'Pedido de compras', href: '/compras/pedidos', permission: 'pedidos' },
       { label: 'Compras por Curva', href: '/compras/curva', permission: 'pedidos' },
       { label: 'Tabelas de Preco', href: '/compras/tabelas-preco', permission: 'pedidos' },
+      { label: 'Catalogos', href: '/compras/catalogo', permission: 'pedidos' },
       { label: 'Controle de estoque', href: '/estoque/produtos', permission: 'estoque' },
       { label: 'Sugestoes de Estoque', href: '/estoque/sugestoes', permission: 'estoque' },
       { label: 'Notas de entrada', href: '/fiscal/notas', permission: 'financeiro' },
@@ -325,13 +326,15 @@ export function MainHeader() {
                 >
                   Meu Perfil
                 </Link>
-                <Link
-                  href="/configuracoes"
-                  onClick={() => setUserMenuOpen(false)}
-                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  Configuracoes
-                </Link>
+                {hasPermission('configuracoes') && (
+                  <Link
+                    href="/configuracoes"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Configuracoes
+                  </Link>
+                )}
                 <div className="border-t border-gray-100 mt-1 pt-1">
                   <button
                     onClick={handleLogout}
@@ -424,12 +427,14 @@ export function MainHeader() {
           </div>
 
           {/* Settings */}
-          <Link
-            href="/configuracoes"
-            className="p-2 rounded-md text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-          >
-            <SettingsIcon />
-          </Link>
+          {hasPermission('configuracoes') && (
+            <Link
+              href="/configuracoes"
+              className="p-2 rounded-md text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <SettingsIcon />
+            </Link>
+          )}
         </div>
       </div>
     </header>

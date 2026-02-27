@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { FRETE_POR_CONTA_OPTIONS, calcularTotalPedido } from '@/types/pedido-compra'
@@ -1137,16 +1138,19 @@ function GerarAutomaticoContent() {
 
   if (loading) {
     return (
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
           <SpinnerIcon />
           <span className="ml-2 text-gray-500">Carregando...</span>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   return (
+    <RequirePermission permission="pedidos">
     <DashboardLayout>
       {/* Toast de notificacao */}
       {toast && <ToastNotification toast={toast} onClose={() => setToast(null)} />}
@@ -2066,18 +2070,21 @@ function GerarAutomaticoContent() {
         onContinuar={handleContinuarComDesconto}
       />
     </DashboardLayout>
+    </RequirePermission>
   )
 }
 
 export default function GerarAutomaticoPage() {
   return (
     <Suspense fallback={
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
           <SpinnerIcon />
           <span className="ml-2 text-gray-500">Carregando...</span>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     }>
       <GerarAutomaticoContent />
     </Suspense>

@@ -3,9 +3,11 @@
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { EmpresaForm } from '@/components/empresas/EmpresaForm'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 
 export default function NovaEmpresaPage() {
   return (
+    <RequirePermission permission="configuracoes">
     <DashboardLayout>
       {/* Breadcrumb */}
       <div className="mb-6">
@@ -20,5 +22,6 @@ export default function NovaEmpresaPage() {
 
       <EmpresaForm />
     </DashboardLayout>
+    </RequirePermission>
   )
 }

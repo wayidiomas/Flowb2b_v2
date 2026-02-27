@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import type { ProdutoFormData, ProdutoFornecedor, MovimentacaoEstoqueProduto } from '@/types/produto'
@@ -477,6 +478,7 @@ export default function EditarProdutoPage() {
 
   if (loading) {
     return (
+      <RequirePermission permission="cadastros">
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <svg className="animate-spin h-8 w-8 text-[#336FB6]" fill="none" viewBox="0 0 24 24">
@@ -485,10 +487,12 @@ export default function EditarProdutoPage() {
           </svg>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   return (
+    <RequirePermission permission="cadastros">
     <DashboardLayout>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
@@ -1149,5 +1153,6 @@ export default function EditarProdutoPage() {
         </div>
       )}
     </DashboardLayout>
+    </RequirePermission>
   )
 }

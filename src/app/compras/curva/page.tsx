@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { DashboardLayout } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import {
   CurvaToggle,
   FornecedorCurvaTable,
@@ -358,13 +359,16 @@ export default function ComprasCurvaPage() {
   // Loading inicial com logo animada
   if (loading) {
     return (
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <PageLoader message="Calculando curvas ABC e carregando dados..." />
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   return (
+    <RequirePermission permission="pedidos">
     <DashboardLayout>
       <div className="max-w-[1800px] mx-auto">
         {/* Header */}
@@ -533,5 +537,6 @@ export default function ComprasCurvaPage() {
         />
       )}
     </DashboardLayout>
+    </RequirePermission>
   )
 }

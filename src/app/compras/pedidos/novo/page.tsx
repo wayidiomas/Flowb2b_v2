@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -808,16 +809,19 @@ function NovoPedidoContent() {
 
   if (loading) {
     return (
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#336FB6]"></div>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   if (!fornecedorId) {
     return (
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <div className="bg-white rounded-[20px] p-8 text-center">
           <p className="text-gray-600 mb-4">Fornecedor nao encontrado.</p>
@@ -826,10 +830,12 @@ function NovoPedidoContent() {
           </Link>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   return (
+    <RequirePermission permission="pedidos">
     <DashboardLayout>
       {/* Toast de notificacao */}
       {toast && <ToastNotification toast={toast} onClose={() => setToast(null)} />}
@@ -1456,17 +1462,20 @@ function NovoPedidoContent() {
         </ModalFooter>
       </Modal>
     </DashboardLayout>
+    </RequirePermission>
   )
 }
 
 export default function NovoPedidoCompraPage() {
   return (
     <Suspense fallback={
+      <RequirePermission permission="pedidos">
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#336FB6]"></div>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     }>
       <NovoPedidoContent />
     </Suspense>

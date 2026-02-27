@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
+import { requirePermission } from '@/lib/permissions'
 import { getBlingAuthUrl } from '@/lib/bling'
 import { createServerSupabaseClient } from '@/lib/supabase'
 
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
         new URL('/login?error=Faça login primeiro', request.url)
       )
     }
+
+    const permCheck = await requirePermission(user, 'configuracoes')
+    if (!permCheck.allowed) return permCheck.response
 
     // Verificar se foi passado um empresaId específico via query param
     // Isso é usado quando o usuário cria uma nova empresa e quer conectá-la ao Bling

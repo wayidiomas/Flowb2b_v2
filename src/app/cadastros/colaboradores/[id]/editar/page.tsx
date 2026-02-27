@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useParams } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions } from '@/hooks/usePermissions'
 import { supabase } from '@/lib/supabase'
@@ -347,6 +348,7 @@ export default function EditarColaboradorPage() {
 
   if (loadingData) {
     return (
+      <RequirePermission permission="cadastros">
       <DashboardLayout>
         <div className="flex items-center justify-center py-12">
           <svg className="animate-spin h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24">
@@ -356,12 +358,14 @@ export default function EditarColaboradorPage() {
           <span className="ml-3 text-gray-600">Carregando...</span>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   // Verificar permissao de acesso
   if (!permissionsLoading && !isAdmin && !hasPermission('cadastros')) {
     return (
+      <RequirePermission permission="cadastros">
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
           <div className="text-center">
@@ -381,10 +385,12 @@ export default function EditarColaboradorPage() {
           </div>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   return (
+    <RequirePermission permission="cadastros">
     <DashboardLayout>
       {/* Breadcrumb */}
       <div className="mb-6">
@@ -659,6 +665,7 @@ export default function EditarColaboradorPage() {
         />
       )}
     </DashboardLayout>
+    </RequirePermission>
   )
 }
 

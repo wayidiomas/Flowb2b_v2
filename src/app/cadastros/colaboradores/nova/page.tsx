@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions } from '@/hooks/usePermissions'
 import { supabase } from '@/lib/supabase'
@@ -262,6 +263,7 @@ export default function NovoColaboradorPage() {
   // Verificar permissao de acesso
   if (!permissionsLoading && !isAdmin && !hasPermission('cadastros')) {
     return (
+      <RequirePermission permission="cadastros">
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
           <div className="text-center">
@@ -281,10 +283,12 @@ export default function NovoColaboradorPage() {
           </div>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   return (
+    <RequirePermission permission="cadastros">
     <DashboardLayout>
       {/* Breadcrumb */}
       <div className="mb-6">
@@ -540,5 +544,6 @@ export default function NovoColaboradorPage() {
         </form>
       </div>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { TableSkeleton } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import type { TabelaPreco, ItemTabelaPreco } from '@/types/tabela-preco'
@@ -127,6 +128,7 @@ export default function TabelasPrecoPage() {
   }
 
   return (
+    <RequirePermission permission="pedidos">
     <DashboardLayout>
       <PageHeader title="Tabelas de Preco" subtitle="Tabelas recebidas de fornecedores" />
 
@@ -321,5 +323,6 @@ export default function TabelasPrecoPage() {
         </div>
       </div>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

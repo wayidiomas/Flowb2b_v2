@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
+import { requirePermission } from '@/lib/permissions'
 import { createServerSupabaseClient } from '@/lib/supabase'
 
 // Interface para o produto retornado pela API Python
@@ -33,6 +34,9 @@ export async function POST(request: NextRequest) {
     if (!user?.empresaId) {
       return NextResponse.json({ error: 'Nao autorizado' }, { status: 401 })
     }
+
+    const permCheck = await requirePermission(user, 'pedidos')
+    if (!permCheck.allowed) return permCheck.response
 
     const body = await request.json()
     const { fornecedor_id, descontar_pedidos_abertos } = body

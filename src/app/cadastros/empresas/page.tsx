@@ -7,6 +7,7 @@ import { DashboardLayout, PageHeader } from '@/components/layout'
 import { TableSkeleton } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 
 // Icons
 function SearchIcon() {
@@ -308,6 +309,7 @@ export default function MinhasEmpresasPage() {
   }
 
   return (
+    <RequirePermission permission="configuracoes">
     <DashboardLayout>
       {/* Page Header com seletor de empresa */}
       <PageHeader
@@ -644,5 +646,6 @@ export default function MinhasEmpresasPage() {
         )}
       </div>
     </DashboardLayout>
+    </RequirePermission>
   )
 }

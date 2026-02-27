@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
+import { requirePermission } from '@/lib/permissions'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 
 // Interface para o corpo da requisicao
@@ -205,6 +206,9 @@ export async function POST(request: NextRequest) {
     if (!user || !user.empresaId) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
+
+    const permCheck = await requirePermission(user, 'cadastros')
+    if (!permCheck.allowed) return permCheck.response
 
     const body: FornecedorRequest = await request.json()
 

@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import { useAuth } from '@/contexts/AuthContext'
 
 // Icons
@@ -267,25 +268,30 @@ export default function RepresentanteDetalhesPage({ params }: { params: Promise<
 
   if (loading) {
     return (
+      <RequirePermission permission="cadastros">
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-[400px]">
           <SpinnerIcon />
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   if (!representante) {
     return (
+      <RequirePermission permission="cadastros">
       <DashboardLayout>
         <div className="text-center py-12">
           <p className="text-gray-500">Representante nao encontrado</p>
         </div>
       </DashboardLayout>
+      </RequirePermission>
     )
   }
 
   return (
+    <RequirePermission permission="cadastros">
     <DashboardLayout>
       <PageHeader
         title={representante.nome}
@@ -553,5 +559,6 @@ export default function RepresentanteDetalhesPage({ params }: { params: Promise<
         </div>
       )}
     </DashboardLayout>
+    </RequirePermission>
   )
 }
