@@ -321,7 +321,7 @@ export default function MinhasEmpresasPage() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         {/* Card Header */}
         <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-gray-900">Empresas</h2>
               <p className="text-sm text-gray-500">
@@ -427,8 +427,8 @@ export default function MinhasEmpresasPage() {
 
         {/* Search and Action Buttons */}
         <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center justify-between gap-4">
-            <div className="relative max-w-md flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="relative w-full sm:max-w-[360px]">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                 <SearchIcon />
               </div>
@@ -446,41 +446,43 @@ export default function MinhasEmpresasPage() {
 
             {/* Selection counter and action buttons */}
             {selectedEmpresas.length > 0 && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 <span className="text-sm text-gray-600">
                   {selectedEmpresas.length} item(ns) selecionado(s)
                 </span>
-                <button
-                  onClick={handleAtivar}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-500 hover:bg-green-600 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <CheckIcon />
-                  Ativar
-                </button>
-                <button
-                  onClick={handleDesativar}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <BanIcon />
-                  Desativar
-                </button>
-                <button
-                  onClick={handleExcluir}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <TrashIcon />
-                  Excluir
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={handleAtivar}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-500 hover:bg-green-600 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <CheckIcon />
+                    Ativar
+                  </button>
+                  <button
+                    onClick={handleDesativar}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <BanIcon />
+                    Desativar
+                  </button>
+                  <button
+                    onClick={handleExcluir}
+                    disabled={actionLoading}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <TrashIcon />
+                    Excluir
+                  </button>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Table - Desktop */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -602,6 +604,68 @@ export default function MinhasEmpresasPage() {
           </table>
         </div>
 
+        {/* Mobile Card List */}
+        <div className="md:hidden divide-y divide-gray-200">
+          {loading ? (
+            <div className="p-6 text-center text-gray-500">Carregando...</div>
+          ) : paginatedEmpresas.length === 0 ? (
+            <div className="px-6 py-12 text-center text-gray-500">
+              {searchTerm || hasActiveFilters ? (
+                <div>
+                  <p>Nenhuma empresa encontrada para os filtros aplicados.</p>
+                  {hasActiveFilters && (
+                    <button
+                      onClick={clearFilters}
+                      className="mt-2 text-sm text-[#336FB6] hover:underline"
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+              ) : (
+                'Nenhuma empresa cadastrada.'
+              )}
+            </div>
+          ) : (
+            paginatedEmpresas.map((emp) => (
+              <Link
+                key={emp.id}
+                href={`/cadastros/empresas/${emp.id}/editar`}
+                className={`block px-4 py-4 hover:bg-gray-50 ${selectedEmpresas.includes(emp.id) ? 'bg-blue-50' : ''}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {emp.nome_fantasia || emp.razao_social || '-'}
+                    </p>
+                    {emp.nome_fantasia && emp.razao_social && (
+                      <p className="text-xs text-gray-500 truncate mt-0.5">{emp.razao_social}</p>
+                    )}
+                    {emp.cnpj && (
+                      <p className="text-xs text-gray-500 mt-1">CNPJ: {emp.cnpj}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-2">
+                      <span className="text-xs text-gray-500">
+                        {emp.numero_colaboradores ?? 0} colaboradores
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      emp.ativo === false
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}>
+                      {emp.ativo === false ? 'Inativo' : 'Ativo'}
+                    </span>
+                    <ExternalLinkIcon />
+                  </div>
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+
         {/* Pagination */}
         {!loading && filteredEmpresas.length > 0 && (
           <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
@@ -611,10 +675,10 @@ export default function MinhasEmpresasPage() {
               className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeftIcon />
-              Anterior
+              <span className="hidden sm:inline">Anterior</span>
             </button>
 
-            <div className="flex items-center gap-1">
+            <div className="hidden sm:flex items-center gap-1">
               {getPageNumbers().map((page, index) => (
                 page === '...' ? (
                   <span key={`ellipsis-${index}`} className="px-3 py-2 text-sm text-gray-500">...</span>
@@ -634,12 +698,16 @@ export default function MinhasEmpresasPage() {
               ))}
             </div>
 
+            <span className="sm:hidden text-sm text-gray-600">
+              {currentPage} / {totalPages}
+            </span>
+
             <button
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
               className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Proximo
+              <span className="hidden sm:inline">Proximo</span>
               <ChevronRightIcon />
             </button>
           </div>

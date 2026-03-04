@@ -332,19 +332,19 @@ export default function ProdutosPage() {
       <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
         {/* Card Header */}
         <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-[20px] px-5 py-[18px]">
-          <div className="flex items-end justify-between gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
             <div className="flex flex-col gap-1.5">
               <h2 className="text-base font-medium text-[#344054]">Produtos</h2>
               <p className="text-xs text-[#838383]">
                 Gerencie seu catalogo de produtos
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               {/* Botao de Filtros com Dropdown */}
               <div className="relative" ref={filterDropdownRef}>
                 <button
                   onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                  className="inline-flex items-center gap-2 px-10 py-2.5 text-[13px] font-medium text-white bg-[#FFAA11] hover:bg-[#E59A0F] rounded-lg shadow-xs transition-colors"
+                  className="inline-flex items-center gap-2 px-10 py-2.5 text-[13px] font-medium text-white bg-[#FFAA11] hover:bg-[#E59A0F] rounded-lg shadow-xs transition-colors w-full sm:w-auto justify-center"
                 >
                   <FilterIcon />
                   Filtros
@@ -483,7 +483,7 @@ export default function ProdutosPage() {
 
               <Link
                 href="/cadastros/produtos/novo"
-                className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg shadow-xs transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg shadow-xs transition-colors w-full sm:w-auto justify-center"
               >
                 <PlusIcon />
                 Novo produto
@@ -492,7 +492,7 @@ export default function ProdutosPage() {
           </div>
 
           {/* Search */}
-          <div className="relative max-w-[360px]">
+          <div className="relative w-full sm:max-w-[360px]">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#898989]">
               <SearchIcon />
             </div>
@@ -508,7 +508,7 @@ export default function ProdutosPage() {
 
         {/* Selection Actions */}
         {selectedProdutos.length > 0 && (
-          <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+          <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <span className="text-sm text-gray-600">
               {selectedProdutos.length} item(ns) selecionado(s)
             </span>
@@ -523,8 +523,8 @@ export default function ProdutosPage() {
           </div>
         )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Table - Desktop */}
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#EFEFEF]">
@@ -643,6 +643,58 @@ export default function ProdutosPage() {
           </table>
         </div>
 
+        {/* Mobile Card List */}
+        <div className="md:hidden divide-y divide-[#EFEFEF]">
+          {loading ? (
+            <div className="p-6 text-center text-sm text-gray-500">Carregando...</div>
+          ) : produtos.length === 0 ? (
+            <div className="px-6 py-12 text-center text-gray-500">
+              {searchTerm || hasActiveFilters ? (
+                <div>
+                  <p>Nenhum produto encontrado para os filtros aplicados.</p>
+                  {hasActiveFilters && (
+                    <button
+                      onClick={clearFilters}
+                      className="mt-2 text-sm text-[#336FB6] hover:underline"
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <p>Nenhum produto cadastrado.</p>
+                  <Link
+                    href="/cadastros/produtos/novo"
+                    className="mt-2 inline-block text-sm text-[#336FB6] hover:underline"
+                  >
+                    Adicionar primeiro produto
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+            produtos.map((prod) => (
+              <Link
+                key={prod.id}
+                href={`/cadastros/produtos/${prod.id}/editar`}
+                className="block px-5 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+              >
+                <p className="text-sm font-medium text-[#344054] truncate">{prod.nome || '-'}</p>
+                <div className="flex items-center gap-3 mt-1 text-xs text-[#838383]">
+                  <span>{prod.codigo || '-'}</span>
+                  <span>|</span>
+                  <span>{prod.unidade || 'UN'}</span>
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-sm font-medium text-[#344054]">{formatPreco(prod.preco)}</span>
+                  <span className="text-xs text-[#838383]">Estoque: {prod.estoque_atual}</span>
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+
         {/* Pagination */}
         {!loading && totalCount > 0 && (
           <div className="px-7 py-4 flex items-center justify-between bg-white">
@@ -652,10 +704,10 @@ export default function ProdutosPage() {
               className="inline-flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-medium text-[#336FB6] bg-white border-[1.5px] border-[#336FB6] rounded-lg shadow-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeftIcon />
-              Anterior
+              <span className="hidden sm:inline">Anterior</span>
             </button>
 
-            <div className="flex items-center gap-0.5">
+            <div className="hidden sm:flex items-center gap-0.5">
               {getPageNumbers().map((page, index) => (
                 page === '...' ? (
                   <span key={`ellipsis-${index}`} className="px-3 py-2 text-sm text-gray-500">...</span>
@@ -675,12 +727,16 @@ export default function ProdutosPage() {
               ))}
             </div>
 
+            <span className="sm:hidden text-xs text-gray-500">
+              {currentPage} / {totalPages}
+            </span>
+
             <button
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
               className="inline-flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-medium text-[#336FB6] bg-white border-[1.5px] border-[#336FB6] rounded-lg shadow-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Proximo
+              <span className="hidden sm:inline">Proximo</span>
               <ChevronRightIcon />
             </button>
           </div>

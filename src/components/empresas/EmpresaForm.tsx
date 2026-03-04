@@ -375,7 +375,7 @@ export function EmpresaForm({ initialData, isEditing = false, conectadaBling = f
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         {/* Card Header */}
         <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-gray-900">
                 {isEditing ? 'Editar empresa' : 'Nova empresa'}
@@ -384,7 +384,7 @@ export function EmpresaForm({ initialData, isEditing = false, conectadaBling = f
                 Aqui voce gerencia ua empresas e filiais para que possa gerenciar todas de forma otimizada
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {isEditing && initialData?.id && !conectadaBling && (
                 <a
                   href={`/api/auth/bling/connect?empresaId=${initialData.id}`}
@@ -736,8 +736,8 @@ export function EmpresaForm({ initialData, isEditing = false, conectadaBling = f
           </div>
 
           {/* Tabs */}
-          <div className="border-b border-gray-200 mb-6">
-            <nav className="flex gap-6">
+          <div className="border-b border-gray-200 mb-6 overflow-x-auto">
+            <nav className="flex gap-6 min-w-max">
               {tabs.map((tab) => (
                 <button
                   key={tab.key}

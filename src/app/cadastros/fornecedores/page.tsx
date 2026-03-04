@@ -302,14 +302,14 @@ export default function FornecedoresPage() {
       <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
         {/* Card Header */}
         <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-[20px] px-5 py-[18px]">
-          <div className="flex items-end justify-between gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
             <div className="flex flex-col gap-1.5">
               <h2 className="text-base font-medium text-[#344054]">Fornecedores</h2>
               <p className="text-xs text-[#838383]">
                 Gerencie seus fornecedores e a forma de pagamento de cada um deles
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               {/* Botao de Filtros com Dropdown */}
               <div className="relative" ref={filterDropdownRef}>
                 <button
@@ -439,7 +439,7 @@ export default function FornecedoresPage() {
           </div>
 
           {/* Search */}
-          <div className="relative max-w-[360px]">
+          <div className="relative w-full sm:max-w-[360px]">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#898989]">
               <SearchIcon />
             </div>
@@ -458,7 +458,7 @@ export default function FornecedoresPage() {
 
         {/* Selection Actions */}
         {selectedFornecedores.length > 0 && (
-          <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+          <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <span className="text-sm text-gray-600">
               {selectedFornecedores.length} item(ns) selecionado(s)
             </span>
@@ -473,8 +473,8 @@ export default function FornecedoresPage() {
           </div>
         )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Table - Desktop */}
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#EFEFEF]">
@@ -585,6 +585,48 @@ export default function FornecedoresPage() {
           </table>
         </div>
 
+        {/* Mobile Card List */}
+        <div className="md:hidden divide-y divide-[#EFEFEF]">
+          {loading ? (
+            <div className="px-4 py-8 text-center text-gray-500">Carregando...</div>
+          ) : paginatedFornecedores.length === 0 ? (
+            <div className="px-4 py-8 text-center text-gray-500">
+              {searchTerm || hasActiveFilters ? (
+                <div>
+                  <p>Nenhum fornecedor encontrado.</p>
+                  {hasActiveFilters && (
+                    <button onClick={clearFilters} className="mt-2 text-sm text-[#336FB6] hover:underline">
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <p>Nenhum fornecedor cadastrado.</p>
+                  <Link href="/cadastros/fornecedores/novo" className="mt-2 inline-block text-sm text-[#336FB6] hover:underline">
+                    Adicionar primeiro fornecedor
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+            paginatedFornecedores.map((forn) => (
+              <Link
+                key={forn.id}
+                href={`/cadastros/fornecedores/${forn.id}/editar`}
+                className="block px-4 py-3 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-[#344054]">{forn.nome || '-'}</span>
+                  <span className="text-xs text-gray-500">{forn.produtos_vinculados || 0} produtos</span>
+                </div>
+                <p className="text-xs text-gray-500">{formatDocumento(forn.cnpj, forn.cpf)}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{formatContato(forn.telefone, forn.celular)}</p>
+              </Link>
+            ))
+          )}
+        </div>
+
         {/* Pagination */}
         {!loading && filteredFornecedores.length > 0 && (
           <div className="px-7 py-4 flex items-center justify-between bg-white">
@@ -594,10 +636,10 @@ export default function FornecedoresPage() {
               className="inline-flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-medium text-[#336FB6] bg-white border-[1.5px] border-[#336FB6] rounded-lg shadow-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeftIcon />
-              Anterior
+              <span className="hidden sm:inline">Anterior</span>
             </button>
 
-            <div className="flex items-center gap-0.5">
+            <div className="hidden sm:flex items-center gap-0.5">
               {getPageNumbers().map((page, index) => (
                 page === '...' ? (
                   <span key={`ellipsis-${index}`} className="px-3 py-2 text-sm text-gray-500">...</span>
@@ -617,12 +659,16 @@ export default function FornecedoresPage() {
               ))}
             </div>
 
+            <span className="sm:hidden text-xs text-gray-500">
+              {currentPage} / {totalPages}
+            </span>
+
             <button
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
               className="inline-flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-medium text-[#336FB6] bg-white border-[1.5px] border-[#336FB6] rounded-lg shadow-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Proximo
+              <span className="hidden sm:inline">Proximo</span>
               <ChevronRightIcon />
             </button>
           </div>

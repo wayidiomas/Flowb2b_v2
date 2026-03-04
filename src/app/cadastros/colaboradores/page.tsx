@@ -362,19 +362,19 @@ export default function ColaboradoresPage() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         {/* Card Header */}
         <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-gray-900">Lista de Colaboradores</h2>
               <p className="text-sm text-gray-500">
                 Gerencie os colaboradores vinculados a sua empresa
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               {/* Botao de Filtros com Dropdown */}
               <div className="relative" ref={filterDropdownRef}>
                 <button
                   onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-[#FFBE4A] hover:bg-[#E5AB42] rounded-lg transition-colors"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-[#FFBE4A] hover:bg-[#E5AB42] rounded-lg transition-colors"
                 >
                   <FilterIcon />
                   Filtros
@@ -460,7 +460,7 @@ export default function ColaboradoresPage() {
 
               <Link
                 href="/cadastros/colaboradores/nova"
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
               >
                 <PlusIcon />
                 Novo colaborador
@@ -471,8 +471,8 @@ export default function ColaboradoresPage() {
 
         {/* Search and Action Buttons */}
         <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center justify-between gap-4">
-            <div className="relative max-w-md flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="relative w-full max-w-md flex-1">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                 <SearchIcon />
               </div>
@@ -490,41 +490,43 @@ export default function ColaboradoresPage() {
 
             {/* Selection counter and action buttons */}
             {selectedColaboradores.length > 0 && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <span className="text-sm text-gray-600">
                   {selectedColaboradores.length} item(ns) selecionado(s)
                 </span>
-                <button
-                  onClick={handleAtivar}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-500 hover:bg-green-600 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <CheckIcon />
-                  Ativar
-                </button>
-                <button
-                  onClick={handleDesativar}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <BanIcon />
-                  Desativar
-                </button>
-                <button
-                  onClick={handleExcluir}
-                  disabled={actionLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <TrashIcon />
-                  Remover
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                  <button
+                    onClick={handleAtivar}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-500 hover:bg-green-600 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <CheckIcon />
+                    Ativar
+                  </button>
+                  <button
+                    onClick={handleDesativar}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <BanIcon />
+                    Desativar
+                  </button>
+                  <button
+                    onClick={handleExcluir}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <TrashIcon />
+                    Remover
+                  </button>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Table - hidden on mobile */}
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -642,6 +644,68 @@ export default function ColaboradoresPage() {
           </table>
         </div>
 
+        {/* Mobile Card List */}
+        <div className="md:hidden divide-y divide-gray-200">
+          {loading ? (
+            <div className="px-4 py-8 text-center text-gray-500">Carregando...</div>
+          ) : paginatedColaboradores.length === 0 ? (
+            <div className="px-4 py-8 text-center text-gray-500">
+              {searchTerm || hasActiveFilters ? (
+                <div>
+                  <p>Nenhum colaborador encontrado para os filtros aplicados.</p>
+                  {hasActiveFilters && (
+                    <button
+                      onClick={clearFilters}
+                      className="mt-2 text-sm text-[#336FB6] hover:underline"
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <p>Nenhum colaborador cadastrado.</p>
+                  <Link
+                    href="/cadastros/colaboradores/nova"
+                    className="mt-2 inline-block text-sm text-[#336FB6] hover:underline"
+                  >
+                    Adicionar primeiro colaborador
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+            paginatedColaboradores.map((col) => (
+              <div key={col.id} className={`px-4 py-3 ${selectedColaboradores.includes(col.id) ? 'bg-blue-50' : ''}`}>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedColaboradores.includes(col.id)}
+                    onChange={() => handleSelectColaborador(col.id)}
+                    className="mt-1 w-4 h-4 text-primary-600 bg-white border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <Link href={`/cadastros/colaboradores/${col.id}/editar`} className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium text-gray-900 truncate">
+                        {col.nome || '-'}
+                      </span>
+                      <span className={`inline-flex items-center shrink-0 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        col.ativo === false
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {col.ativo === false ? 'Inativo' : 'Ativo'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-500 truncate mt-0.5">{col.email || '-'}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatCargo(col.role)}</p>
+                  </Link>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
         {/* Pagination */}
         {!loading && filteredColaboradores.length > 0 && (
           <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
@@ -651,10 +715,10 @@ export default function ColaboradoresPage() {
               className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeftIcon />
-              Anterior
+              <span className="hidden sm:inline">Anterior</span>
             </button>
 
-            <div className="flex items-center gap-1">
+            <div className="hidden sm:flex items-center gap-1">
               {getPageNumbers().map((page, index) => (
                 page === '...' ? (
                   <span key={`ellipsis-${index}`} className="px-3 py-2 text-sm text-gray-500">...</span>
@@ -674,12 +738,16 @@ export default function ColaboradoresPage() {
               ))}
             </div>
 
+            <span className="sm:hidden text-sm text-gray-600">
+              {currentPage} / {totalPages}
+            </span>
+
             <button
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
               className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Proximo
+              <span className="hidden sm:inline">Proximo</span>
               <ChevronRightIcon />
             </button>
           </div>

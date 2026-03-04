@@ -289,7 +289,7 @@ export default function RepresentantesPage() {
       <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
         {/* Card Header */}
         <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-[20px] px-5 py-[18px]">
-          <div className="flex items-end justify-between gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
             <div className="flex flex-col gap-1.5">
               <h2 className="text-base font-medium text-[#344054]">Representantes Comerciais</h2>
               <p className="text-xs text-[#838383]">
@@ -299,7 +299,7 @@ export default function RepresentantesPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowModal(true)}
-                className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg shadow-xs transition-colors"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg shadow-xs transition-colors"
               >
                 <PlusIcon />
                 Novo representante
@@ -308,7 +308,7 @@ export default function RepresentantesPage() {
           </div>
 
           {/* Search */}
-          <div className="relative max-w-[360px]">
+          <div className="relative w-full sm:max-w-[360px]">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#898989]">
               <SearchIcon />
             </div>
@@ -325,8 +325,8 @@ export default function RepresentantesPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Table - Desktop */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#EFEFEF]">
@@ -455,6 +455,100 @@ export default function RepresentantesPage() {
           </table>
         </div>
 
+        {/* Mobile Card List */}
+        <div className="md:hidden divide-y divide-[#EFEFEF]">
+          {loading ? (
+            <div className="p-6 text-center text-gray-500">Carregando...</div>
+          ) : paginatedRepresentantes.length === 0 ? (
+            <div className="px-6 py-12 text-center text-gray-500">
+              {searchTerm ? (
+                <p>Nenhum representante encontrado para a busca.</p>
+              ) : (
+                <div>
+                  <p>Nenhum representante cadastrado.</p>
+                  <button
+                    onClick={() => setShowModal(true)}
+                    className="mt-2 inline-block text-sm text-[#336FB6] hover:underline"
+                  >
+                    Adicionar primeiro representante
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            paginatedRepresentantes.map((rep) => (
+              <div
+                key={rep.id}
+                className="px-4 py-4 hover:bg-gray-50"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <Link href={`/cadastros/representantes/${rep.id}`} className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-[13px] font-medium text-[#344054] truncate">
+                        {rep.nome}
+                      </p>
+                      <span className={`inline-flex shrink-0 px-2 py-0.5 text-[11px] font-medium rounded-full ${
+                        rep.cadastrado
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {rep.cadastrado ? 'Cadastrado' : 'Pendente'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <code className="px-2 py-0.5 bg-[#f1f5f9] rounded text-[12px] font-mono text-[#336FB6]">
+                        {rep.codigo_acesso}
+                      </code>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handleCopyCode(rep.codigo_acesso)
+                        }}
+                        className="p-0.5 text-[#64748b] hover:text-[#336FB6] transition-colors"
+                        title="Copiar codigo"
+                      >
+                        {copiedCode === rep.codigo_acesso ? (
+                          <CheckIcon />
+                        ) : (
+                          <CopyIcon />
+                        )}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1.5">
+                      {rep.telefone && (
+                        <span className="text-[12px] text-[#64748b]">{rep.telefone}</span>
+                      )}
+                      <span className="text-[12px] text-[#64748b]">
+                        {rep.fornecedores_count || 0} fornecedores
+                      </span>
+                    </div>
+                  </Link>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleWhatsApp(rep)}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        rep.telefone
+                          ? 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                          : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                      }`}
+                      title={rep.telefone ? 'Enviar codigo via WhatsApp' : 'Cadastrar telefone e enviar via WhatsApp'}
+                    >
+                      <WhatsAppIcon />
+                    </button>
+                    <Link
+                      href={`/cadastros/representantes/${rep.id}`}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg transition-colors inline-block"
+                      title="Ver detalhes"
+                    >
+                      <ExternalLinkIcon />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
         {/* Pagination */}
         {!loading && filteredRepresentantes.length > 0 && (
           <div className="px-7 py-4 flex items-center justify-between bg-white">
@@ -464,10 +558,10 @@ export default function RepresentantesPage() {
               className="inline-flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-medium text-[#336FB6] bg-white border-[1.5px] border-[#336FB6] rounded-lg shadow-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeftIcon />
-              Anterior
+              <span className="hidden sm:inline">Anterior</span>
             </button>
 
-            <div className="flex items-center gap-0.5">
+            <div className="hidden sm:flex items-center gap-0.5">
               {getPageNumbers().map((page, index) => (
                 page === '...' ? (
                   <span key={`ellipsis-${index}`} className="px-3 py-2 text-sm text-gray-500">...</span>
@@ -487,12 +581,16 @@ export default function RepresentantesPage() {
               ))}
             </div>
 
+            <span className="sm:hidden text-sm text-gray-600">
+              {currentPage} / {totalPages}
+            </span>
+
             <button
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
               className="inline-flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-medium text-[#336FB6] bg-white border-[1.5px] border-[#336FB6] rounded-lg shadow-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Proximo
+              <span className="hidden sm:inline">Proximo</span>
               <ChevronRightIcon />
             </button>
           </div>

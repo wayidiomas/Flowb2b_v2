@@ -381,7 +381,7 @@ export default function RepresentanteDetalhesPage({ params }: { params: Promise<
             )}
           </div>
 
-          <div className="flex items-center justify-between mt-6 pt-6 border-t border-[#e2e8f0]">
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-6 pt-6 border-t border-[#e2e8f0]">
             <button
               onClick={handleDesativar}
               className="px-4 py-2 text-[13px] font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
@@ -391,7 +391,7 @@ export default function RepresentanteDetalhesPage({ params }: { params: Promise<
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-6 py-2.5 text-[14px] font-medium text-white bg-[#336FB6] rounded-xl hover:bg-[#2660A5] transition-all disabled:opacity-50 flex items-center gap-2"
+              className="px-6 py-2.5 text-[14px] font-medium text-white bg-[#336FB6] rounded-xl hover:bg-[#2660A5] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {saving && <SpinnerIcon />}
               <span>Salvar alteracoes</span>
@@ -428,21 +428,22 @@ export default function RepresentanteDetalhesPage({ params }: { params: Promise<
 
       {/* Fornecedores Vinculados */}
       <div className="mt-6 bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#e2e8f0] flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-[#e2e8f0] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-[#1e293b]">
             Fornecedores Vinculados
           </h2>
           <button
             onClick={() => setShowAddModal(true)}
             disabled={fornecedoresParaAdicionar.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-white bg-[#336FB6] rounded-lg hover:bg-[#2660A5] transition-colors disabled:opacity-50"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 text-[13px] font-medium text-white bg-[#336FB6] rounded-lg hover:bg-[#2660A5] transition-colors disabled:opacity-50"
           >
             <PlusIcon />
             Adicionar
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Table - Desktop */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#EFEFEF]">
@@ -504,6 +505,40 @@ export default function RepresentanteDetalhesPage({ params }: { params: Promise<
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card List */}
+        <div className="md:hidden divide-y divide-[#EFEFEF]">
+          {representante.fornecedores.length === 0 ? (
+            <div className="px-6 py-12 text-center text-[#64748b]">
+              Nenhum fornecedor vinculado
+            </div>
+          ) : (
+            representante.fornecedores.map((forn) => (
+              <div key={forn.id} className="px-4 py-4 hover:bg-gray-50">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-[#344054] truncate">
+                      {forn.nome}
+                    </p>
+                    {forn.cnpj && (
+                      <p className="text-[12px] text-[#64748b] mt-0.5">CNPJ: {forn.cnpj}</p>
+                    )}
+                    <p className="text-[12px] text-[#64748b] mt-0.5">
+                      Vinculado em {formatDate(forn.vinculado_em)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveFornecedor(forn.id)}
+                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                    title="Remover vinculo"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

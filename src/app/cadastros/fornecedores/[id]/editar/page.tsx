@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout'
 import { RequirePermission } from '@/components/auth/RequirePermission'
+import { FormActions } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import type {
@@ -593,14 +594,14 @@ export default function EditarFornecedorPage() {
       <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
         {/* Header */}
         <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-t-[20px] px-5 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-medium text-[#344054]">Editar fornecedor</h2>
               <p className="text-xs text-[#838383]">
                 Gerencie seus fornecedores e a forma de pagamento de cada um deles
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-3">
               <Link
                 href="/cadastros/fornecedores"
                 className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-gray-500 hover:bg-gray-600 rounded-lg transition-colors"
@@ -626,7 +627,7 @@ export default function EditarFornecedorPage() {
           <div className="mb-8">
             <h3 className="text-base font-medium text-gray-900 mb-4">Dados Gerais</h3>
 
-            <div className="flex gap-6">
+            <div className="flex flex-col sm:flex-row gap-6">
               {/* Avatar/Logo */}
               <div className="flex-shrink-0">
                 <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300">
@@ -635,7 +636,7 @@ export default function EditarFornecedorPage() {
               </div>
 
               {/* Form fields */}
-              <div className="flex-1 grid grid-cols-3 gap-4">
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Nome */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Nome do fornecedor</label>
@@ -762,7 +763,7 @@ export default function EditarFornecedorPage() {
             </div>
 
             {/* Segunda linha - Relacao de venda, Orgao Emissor, etc */}
-            <div className="mt-4 grid grid-cols-2 gap-4">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Relacao de venda */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Relacao de venda</label>
@@ -832,7 +833,7 @@ export default function EditarFornecedorPage() {
 
           {/* Tabs */}
           <div className="border-b border-gray-200 mb-6">
-            <nav className="flex gap-6">
+            <nav className="flex gap-6 overflow-x-auto">
               {[
                 { id: 'contato', label: 'Contato' },
                 { id: 'endereco', label: 'Endereco' },
@@ -842,7 +843,7 @@ export default function EditarFornecedorPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as TabType)}
-                  className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+                  className={`pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                     activeTab === tab.id
                       ? 'border-[#336FB6] text-[#336FB6]'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -856,7 +857,7 @@ export default function EditarFornecedorPage() {
 
           {/* Tab Content */}
           {activeTab === 'contato' && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
                 <input
@@ -891,7 +892,7 @@ export default function EditarFornecedorPage() {
           )}
 
           {activeTab === 'endereco' && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">CEP</label>
                 <div className="relative">
@@ -914,7 +915,7 @@ export default function EditarFornecedorPage() {
                   )}
                 </div>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Logradouro</label>
                 <input
                   type="text"
@@ -975,8 +976,8 @@ export default function EditarFornecedorPage() {
           {activeTab === 'politica' && (
             <div>
               {/* Form para adicionar política */}
-              <div className="grid grid-cols-4 gap-4 mb-4">
-                <div className="col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Formas de Pagamento (dias)</label>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 flex flex-wrap items-center gap-2 min-h-[42px] px-3 py-2 border border-gray-300 rounded-lg bg-white">
@@ -1062,7 +1063,7 @@ export default function EditarFornecedorPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Peso (kg)</label>
                   <input
@@ -1169,8 +1170,8 @@ export default function EditarFornecedorPage() {
                 </button>
               </div>
 
-              {/* Tabela de produtos */}
-              <div className="overflow-x-auto">
+              {/* Tabela de produtos - Desktop */}
+              <div className="overflow-x-auto hidden md:block">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
@@ -1273,6 +1274,46 @@ export default function EditarFornecedorPage() {
                 </table>
               </div>
 
+              {/* Mobile Card List - Produtos */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {paginatedProdutos.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-gray-500">
+                    Nenhum produto vinculado a este fornecedor.
+                  </div>
+                ) : (
+                  paginatedProdutos.map((prod) => {
+                    const formatDate = (dateStr?: string) => {
+                      if (!dateStr) return '-'
+                      try { return new Date(dateStr).toLocaleDateString('pt-BR') } catch { return dateStr }
+                    }
+                    const formatCurrency = (value?: number) => {
+                      if (!value) return '-'
+                      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value))
+                    }
+                    const estoqueAtual = prod.estoque_atual ? Number(prod.estoque_atual) : 0
+                    const diasSemVenda = prod.dias_sem_venda ? Number(prod.dias_sem_venda) : null
+
+                    return (
+                      <Link
+                        key={prod.produto_id}
+                        href={`/estoque/produtos/${prod.produto_id}`}
+                        className="block px-4 py-3 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-900 truncate mr-2">{prod.nome_produto || '-'}</span>
+                          <span className="text-xs text-gray-500 whitespace-nowrap">{prod.codigo_produto || '-'}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-gray-500">
+                          <span>Compra: {formatCurrency(prod.valor_de_compra)}</span>
+                          <span>Estoque: {estoqueAtual}</span>
+                          {diasSemVenda !== null && <span>Sem venda: {diasSemVenda}d</span>}
+                        </div>
+                      </Link>
+                    )
+                  })
+                )}
+              </div>
+
               {/* Pagination */}
               {produtos.length > produtosPerPage && (
                 <div className="px-4 py-4 flex items-center justify-between">
@@ -1282,10 +1323,10 @@ export default function EditarFornecedorPage() {
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 disabled:opacity-50"
                   >
                     <ChevronLeftIcon />
-                    Anterior
+                    <span className="hidden sm:inline">Anterior</span>
                   </button>
 
-                  <div className="flex items-center gap-1">
+                  <div className="hidden sm:flex items-center gap-1">
                     {getPageNumbers().map((page, index) => (
                       page === '...' ? (
                         <span key={`ellipsis-${index}`} className="px-3 py-2 text-sm text-gray-500">...</span>
@@ -1305,18 +1346,41 @@ export default function EditarFornecedorPage() {
                     ))}
                   </div>
 
+                  <span className="sm:hidden text-xs text-gray-500">
+                    {produtosPage} / {totalProdutosPages}
+                  </span>
+
                   <button
                     onClick={() => setProdutosPage(prev => Math.min(totalProdutosPages, prev + 1))}
                     disabled={produtosPage === totalProdutosPages}
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 disabled:opacity-50"
                   >
-                    Proximo
+                    <span className="hidden sm:inline">Proximo</span>
                     <ChevronRightIcon />
                   </button>
                 </div>
               )}
             </div>
           )}
+
+          {/* Mobile Form Actions */}
+          <FormActions className="sm:hidden">
+            <Link
+              href="/cadastros/fornecedores"
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-gray-500 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              <XIcon />
+              Cancelar
+            </Link>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-[#22C55E] hover:bg-[#16A34A] rounded-lg transition-colors disabled:opacity-50"
+            >
+              <SaveIcon />
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </FormActions>
         </div>
       </div>
 

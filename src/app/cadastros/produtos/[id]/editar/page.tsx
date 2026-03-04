@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout'
 import { RequirePermission } from '@/components/auth/RequirePermission'
+import { FormActions } from '@/components/ui'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import type { ProdutoFormData, ProdutoFornecedor, MovimentacaoEstoqueProduto } from '@/types/produto'
@@ -507,14 +508,14 @@ export default function EditarProdutoPage() {
       <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
         {/* Header */}
         <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-t-[20px] px-5 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-medium text-[#344054]">Editar produto</h2>
               <p className="text-xs text-[#838383]">
                 Gerencie as informacoes do produto
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-3">
               <Link
                 href="/cadastros/produtos"
                 className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-gray-500 hover:bg-gray-600 rounded-lg transition-colors"
@@ -540,7 +541,7 @@ export default function EditarProdutoPage() {
           <div className="mb-8">
             <h3 className="text-base font-medium text-gray-900 mb-4">Dados Gerais</h3>
 
-            <div className="flex gap-6">
+            <div className="flex flex-col sm:flex-row gap-6">
               {/* Avatar/Logo */}
               <div className="flex-shrink-0">
                 <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300">
@@ -549,9 +550,9 @@ export default function EditarProdutoPage() {
               </div>
 
               {/* Form fields */}
-              <div className="flex-1 grid grid-cols-3 gap-4">
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Nome */}
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Nome do produto <span className="text-red-500">*</span>
                   </label>
@@ -680,7 +681,7 @@ export default function EditarProdutoPage() {
 
           {/* Tabs */}
           <div className="border-b border-gray-200 mb-6">
-            <nav className="flex gap-6">
+            <nav className="flex gap-6 overflow-x-auto">
               {[
                 { id: 'caracteristicas', label: 'Caracteristicas' },
                 { id: 'estoque', label: `Estoque (${movimentacoes.length})` },
@@ -703,7 +704,7 @@ export default function EditarProdutoPage() {
 
           {/* Tab Content - Caracteristicas */}
           {activeTab === 'caracteristicas' && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Marca */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Marca</label>
@@ -940,8 +941,8 @@ export default function EditarProdutoPage() {
                 </button>
               </div>
 
-              {/* Tabela de fornecedores */}
-              <div className="overflow-x-auto">
+              {/* Tabela de fornecedores - Desktop */}
+              <div className="overflow-x-auto hidden md:block">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
@@ -980,8 +981,52 @@ export default function EditarProdutoPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile Card List - Fornecedores */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {fornecedores.length === 0 ? (
+                  <div className="px-4 py-12 text-center text-gray-500">
+                    Nenhum fornecedor vinculado a este produto.
+                    {!idProdutoBling && (
+                      <p className="text-xs mt-1">
+                        Este produto precisa ser sincronizado com o Bling para vincular fornecedores.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  fornecedores.map((forn) => (
+                    <div key={forn.fornecedor_id} className="px-4 py-4">
+                      <p className="text-sm font-medium text-gray-900 truncate">{forn.nome}</p>
+                      <p className="text-xs text-gray-500 mt-1">{formatCNPJ(forn.cnpj)}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-sm font-medium text-gray-900">{formatCurrency(forn.valor_de_compra)}</span>
+                        <span className="text-xs text-gray-500">Qtd: {forn.qtd_ultima_compra || '-'}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
+
+          {/* Mobile Form Actions */}
+          <FormActions className="sm:hidden">
+            <Link
+              href="/cadastros/produtos"
+              className="inline-flex items-center justify-center gap-2 flex-1 py-2.5 text-[13px] font-medium text-white bg-gray-500 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              <XIcon />
+              Cancelar
+            </Link>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center justify-center gap-2 flex-1 py-2.5 text-[13px] font-medium text-white bg-[#22C55E] hover:bg-[#16A34A] rounded-lg transition-colors disabled:opacity-50"
+            >
+              <SaveIcon />
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </FormActions>
         </div>
       </div>
 

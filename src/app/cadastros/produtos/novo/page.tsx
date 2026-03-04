@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout'
 import { RequirePermission } from '@/components/auth/RequirePermission'
-import { LogoMark } from '@/components/ui'
+import { LogoMark, FormActions } from '@/components/ui'
 import type { ProdutoFormData } from '@/types/produto'
 import {
   FORMATO_OPTIONS,
@@ -157,14 +157,14 @@ export default function NovoProdutoPage() {
       <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
         {/* Header */}
         <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-t-[20px] px-5 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-medium text-[#344054]">Adicionar produtos</h2>
               <p className="text-xs text-[#838383]">
                 Cadastre um novo produto para sua empresa
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-3">
               <Link
                 href="/cadastros/produtos"
                 className="inline-flex items-center gap-2 px-6 py-2.5 text-[13px] font-medium text-white bg-gray-500 hover:bg-gray-600 rounded-lg transition-colors"
@@ -190,7 +190,7 @@ export default function NovoProdutoPage() {
           <div className="mb-8">
             <h3 className="text-base font-medium text-gray-900 mb-4">Dados Gerais</h3>
 
-            <div className="flex gap-6">
+            <div className="flex flex-col sm:flex-row gap-6">
               {/* Avatar/Logo */}
               <div className="flex-shrink-0">
                 <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300">
@@ -199,9 +199,9 @@ export default function NovoProdutoPage() {
               </div>
 
               {/* Form fields */}
-              <div className="flex-1 grid grid-cols-3 gap-4">
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Nome */}
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Nome do produto <span className="text-red-500">*</span>
                   </label>
@@ -332,7 +332,7 @@ export default function NovoProdutoPage() {
 
           {/* Tabs */}
           <div className="border-b border-gray-200 mb-6">
-            <nav className="flex gap-6">
+            <nav className="flex gap-6 overflow-x-auto">
               {[
                 { id: 'caracteristicas', label: 'Caracteristicas' },
                 { id: 'estoque', label: 'Estoque' },
@@ -355,7 +355,7 @@ export default function NovoProdutoPage() {
 
           {/* Tab Content - Caracteristicas */}
           {activeTab === 'caracteristicas' && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Marca */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Marca</label>
@@ -513,6 +513,25 @@ export default function NovoProdutoPage() {
               </div>
             </div>
           )}
+
+          {/* Mobile Form Actions */}
+          <FormActions className="sm:hidden">
+            <Link
+              href="/cadastros/produtos"
+              className="inline-flex items-center justify-center gap-2 flex-1 py-2.5 text-[13px] font-medium text-white bg-gray-500 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              <XIcon />
+              Cancelar
+            </Link>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center justify-center gap-2 flex-1 py-2.5 text-[13px] font-medium text-white bg-[#22C55E] hover:bg-[#16A34A] rounded-lg transition-colors disabled:opacity-50"
+            >
+              <SaveIcon />
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </FormActions>
 
           {/* Info message */}
           <div className="mt-8 p-4 bg-[#EBF3FF] border border-[#336FB6]/20 rounded-xl flex items-center gap-4">
