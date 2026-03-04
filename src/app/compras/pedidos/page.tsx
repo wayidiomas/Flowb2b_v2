@@ -857,7 +857,7 @@ export default function PedidoCompraPage() {
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
             {/* Card Header */}
             <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-[20px] px-5 py-[18px]">
-              <div className="flex items-end justify-between gap-2 mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
                 <div className="flex flex-col gap-1.5">
                   <h2 className="text-base font-medium text-[#344054]">
                     {workflowFilter === 'todos' ? 'Todos os Pedidos' : `Pedidos - ${WORKFLOW_TABS.find(t => t.key === workflowFilter)?.label}`}
@@ -870,7 +870,7 @@ export default function PedidoCompraPage() {
                       : 'Gerencie seus pedidos de compra'}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {/* Toggle Sidebar */}
                   <button
                     onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -1002,7 +1002,7 @@ export default function PedidoCompraPage() {
               </div>
 
               {/* Search */}
-              <div className="relative max-w-[360px]">
+              <div className="relative w-full sm:max-w-[360px]">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#898989]">
                   <SearchIcon />
                 </div>
@@ -1018,7 +1018,7 @@ export default function PedidoCompraPage() {
 
             {/* Selection Actions */}
             {selectedPedidos.length > 0 && (
-              <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+              <div className="px-4 sm:px-5 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between gap-2">
                 <span className="text-sm text-gray-600">
                   {selectedPedidos.length} item(ns) selecionado(s)
                 </span>
@@ -1033,8 +1033,74 @@ export default function PedidoCompraPage() {
               </div>
             )}
 
+            {/* Mobile card list */}
+            <div className="md:hidden">
+              {loading ? (
+                <div className="p-4 space-y-3">
+                  {[1,2,3,4,5].map(i => (
+                    <div key={i} className="bg-gray-50 rounded-xl p-4 animate-pulse space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-1/3" />
+                      <div className="h-3 bg-gray-200 rounded w-2/3" />
+                      <div className="h-3 bg-gray-200 rounded w-1/2" />
+                    </div>
+                  ))}
+                </div>
+              ) : pedidos.length === 0 ? (
+                <div className="px-4 py-12 text-center">
+                  <p className="text-gray-500 text-sm">Nenhum pedido encontrado</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {pedidos.map((pedido) => {
+                    const statusConfig = STATUS_CONFIG[pedido.status] || STATUS_CONFIG['Rascunho']
+                    const statusInterno = statusInternoMap[pedido.pedido_id] || 'rascunho'
+                    const hasPendingSuggestion = statusInterno === 'sugestao_pendente'
+                    const hasContraProposta = statusInterno === 'contra_proposta_pendente'
+
+                    return (
+                      <Link
+                        key={pedido.pedido_id}
+                        href={`/compras/pedidos/${pedido.pedido_id}`}
+                        className={`block px-4 py-3.5 hover:bg-[#336FB6]/5 active:bg-[#336FB6]/10 transition-colors ${
+                          hasPendingSuggestion ? 'bg-amber-50/50' :
+                          hasContraProposta ? 'bg-orange-50/50' : ''
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-primary-600">
+                                #{pedido.numero_pedido || pedido.pedido_id}
+                              </span>
+                              <span className={`inline-flex px-2 py-0.5 text-[10px] font-medium rounded-full ${statusConfig.bg} ${statusConfig.text}`}>
+                                {statusConfig.label}
+                              </span>
+                              {statusInterno && statusInterno !== 'rascunho' && (
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full ${STATUS_INTERNO_CONFIG[statusInterno].bg} ${STATUS_INTERNO_CONFIG[statusInterno].text}`}>
+                                  {statusInterno === 'sugestao_pendente' && <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />}
+                                  {STATUS_INTERNO_CONFIG[statusInterno].label}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-900 mt-1 truncate">
+                              {pedido.fornecedor_nome || 'Sem fornecedor'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                          <span>{formatDate(pedido.data_pedido)}</span>
+                          <span>{pedido.itens_produtos?.length || 0} itens</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(pedido.valor_total || 0)}</span>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
             {/* Table */}
-            <div className="overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-[#EFEFEF]">
@@ -1336,7 +1402,7 @@ export default function PedidoCompraPage() {
 
             {/* Pagination */}
             {!loading && totalCount > itemsPerPage && (
-              <div className="px-7 py-4 flex items-center justify-between bg-white">
+              <div className="px-4 sm:px-7 py-4 flex items-center justify-between bg-white">
                 <button
                   onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
@@ -1346,7 +1412,7 @@ export default function PedidoCompraPage() {
                   Anterior
                 </button>
 
-                <div className="flex items-center gap-0.5">
+                <div className="hidden sm:flex items-center gap-0.5">
                   {getPageNumbers().map((page, index) => (
                     page === '...' ? (
                       <span key={`ellipsis-${index}`} className="px-3 py-2 text-sm text-gray-500">...</span>
@@ -1365,6 +1431,9 @@ export default function PedidoCompraPage() {
                     )
                   ))}
                 </div>
+                <span className="sm:hidden text-sm text-gray-500">
+                  {currentPage} / {totalPages}
+                </span>
 
                 <button
                   onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
