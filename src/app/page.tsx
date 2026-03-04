@@ -422,22 +422,29 @@ export default function Home() {
         </div>
 
         {loadingCurva ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Produto</th>
-                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Curva</th>
-                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Vendas</th>
-                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Estoque</th>
-                  <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <TableSkeleton columns={5} rows={5} />
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Produto</th>
+                    <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Curva</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Vendas</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Estoque</th>
+                    <th className="text-center py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <TableSkeleton columns={5} rows={5} />
+                </tbody>
+              </table>
+            </div>
+            <div className="md:hidden p-4 space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          </>
         ) : produtosCurva.length > 0 ? (
           <ProdutosCurvaTable data={produtosCurva} />
         ) : (

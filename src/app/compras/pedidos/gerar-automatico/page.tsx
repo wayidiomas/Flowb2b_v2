@@ -1472,7 +1472,7 @@ function GerarAutomaticoContent() {
                     <p className="mt-1 text-[10px] text-amber-600">Ex: 10, 20, 30 dias. O prazo de estoque e calculado automaticamente.</p>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-amber-800 mb-1">
                         Prazo de entrega (dias) *
@@ -1616,7 +1616,7 @@ function GerarAutomaticoContent() {
         {/* Tabela de sugestoes */}
         {sugestoes.length > 0 && (
           <>
-            <div className="overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-[#EFEFEF] bg-[#F9F9F9]">
@@ -1680,12 +1680,79 @@ function GerarAutomaticoContent() {
               </table>
             </div>
 
+            {/* Mobile card list */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {sugestoes.map((item, index) => (
+                <div key={item.produto_id} className="p-4 space-y-3">
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-[#344054] truncate">{item.nome}</p>
+                      <p className="text-xs text-[#667085]">{item.codigo}{item.ean ? ` • ${item.ean}` : ''}</p>
+                    </div>
+                    <button
+                      onClick={() => handleRemoverItem(index)}
+                      className="p-1 text-gray-400 hover:text-red-500 shrink-0"
+                      title="Remover"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-[10px] text-gray-500">Estoque</p>
+                      <p className="text-sm font-medium text-[#344054]">{item.estoque_atual}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-[10px] text-gray-500">Cx</p>
+                      <p className="text-sm font-medium text-[#344054]">{item.itens_por_caixa}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-[10px] text-gray-500">Media/dia</p>
+                      <p className="text-sm font-medium text-[#344054]">{item.media_vendas_dia}</p>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-2">
+                      <p className="text-[10px] text-blue-500">Sugestao</p>
+                      <p className="text-sm font-medium text-[#4684CD]">{item.sugestao_quantidade}</p>
+                    </div>
+                  </div>
+
+                  {/* Quantity + Values */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-gray-500 mb-1">Qtd</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step={item.itens_por_caixa}
+                        value={item.quantidade_ajustada}
+                        onChange={(e) => handleQuantidadeChange(index, parseInt(e.target.value) || 0)}
+                        className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                      />
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-gray-500">Unit.</p>
+                      <p className="text-sm text-[#667085]">{formatCurrency(item.valor_unitario)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-gray-500">Total</p>
+                      <p className="text-sm font-medium text-[#344054]">{formatCurrency(item.valor_total)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
             {/* Secao de detalhes do pedido */}
             <div className="px-6 py-5 border-t border-[#EDEDED]">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Detalhes do Pedido</h3>
 
               {/* Data prevista e Frete */}
-              <div className="grid grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Data Prevista</label>
                   <input
@@ -1728,7 +1795,7 @@ function GerarAutomaticoContent() {
               </div>
 
               {/* Observacoes */}
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Observacoes (visivel ao fornecedor)</label>
                   <textarea
@@ -1823,7 +1890,7 @@ function GerarAutomaticoContent() {
                   <div className="space-y-2">
                     {parcelas.map((parcela, index) => (
                       <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                        <div className="flex-1 grid grid-cols-4 gap-3">
+                        <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <div>
                             <label className="block text-[10px] text-gray-500 mb-0.5">Valor (R$)</label>
                             <input

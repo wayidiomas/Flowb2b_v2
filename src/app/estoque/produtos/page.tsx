@@ -1260,7 +1260,7 @@ export default function ControleEstoquePage() {
 
                 {/* Modal Body */}
                 <div className="px-6 py-5 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Tipo */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
@@ -1287,7 +1287,7 @@ export default function ControleEstoquePage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Preco de Compra */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Preco de compra</label>
