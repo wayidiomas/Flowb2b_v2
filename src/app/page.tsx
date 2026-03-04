@@ -181,7 +181,7 @@ export default function Home() {
 
       {/* Pedido de Compras por Periodo */}
       <Card className="mb-6" padding="md">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 className="text-base font-semibold text-gray-900">Pedido de compras por periodo</h3>
           <div className="flex gap-2">
             <PeriodButton
@@ -247,7 +247,7 @@ export default function Home() {
         {/* Variação do Valor em Estoque */}
         <Card padding="md">
           <div className="flex flex-col gap-3 mb-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <h3 className="text-base font-semibold text-gray-900">Variação do Valor em Estoque</h3>
               </div>
@@ -285,7 +285,7 @@ export default function Home() {
             </div>
             {/* Seletor de datas personalizado */}
             {intervaloEstoque === 'personalizado' && (
-              <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg">
+              <div className="flex flex-wrap items-center gap-2 bg-gray-50 p-2 rounded-lg">
                 <label className="text-xs text-gray-500">De:</label>
                 <input
                   type="date"
@@ -326,7 +326,7 @@ export default function Home() {
 
       {/* Produtos de Alta Rotatividade */}
       <Card className="mb-6" padding="md">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
           <div>
             <h3 className="text-base font-semibold text-gray-900">Produtos de Alta Rotatividade</h3>
             <p className="text-xs text-gray-500 mt-1">Produtos que você mais compra e vende rapidamente (últimos 90 dias)</p>
@@ -391,9 +391,9 @@ export default function Home() {
 
       {/* Tabela de Produtos por Curva */}
       <Card className="mt-6" padding="md">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 className="text-base font-semibold text-gray-900">Produtos por Curva</h3>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <CurvaButton
               label="Curva A"
               active={curvaSelecionada === 'A'}
@@ -497,8 +497,8 @@ function MetricCard({
 // ===== SUPPLIERS PIE CHART =====
 function SuppliersPieChart({ data }: { data: { fornecedor_nome: string; percentual: number }[] }) {
   return (
-    <div className="flex items-center justify-center gap-8">
-      <div className="w-44 h-44">
+    <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8">
+      <div className="w-36 h-36 sm:w-44 sm:h-44">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -530,7 +530,7 @@ function SuppliersPieChart({ data }: { data: { fornecedor_nome: string; percentu
             />
             <div className="flex flex-col">
               <span
-                className="text-sm text-gray-700 font-medium max-w-[160px] truncate"
+                className="text-sm text-gray-700 font-medium max-w-[140px] sm:max-w-[160px] truncate"
                 title={item.fornecedor_nome}
               >
                 {item.fornecedor_nome}
@@ -557,11 +557,11 @@ function ProductsBarChart({ data }: { data: { produto_nome: string; numero_venda
         <BarChart
           layout="vertical"
           data={chartData}
-          margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+          margin={{ top: 5, right: 10, left: 60, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
           <XAxis type="number" />
-          <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
+          <YAxis type="category" dataKey="name" width={55} tick={{ fontSize: 10 }} />
           <Tooltip />
           <Bar dataKey="vendas" radius={[0, 4, 4, 0]}>
             {chartData.map((_, index) => (
@@ -849,11 +849,11 @@ function TopProdutosVendidosChart({ data }: { data: TopProdutoVendidoData[] }) {
         <BarChart
           layout="vertical"
           data={chartData}
-          margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+          margin={{ top: 5, right: 10, left: 60, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
           <XAxis type="number" />
-          <YAxis type="category" dataKey="name" width={95} tick={{ fontSize: 11 }} />
+          <YAxis type="category" dataKey="name" width={55} tick={{ fontSize: 10 }} />
           <Tooltip
             formatter={(value, name) => [
               name === 'quantidade' ? `${value} un` : formatCurrency(Number(value)),
@@ -963,11 +963,11 @@ function FornecedoresMaisVendasChart({ data }: { data: FornecedorMaisVendasData[
         <BarChart
           layout="vertical"
           data={chartData}
-          margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+          margin={{ top: 5, right: 10, left: 60, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
           <XAxis type="number" tickFormatter={formatCompact} />
-          <YAxis type="category" dataKey="name" width={95} tick={{ fontSize: 11 }} />
+          <YAxis type="category" dataKey="name" width={55} tick={{ fontSize: 10 }} />
           <Tooltip
             formatter={(value, name) => [
               name === 'valor' ? formatCurrency(Number(value)) : `${value}%`,
@@ -1090,7 +1090,53 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      {/* Mobile card list */}
+      <div className="md:hidden divide-y divide-gray-100">
+        {paginatedData.length === 0 ? (
+          <div className="py-8 text-center text-sm text-gray-500">
+            Nenhum produto encontrado para &quot;{searchTerm}&quot;
+          </div>
+        ) : paginatedData.map((produto) => (
+          <div key={produto.produto_id} className="py-3 space-y-2">
+            <p className="text-sm font-medium text-gray-900 leading-snug">{produto.produto_nome}</p>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div>
+                <span className="text-gray-500">Vendido</span>
+                <p className="font-medium text-gray-700">{Number(produto.quantidade_vendida).toLocaleString('pt-BR')}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Comprado</span>
+                <p className="font-medium text-gray-700">{Number(produto.quantidade_comprada).toLocaleString('pt-BR')}</p>
+              </div>
+              <div>
+                <span className="text-gray-500">Estoque</span>
+                <p className={`font-medium ${
+                  produto.estoque_atual <= 0 ? 'text-red-600' : produto.estoque_atual < 10 ? 'text-yellow-600' : 'text-gray-700'
+                }`}>{produto.estoque_atual.toLocaleString('pt-BR')}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Vendas/dia: <span className="font-medium text-gray-700">{Number(produto.vendas_por_dia).toFixed(1)}</span></span>
+              {produto.dias_estoque !== null && (
+                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                  produto.dias_estoque <= 7 ? 'bg-red-100 text-red-700'
+                    : produto.dias_estoque <= 30 ? 'bg-yellow-100 text-yellow-700'
+                    : 'bg-green-100 text-green-700'
+                }`}>{produto.dias_estoque.toFixed(0)} dias estoque</span>
+              )}
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                Number(produto.indice_rotatividade) >= 200 ? 'bg-green-100 text-green-700'
+                  : Number(produto.indice_rotatividade) >= 100 ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-gray-100 text-gray-600'
+              }`}>
+                {Number(produto.indice_rotatividade) >= 200 ? 'Alta' : Number(produto.indice_rotatividade) >= 100 ? 'Média' : 'Baixa'} {Number(produto.indice_rotatividade).toFixed(0)}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden md:block overflow-x-auto">
       <table className="w-full">
         <thead>
           <tr className="border-b border-gray-200">
@@ -1225,7 +1271,7 @@ function ProdutosRotatividadeTable({ data }: { data: ProdutoRotatividadeData[] }
 
       {/* Paginação */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-4 border-t border-gray-100">
           <span className="text-sm text-gray-500">
             Mostrando {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredData.length)} de {filteredData.length} produtos
           </span>
@@ -1294,7 +1340,44 @@ function ProdutosCurvaTable({ data }: { data: ProdutoCurvaData[] }) {
 
   return (
     <div>
-      <div className="overflow-x-auto">
+      {/* Mobile card list */}
+      <div className="md:hidden divide-y divide-gray-100">
+        {paginatedData.map((produto) => (
+          <div key={produto.produto_id} className="py-3 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm font-medium text-gray-900 leading-snug">{produto.produto_nome}</p>
+              <span
+                className={`inline-flex shrink-0 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                  curvaColors[produto.curva || 'C'] || 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                {produto.curva || '-'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-4">
+                <span className="text-gray-500">Vendas: <span className="font-medium text-gray-700">{Number(produto.numero_vendas).toLocaleString('pt-BR')}</span></span>
+                <span className="text-gray-500">Estoque: <span className={`font-medium ${
+                  (produto.quantidade_em_estoque || 0) <= 0 ? 'text-red-600'
+                    : (produto.quantidade_em_estoque || 0) < 10 ? 'text-yellow-600'
+                    : 'text-gray-700'
+                }`}>{(produto.quantidade_em_estoque || 0).toLocaleString('pt-BR')}</span></span>
+              </div>
+              {produto.condicao_de_ruptura ? (
+                <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                  Ruptura
+                </span>
+              ) : (
+                <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                  OK
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-200">
@@ -1374,7 +1457,7 @@ function ProdutosCurvaTable({ data }: { data: ProdutoCurvaData[] }) {
 
       {/* Paginacao */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-4 border-t border-gray-100">
           <span className="text-sm text-gray-500">
             Mostrando {startIndex + 1}-{Math.min(startIndex + itemsPerPage, data.length)} de{' '}
             {data.length} produtos
