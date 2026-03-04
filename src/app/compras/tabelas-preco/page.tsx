@@ -165,7 +165,7 @@ export default function TabelasPrecoPage() {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-t border-gray-100">
@@ -320,6 +320,124 @@ export default function TabelasPrecoPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card List */}
+        <div className="md:hidden">
+          {loading ? (
+            <div className="p-4 space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="animate-pulse bg-gray-100 rounded-lg h-24" />
+              ))}
+            </div>
+          ) : filteredTabelas.length === 0 ? (
+            <div className="px-4 py-12 text-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                  <TagIcon />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Nenhuma tabela de preco encontrada</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {search || fornecedorFilter !== 'todos'
+                      ? 'Tente ajustar os filtros'
+                      : 'Quando fornecedores criarem tabelas de preco, elas aparecerao aqui'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {filteredTabelas.map((tabela) => {
+                const sConfig = statusConfig[tabela.status] || statusConfig.inativa
+                const isExpanded = expandedId === tabela.id
+                const itemCount = getItemCount(tabela)
+
+                return (
+                  <div key={tabela.id}>
+                    <div
+                      className={`px-4 py-3 cursor-pointer active:bg-gray-50 transition-colors ${isExpanded ? 'bg-gray-50/50' : ''}`}
+                      onClick={() => toggleExpand(tabela.id)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="text-[13px] font-semibold text-gray-900 truncate">
+                            {tabela.fornecedor_nome || '-'}
+                          </p>
+                          <p className="text-[12px] text-gray-600 truncate">{tabela.nome}</p>
+                          <p className="text-[11px] text-gray-500">
+                            {tabela.vigencia_inicio && tabela.vigencia_fim ? (
+                              <>
+                                {new Date(tabela.vigencia_inicio).toLocaleDateString('pt-BR')}
+                                {' - '}
+                                {new Date(tabela.vigencia_fim).toLocaleDateString('pt-BR')}
+                              </>
+                            ) : tabela.vigencia_inicio ? (
+                              <>A partir de {new Date(tabela.vigencia_inicio).toLocaleDateString('pt-BR')}</>
+                            ) : (
+                              'Sem vigencia definida'
+                            )}
+                          </p>
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <span className="text-[11px] text-gray-500">{itemCount} itens</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${sConfig.bg} ${sConfig.text}`}>
+                              {sConfig.label}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={`mt-1 transition-transform shrink-0 text-gray-400 ${isExpanded ? 'rotate-180' : ''}`}>
+                          <ChevronDownIcon />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded items */}
+                    {isExpanded && (
+                      <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
+                        {loadingItens ? (
+                          <div className="py-4 text-center">
+                            <div className="animate-spin h-5 w-5 border-2 border-[#336FB6] border-t-transparent rounded-full mx-auto" />
+                            <p className="text-xs text-gray-500 mt-2">Carregando itens...</p>
+                          </div>
+                        ) : expandedItens.length === 0 ? (
+                          <div className="py-4 text-center text-sm text-gray-500">
+                            Nenhum item nesta tabela
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {expandedItens.map((item) => (
+                              <div key={item.id} className="bg-white rounded-lg p-3 border border-gray-100">
+                                <p className="text-[13px] font-medium text-gray-900 truncate">{item.nome || '-'}</p>
+                                <p className="text-[11px] text-gray-500 mt-0.5">Cod: {item.codigo || '-'}</p>
+                                <div className="flex items-center justify-between mt-1.5">
+                                  <span className="text-[12px] font-medium text-gray-900">
+                                    {formatCurrency(item.preco_tabela)}
+                                  </span>
+                                  {item.desconto_percentual ? (
+                                    <span className="text-[12px] text-green-600 font-medium">
+                                      -{item.desconto_percentual.toFixed(1)}%
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {tabela.observacao && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="text-xs text-gray-500">
+                              <span className="font-medium">Observacao:</span> {tabela.observacao}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>

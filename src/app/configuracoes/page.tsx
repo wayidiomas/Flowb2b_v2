@@ -476,7 +476,7 @@ function Pagamentos() {
                 <p className="text-sm text-gray-600">
                   <strong className="text-gray-900">Exemplo de valor:</strong>
                 </p>
-                <div className="mt-2 flex items-center gap-4 text-sm">
+                <div className="mt-2 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-sm">
                   <span className="px-3 py-1 bg-white rounded-lg border border-gray-200">
                     1 empresa = <strong>{formatCurrency(planoDisponivel.preco_mensal)}</strong>/mes
                   </span>
@@ -530,7 +530,7 @@ function Pagamentos() {
 
       {/* Plano Atual */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <div>
             <h3 className="text-base font-semibold text-gray-900">Plano {plano?.nome || 'Profissional'}</h3>
             <p className="text-sm text-gray-500">Sua assinatura atual</p>
@@ -702,9 +702,31 @@ export default function ConfiguracoesPage() {
     <DashboardLayout>
       <PageHeader title="Configuracoes" />
 
-      <div className="flex gap-6 2xl:gap-8">
+      <div className="flex flex-col md:flex-row gap-6 2xl:gap-8">
+        {/* Mobile navigation */}
+        <div className="md:hidden mb-4 -mx-4 px-4">
+          <div className="flex gap-1 overflow-x-auto pb-2">
+            {menuItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
+                  activeTab === item.id
+                    ? 'bg-[#336FB6] text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <span className={activeTab === item.id ? 'text-white' : 'text-gray-400'}>
+                  {item.icon}
+                </span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Sidebar */}
-        <div className="w-64 2xl:w-72 shrink-0">
+        <div className="hidden md:block w-64 2xl:w-72 shrink-0">
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             {/* Secao Minha Conta */}
             <div className="p-4 border-b border-gray-200">

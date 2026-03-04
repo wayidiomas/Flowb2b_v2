@@ -172,7 +172,7 @@ const PoliticaFormFields = memo(function PoliticaFormFields({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Prazo de entrega */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de entrega (dias)</label>
@@ -649,20 +649,20 @@ export default function PoliticaCompraPage() {
       <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
         {/* Header */}
         <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-t-[20px] px-5 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-medium text-[#344054]">Politicas de Compra</h2>
               <p className="text-xs text-[#838383]">
                 Gerencie as politicas de compra de todos os fornecedores em um so lugar
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 bg-[#336FB6]/10 text-[#336FB6] rounded-full font-medium text-sm">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <span className="px-3 py-1 bg-[#336FB6]/10 text-[#336FB6] rounded-full font-medium text-sm text-center w-full sm:w-auto">
                 {filteredPoliticas.length} politica{filteredPoliticas.length !== 1 ? 's' : ''}
               </span>
               <button
                 onClick={handleOpenCreate}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors w-full sm:w-auto"
               >
                 <PlusIcon />
                 Nova Politica
@@ -673,9 +673,9 @@ export default function PoliticaCompraPage() {
 
         {/* Filtros */}
         <div className="px-6 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             {/* Busca */}
-            <div className="relative flex-1 max-w-md">
+            <div className="relative flex-1 w-full sm:max-w-md">
               <input
                 type="text"
                 value={searchTerm}
@@ -698,7 +698,7 @@ export default function PoliticaCompraPage() {
                 setFornecedorFilter(e.target.value)
                 setPage(1)
               }}
-              className="px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
+              className="w-full sm:w-auto px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#336FB6] focus:border-[#336FB6]"
             >
               <option value="">Todos os fornecedores</option>
               {fornecedores.map(f => (
@@ -711,7 +711,7 @@ export default function PoliticaCompraPage() {
         </div>
 
         {/* Tabela */}
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
@@ -808,19 +808,100 @@ export default function PoliticaCompraPage() {
           </table>
         </div>
 
+        {/* Mobile card list */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {paginatedPoliticas.length === 0 ? (
+            <div className="px-6 py-12 text-center text-gray-500">
+              {searchTerm || fornecedorFilter
+                ? 'Nenhuma politica encontrada com os filtros aplicados.'
+                : 'Nenhuma politica de compra cadastrada.'}
+            </div>
+          ) : (
+            paginatedPoliticas.map((pol) => (
+              <div key={pol.id} className="px-4 py-4 space-y-3">
+                {/* Fornecedor name */}
+                <div>
+                  <p className="text-sm font-bold text-gray-900">{pol.fornecedor_nome}</p>
+                  {pol.fornecedor_nome_fantasia && (
+                    <p className="text-xs text-gray-500">{pol.fornecedor_nome_fantasia}</p>
+                  )}
+                </div>
+
+                {/* Forma de pagamento badges */}
+                <div className="flex flex-wrap gap-1">
+                  {pol.forma_pagamento_dias?.length > 0 ? (
+                    pol.forma_pagamento_dias.map(dia => (
+                      <span key={dia} className="px-2 py-0.5 text-xs font-medium bg-[#336FB6]/10 text-[#336FB6] rounded-full">
+                        {dia}d
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-400">Sem forma de pagamento</span>
+                  )}
+                </div>
+
+                {/* Key info 2-column grid */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500">Prazo entrega</p>
+                    <p className="text-gray-900">{pol.prazo_entrega ? `${pol.prazo_entrega} dias` : '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Valor minimo</p>
+                    <p className="text-gray-900 font-medium">{formatCurrency(pol.valor_minimo)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Desconto</p>
+                    <p className="text-gray-900">{pol.desconto ? `${pol.desconto}%` : '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Bonificacao</p>
+                    <p className="text-gray-900">{pol.bonificacao ? `${pol.bonificacao}%` : '-'}</p>
+                  </div>
+                </div>
+
+                {/* Observacao */}
+                {pol.observacao && (
+                  <p className="text-xs text-[#336FB6] truncate" title={pol.observacao}>
+                    {pol.observacao}
+                  </p>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => handleOpenDuplicate(pol)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#336FB6] bg-[#336FB6]/10 hover:bg-[#336FB6]/20 rounded-lg transition-colors"
+                  >
+                    <CopyIcon />
+                    Duplicar
+                  </button>
+                  <Link
+                    href={`/cadastros/fornecedores/${pol.fornecedor_id}/editar`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    <ExternalLinkIcon />
+                    Ver fornecedor
+                  </Link>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
         {/* Paginacao */}
         {totalPages > 1 && (
           <div className="px-4 py-4 flex items-center justify-between border-t border-gray-100">
             <button
               onClick={() => setPage(prev => Math.max(1, prev - 1))}
               disabled={page === 1}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 disabled:opacity-50"
             >
               <ChevronLeftIcon />
-              Anterior
+              <span className="hidden sm:inline">Anterior</span>
             </button>
 
-            <div className="flex items-center gap-1">
+            <div className="hidden sm:flex items-center gap-1">
               {getPageNumbers().map((pageNum, index) => (
                 pageNum === '...' ? (
                   <span key={`ellipsis-${index}`} className="px-3 py-2 text-sm text-gray-500">...</span>
@@ -839,13 +920,16 @@ export default function PoliticaCompraPage() {
                 )
               ))}
             </div>
+            <span className="sm:hidden text-sm text-gray-600">
+              {page} / {totalPages}
+            </span>
 
             <button
               onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
               disabled={page === totalPages}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 disabled:opacity-50"
             >
-              Proximo
+              <span className="hidden sm:inline">Proximo</span>
               <ChevronRightIcon />
             </button>
           </div>
@@ -946,17 +1030,17 @@ export default function PoliticaCompraPage() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3">
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleCreate}
                 disabled={!createFornecedorId || creating}
-                className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
+                className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
               >
                 {creating ? 'Criando...' : 'Criar Politica'}
               </button>
@@ -1100,25 +1184,25 @@ export default function PoliticaCompraPage() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
-              <p className="text-sm text-gray-500">
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <p className="text-sm text-gray-500 text-center sm:text-left">
                 {selectedFornecedores.length} fornecedor(es) selecionado(s)
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-3">
                 <button
                   onClick={() => {
                     setShowDuplicateModal(false)
                     setPoliticaToDuplicate(null)
                     setSelectedFornecedores([])
                   }}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleDuplicate}
                   disabled={selectedFornecedores.length === 0 || duplicating}
-                  className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
+                  className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
                 >
                   {duplicating ? 'Duplicando...' : 'Duplicar Politica'}
                 </button>

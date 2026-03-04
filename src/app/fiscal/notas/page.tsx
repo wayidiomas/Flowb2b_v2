@@ -433,14 +433,14 @@ export default function NotasEntradaPage() {
       <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
         {/* Card Header */}
         <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-[20px] px-5 py-[18px]">
-          <div className="flex items-end justify-between gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
             <div className="flex flex-col gap-1.5">
               <h2 className="text-base font-medium text-[#344054]">Notas Fiscais de Entrada</h2>
               <p className="text-xs text-[#838383]">
                 Visualize todas as notas fiscais de entrada recebidas dos fornecedores
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               {/* Botao de Filtros com Dropdown */}
               <div className="relative" ref={filterDropdownRef}>
                 <button
@@ -542,7 +542,7 @@ export default function NotasEntradaPage() {
           </div>
 
           {/* Search */}
-          <div className="relative max-w-[360px]">
+          <div className="relative w-full sm:max-w-[360px]">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#898989]">
               <SearchIcon />
             </div>
@@ -560,7 +560,7 @@ export default function NotasEntradaPage() {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#EFEFEF]">
@@ -701,6 +701,97 @@ export default function NotasEntradaPage() {
           </table>
         </div>
 
+        {/* Mobile Card List */}
+        <div className="md:hidden">
+          {loading ? (
+            <div className="p-4 space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="animate-pulse bg-gray-100 rounded-lg h-24" />
+              ))}
+            </div>
+          ) : paginatedNotas.length === 0 ? (
+            <div className="px-6 py-12 text-center text-gray-500">
+              {searchTerm || hasActiveFilters ? (
+                <div>
+                  <DocumentIcon />
+                  <p className="mt-2">Nenhuma nota fiscal encontrada para os filtros aplicados.</p>
+                  {hasActiveFilters && (
+                    <button
+                      onClick={clearFilters}
+                      className="mt-2 text-sm text-[#336FB6] hover:underline"
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <DocumentIcon />
+                  <p className="mt-2">Nenhuma nota fiscal de entrada encontrada.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {paginatedNotas.map((nota) => (
+                <div key={nota.id} className="px-4 py-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[13px] font-semibold text-[#344054] truncate">
+                        NF {nota.numero || '-'}
+                      </span>
+                      {nota.serie !== null && (
+                        <span className="text-[11px] text-gray-400 shrink-0">Serie {nota.serie}</span>
+                      )}
+                    </div>
+                    {getStatusBadge(nota.situacao)}
+                  </div>
+                  <p className="text-[13px] text-[#344054] truncate">
+                    {nota.fornecedor_nome || nota.contato_nome || '-'}
+                  </p>
+                  <div className="flex items-center gap-3 text-[12px] text-gray-500">
+                    <span>Emissao: {formatDate(nota.data_emissao)}</span>
+                    <span className="text-gray-300">|</span>
+                    <span>Entrada: {formatDate(nota.data_operacao)}</span>
+                  </div>
+                  <div className="flex items-center gap-1 pt-1">
+                    {nota.link_pdf && (
+                      <a
+                        href={nota.link_pdf}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                      >
+                        <PdfIcon /> PDF
+                      </a>
+                    )}
+                    {nota.link_danfe && (
+                      <a
+                        href={nota.link_danfe}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                      >
+                        <DanfeIcon /> DANFE
+                      </a>
+                    )}
+                    {(nota.xml_url || nota.chave_acesso) && (
+                      <a
+                        href={nota.xml_url || `https://www.bling.com.br/relatorios/nfe.xml.php?chaveAcesso=${nota.chave_acesso}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
+                      >
+                        <XmlIcon /> XML
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Pagination */}
         {!loading && filteredNotas.length > 0 && (
           <div className="px-7 py-4 flex items-center justify-between bg-white">
@@ -710,10 +801,10 @@ export default function NotasEntradaPage() {
               className="inline-flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-medium text-[#336FB6] bg-white border-[1.5px] border-[#336FB6] rounded-lg shadow-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeftIcon />
-              Anterior
+              <span className="hidden sm:inline">Anterior</span>
             </button>
 
-            <div className="flex items-center gap-0.5">
+            <div className="hidden sm:flex items-center gap-0.5">
               {getPageNumbers().map((page, index) => (
                 page === '...' ? (
                   <span key={`ellipsis-${index}`} className="px-3 py-2 text-sm text-gray-500">...</span>
@@ -732,13 +823,16 @@ export default function NotasEntradaPage() {
                 )
               ))}
             </div>
+            <span className="sm:hidden text-xs font-medium text-[#475467]">
+              {currentPage} / {totalPages}
+            </span>
 
             <button
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={currentPage === totalPages || totalPages === 0}
               className="inline-flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-medium text-[#336FB6] bg-white border-[1.5px] border-[#336FB6] rounded-lg shadow-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Proximo
+              <span className="hidden sm:inline">Proximo</span>
               <ChevronRightIcon />
             </button>
           </div>

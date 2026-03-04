@@ -243,10 +243,10 @@ function SyncStatusContent() {
         {/* Card de Status Principal */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
           <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 sm:gap-4">
                 {/* Logo Bling */}
-                <div className="w-12 h-12 bg-[#2660A5] rounded-xl flex items-center justify-center">
+                <div className="w-12 h-12 bg-[#2660A5] rounded-xl flex items-center justify-center shrink-0">
                   <span className="text-white font-bold text-lg">B</span>
                 </div>
                 <div>
@@ -272,7 +272,7 @@ function SyncStatusContent() {
               <button
                 onClick={fetchStatus}
                 disabled={loading}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                className="shrink-0 inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
               >
                 <RefreshIcon />
                 Atualizar
