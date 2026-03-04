@@ -209,7 +209,7 @@ export default function SugestaoDetalhePage() {
       <PageHeader title="Sugestao de Estoque" />
 
       {/* Back + Status */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
         <button
           onClick={() => router.push('/estoque/sugestoes')}
           className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
@@ -240,7 +240,7 @@ export default function SugestaoDetalhePage() {
       )}
 
       {/* Header info */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <p className="text-xs text-gray-500 mb-1">Fornecedor</p>
@@ -303,7 +303,7 @@ export default function SugestaoDetalhePage() {
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
@@ -400,6 +400,70 @@ export default function SugestaoDetalhePage() {
             </tbody>
           </table>
         </div>
+
+        <div className="md:hidden divide-y divide-gray-100">
+          {itens.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-gray-500">Nenhum item nesta conferencia</div>
+          ) : (
+            itens.map((item) => {
+              const diff = item.estoque_conferido - (item.estoque_sistema ?? 0)
+              const hasDiff = diff !== 0
+              const isSelected = selectedIds.has(item.id)
+              return (
+                <div
+                  key={item.id}
+                  className={`px-4 py-3 ${isPendente && isSelected ? 'bg-blue-50/30' : ''}`}
+                  onClick={() => isPendente && toggleItem(item.id)}
+                >
+                  <div className="flex items-start gap-3">
+                    {isPendente && (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleItem(item.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-0.5 w-4 h-4 text-[#336FB6] border-gray-300 rounded cursor-pointer focus:ring-[#336FB6]"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{item.nome || '-'}</p>
+                          {item.gtin && <p className="text-xs text-gray-400">EAN: {item.gtin}</p>}
+                          {item.codigo && <p className="text-xs text-gray-400">Cod: {item.codigo}</p>}
+                        </div>
+                        {hasDiff ? (
+                          <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${diff > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {diff > 0 ? '+' : ''}{diff}
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-xs text-gray-400">0</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 mt-1.5 text-xs">
+                        <span className="text-gray-500">Conferido: <span className="font-medium text-gray-900">{item.estoque_conferido}</span></span>
+                        <span className="text-gray-500">Sistema: <span className="font-medium text-gray-600">{item.estoque_sistema ?? '-'}</span></span>
+                      </div>
+                      {!isPendente && (
+                        <div className="mt-1.5">
+                          {item.aceito === true && (
+                            <span className="inline-flex items-center gap-1 text-xs text-green-700"><CheckCircleIcon /> Aceito</span>
+                          )}
+                          {item.aceito === false && (
+                            <span className="inline-flex items-center gap-1 text-xs text-red-600"><XCircleIcon /> Rejeitado</span>
+                          )}
+                          {item.aceito === null && (
+                            <span className="text-xs text-gray-400">Pendente</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
       </div>
 
       {/* Observation + Actions (only for pending) */}
@@ -418,12 +482,12 @@ export default function SugestaoDetalhePage() {
             />
           </div>
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
             <Button
               variant="outline"
               size="md"
               onClick={() => setShowRejectModal(true)}
-              className="!border-red-300 !text-red-600 hover:!bg-red-50"
+              className="!border-red-300 !text-red-600 hover:!bg-red-50 w-full sm:w-auto"
             >
               Rejeitar Tudo
             </Button>
@@ -433,6 +497,7 @@ export default function SugestaoDetalhePage() {
               size="md"
               onClick={() => setShowConfirmModal(true)}
               disabled={selectedIds.size === 0}
+              className="w-full sm:w-auto"
             >
               Aceitar Selecionados ({selectedIds.size})
             </Button>

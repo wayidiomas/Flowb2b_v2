@@ -671,13 +671,13 @@ export default function ControleEstoquePage() {
         subtitle="Gerencie as movimentacoes de estoque dos produtos"
       />
 
-      <div className="flex gap-4 2xl:gap-6">
+      <div className="flex flex-col lg:flex-row gap-4 2xl:gap-6">
         {/* Main Content */}
         <div className="flex-1">
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
             {/* Card Header */}
             <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-[20px] px-5 py-[18px]">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex flex-col gap-1.5">
                   <h2 className="text-base font-medium text-[#344054]">Controle de estoque</h2>
                   <p className="text-xs text-[#838383]">
@@ -686,7 +686,7 @@ export default function ControleEstoquePage() {
                 </div>
 
                 {/* Search */}
-                <div className="relative w-[360px]">
+                <div className="relative w-full sm:w-[360px]">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#898989]">
                     <SearchIcon />
                   </div>
@@ -757,8 +757,8 @@ export default function ControleEstoquePage() {
               // Product Details
               <div className="p-5">
                 {/* Product Header */}
-                <div className="flex items-center gap-3 mb-6">
-                  <h3 className="text-lg font-medium text-[#344054]">
+                <div className="flex items-start gap-3 mb-6">
+                  <h3 className="text-base sm:text-lg font-medium text-[#344054]">
                     {selectedProduct.gtin || selectedProduct.codigo} - {selectedProduct.nome}
                   </h3>
                   <button
@@ -883,7 +883,7 @@ export default function ControleEstoquePage() {
 
                 {/* Movimentacoes Table */}
                 {loadingMovimentacoes ? (
-                  <div className="overflow-x-auto">
+                  <div className="hidden md:block overflow-x-auto">
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-[#EFEFEF]">
@@ -904,7 +904,7 @@ export default function ControleEstoquePage() {
                   </div>
                 ) : (
                   <>
-                    <div className="overflow-x-auto">
+                    <div className="hidden md:block overflow-x-auto">
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-[#EFEFEF]">
@@ -981,19 +981,68 @@ export default function ControleEstoquePage() {
                       </table>
                     </div>
 
+                    {/* Mobile card list */}
+                    <div className="md:hidden divide-y divide-gray-100">
+                      {paginatedMovimentacoes.length === 0 ? (
+                        <div className="px-4 py-8 text-center text-gray-500 text-sm">
+                          Nenhuma movimentacao encontrada para este produto
+                        </div>
+                      ) : (
+                        paginatedMovimentacoes.map((mov) => (
+                          <div
+                            key={mov.movimentacao_id}
+                            className={`px-4 py-3 ${mov.tipo === 'Entrada' ? 'bg-green-50' : 'bg-red-50'}`}
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-1.5">
+                              <div>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${mov.tipo === 'Entrada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                  {mov.tipo}
+                                </span>
+                                <span className="ml-2 text-sm font-medium text-gray-900">
+                                  {Number(mov.quantidade).toLocaleString('pt-BR')} un
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteMovimentacao(mov)}
+                                className="text-red-500 hover:text-red-700 p-1"
+                                title="Excluir"
+                              >
+                                <TrashIcon />
+                              </button>
+                            </div>
+                            <div className="text-xs text-gray-500 space-y-0.5">
+                              <p>{formatDate(mov.data)}</p>
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                                {mov.preco_venda && <span>Venda: {formatCurrency(mov.preco_venda)}</span>}
+                                {mov.valor_de_compra && <span>Compra: {formatCurrency(mov.valor_de_compra)}</span>}
+                                {mov.preco_custo && <span>Custo: {formatCurrency(mov.preco_custo)}</span>}
+                              </div>
+                              {mov.observacao && <p className="truncate">Obs: {mov.observacao}</p>}
+                              {mov.origem && (
+                                <p className="flex items-center gap-1">
+                                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-medium bg-[#336FB6] text-white">P</span>
+                                  {mov.origem}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
                     {/* Pagination */}
                     {movimentacoes.length > 0 && (
-                      <div className="px-4 py-4 flex items-center justify-between">
+                      <div className="px-4 py-4 flex items-center justify-between gap-2">
                         <button
                           onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                           disabled={currentPage === 1}
                           className="inline-flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-medium text-[#336FB6] bg-white border-[1.5px] border-[#336FB6] rounded-lg shadow-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           <ChevronLeftIcon />
-                          Anterior
+                          <span className="hidden sm:inline">Anterior</span>
                         </button>
 
-                        <div className="flex items-center gap-0.5">
+                        <div className="hidden sm:flex items-center gap-0.5">
                           {getPageNumbers().map((page, index) => (
                             page === '...' ? (
                               <span key={`ellipsis-${index}`} className="px-3 py-2 text-sm text-gray-500">...</span>
@@ -1018,7 +1067,7 @@ export default function ControleEstoquePage() {
                           disabled={currentPage === totalPages || totalPages === 0}
                           className="inline-flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-medium text-[#336FB6] bg-white border-[1.5px] border-[#336FB6] rounded-lg shadow-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                          Proximo
+                          <span className="hidden sm:inline">Proximo</span>
                           <ChevronRightIcon />
                         </button>
                       </div>
@@ -1031,7 +1080,7 @@ export default function ControleEstoquePage() {
         </div>
 
         {/* Right Sidebar */}
-        <div className="w-[286px] 2xl:w-[320px] shrink-0">
+        <div className="w-full lg:w-[286px] 2xl:lg:w-[320px] lg:shrink-0">
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
             {/* Sidebar Header */}
             <div className="bg-[#FBFBFB] border border-[#EDEDED] rounded-[20px] px-5 py-[18px]">

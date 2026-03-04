@@ -91,21 +91,21 @@ export default function SugestoesEstoquePage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <p className="text-xs text-gray-500 mb-1">Total de Sugestoes</p>
-          <p className="text-2xl font-semibold text-gray-900">{sugestoes.length}</p>
+          <p className="text-xl sm:text-2xl font-semibold text-gray-900">{sugestoes.length}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-yellow-200 p-4">
           <p className="text-xs text-yellow-600 mb-1">Pendentes de Revisao</p>
-          <p className="text-2xl font-semibold text-yellow-700">{pendentes}</p>
+          <p className="text-xl sm:text-2xl font-semibold text-yellow-700">{pendentes}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-green-200 p-4">
           <p className="text-xs text-green-600 mb-1">Aceitas</p>
-          <p className="text-2xl font-semibold text-green-700">
+          <p className="text-xl sm:text-2xl font-semibold text-green-700">
             {sugestoes.filter((s) => s.status === 'aceita' || s.status === 'parcialmente_aceita').length}
           </p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-red-200 p-4">
           <p className="text-xs text-red-600 mb-1">Rejeitadas</p>
-          <p className="text-2xl font-semibold text-red-700">
+          <p className="text-xl sm:text-2xl font-semibold text-red-700">
             {sugestoes.filter((s) => s.status === 'rejeitada').length}
           </p>
         </div>
@@ -143,7 +143,7 @@ export default function SugestoesEstoquePage() {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-t border-gray-100">
@@ -238,6 +238,62 @@ export default function SugestoesEstoquePage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile card list */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {loading ? (
+            <div className="p-8 text-center text-gray-500 text-sm">Carregando...</div>
+          ) : filteredSugestoes.length === 0 ? (
+            <div className="px-4 py-12 text-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                  <ClipboardCheckIcon />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Nenhuma sugestao encontrada</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {search || statusFilter !== 'todas'
+                      ? 'Tente ajustar os filtros'
+                      : 'Quando fornecedores enviarem conferencias de estoque, elas aparecerao aqui'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            filteredSugestoes.map((sugestao) => {
+              const config = statusConfig[sugestao.status]
+              const isPendente = sugestao.status === 'enviada'
+              return (
+                <button
+                  key={sugestao.id}
+                  onClick={() => router.push(`/estoque/sugestoes/${sugestao.id}`)}
+                  className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${isPendente ? 'bg-yellow-50/30' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <p className="font-medium text-sm text-gray-900 truncate">{sugestao.fornecedor_nome || '-'}</p>
+                    <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
+                      {config.label}
+                    </span>
+                  </div>
+                  {sugestao.observacao_fornecedor && (
+                    <p className="text-xs text-gray-500 truncate mb-2">{sugestao.observacao_fornecedor}</p>
+                  )}
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <span>
+                      {sugestao.data_envio
+                        ? new Date(sugestao.data_envio).toLocaleDateString('pt-BR')
+                        : '-'}
+                    </span>
+                    <span>{sugestao.total_itens} itens</span>
+                    <span className={sugestao.total_divergencias > 0 ? 'text-red-600 font-medium' : ''}>
+                      {sugestao.total_divergencias} diverg.
+                    </span>
+                  </div>
+                </button>
+              )
+            })
+          )}
         </div>
       </div>
     </DashboardLayout>
