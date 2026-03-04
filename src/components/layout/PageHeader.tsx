@@ -69,7 +69,7 @@ export function PageHeader({ title, subtitle }: PageHeaderProps) {
   const hasMultipleEmpresas = empresas.length > 1
 
   return (
-    <div className="flex items-center justify-between mb-6">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-6">
       {/* Left side - Title and date */}
       <div>
         <h1 className="text-lg font-medium text-gray-900">{title}</h1>

@@ -208,7 +208,7 @@ export function MainHeader() {
 
   return (
     <header className="bg-[#336fb6] h-[60px] w-full shadow-md z-50 relative">
-      <div className="h-full flex items-center px-12 gap-6">
+      <div className="h-full flex items-center px-4 md:px-12 gap-4 md:gap-6">
         {/* Logo */}
         <Link href="/" className="shrink-0">
           <Image
@@ -222,7 +222,7 @@ export function MainHeader() {
         </Link>
 
         {/* Navigation */}
-        <nav className="flex items-center gap-1 ml-4" ref={dropdownRef}>
+        <nav className="hidden md:flex items-center gap-1 ml-4" ref={dropdownRef}>
           {filteredNavigation.map((item) => (
             <div key={item.href} className="relative">
               {item.children ? (
