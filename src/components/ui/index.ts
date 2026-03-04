@@ -30,3 +30,5 @@ export { Skeleton, TableSkeleton, CardSkeleton, ChartSkeleton } from './Skeleton
 export { Tooltip, InfoIcon } from './Tooltip'
 
 export { PageLoader, InlineLoader } from './PageLoader'
+
+export { FormActions } from './FormActions'

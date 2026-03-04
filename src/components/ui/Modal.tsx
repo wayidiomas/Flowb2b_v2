@@ -8,8 +8,11 @@ interface ModalProps {
   onClose: () => void
   children: ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl'
+  /** Se true, modal fica fullscreen no mobile (padrao: true) */
+  mobileFullScreen?: boolean
 }
 
+// Desktop: modal centrado com max-width por tamanho
 const sizeStyles = {
   sm: 'max-w-sm',
   md: 'max-w-md',
@@ -17,7 +20,15 @@ const sizeStyles = {
   xl: 'max-w-xl',
 }
 
-function Modal({ isOpen, onClose, children, size = 'md' }: ModalProps) {
+// Mobile fullscreen: no mobile sem max-width, no desktop aplica max-width
+const sizeStylesResponsive = {
+  sm: 'max-w-none md:max-w-sm',
+  md: 'max-w-none md:max-w-md',
+  lg: 'max-w-none md:max-w-lg',
+  xl: 'max-w-none md:max-w-xl',
+}
+
+function Modal({ isOpen, onClose, children, size = 'md', mobileFullScreen = true }: ModalProps) {
   if (!isOpen) return null
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -28,14 +39,18 @@ function Modal({ isOpen, onClose, children, size = 'md' }: ModalProps) {
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 ${
+        mobileFullScreen ? 'p-0 md:p-4' : 'p-4'
+      }`}
       onClick={handleBackdropClick}
     >
       <div
         className={`
-          relative w-full ${sizeStyles[size]}
-          bg-white rounded-2xl shadow-xl
-          animate-in zoom-in-95 duration-200
+          relative w-full bg-white shadow-xl animate-in zoom-in-95 duration-200
+          ${mobileFullScreen
+            ? `h-full md:h-auto rounded-none md:rounded-2xl overflow-y-auto ${sizeStylesResponsive[size]}`
+            : `rounded-2xl ${sizeStyles[size]}`
+          }
         `}
       >
         {children}
@@ -112,7 +127,7 @@ interface ModalFooterProps {
 
 function ModalFooter({ children }: ModalFooterProps) {
   return (
-    <div className="flex items-center justify-end gap-3 p-6 pt-0">
+    <div className="flex items-center justify-end gap-3 p-6 pt-0 sticky bottom-0 bg-white md:static">
       {children}
     </div>
   )
