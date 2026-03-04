@@ -129,7 +129,7 @@ function KPICard({
   const config = colorClasses[color]
 
   return (
-    <div className={`rounded-[20px] border ${config.border} ${config.bg} p-5 transition-all hover:shadow-md`}>
+    <div className={`rounded-[20px] border ${config.border} ${config.bg} p-4 sm:p-5 transition-all hover:shadow-md`}>
       <div className="flex items-start justify-between mb-3">
         <div className={`p-2.5 rounded-xl ${config.iconBg}`}>
           {icon}
@@ -138,7 +138,7 @@ function KPICard({
           <InfoIcon className="w-4 h-4 text-[#838383] cursor-help" />
         </Tooltip>
       </div>
-      <div className={`text-3xl font-bold ${config.text}`}>{value}</div>
+      <div className={`text-2xl sm:text-3xl font-bold ${config.text}`}>{value}</div>
       <div className="text-sm font-medium text-[#667085] mt-1">{label}</div>
       {subValue && <div className="text-xs text-[#838383] mt-0.5">{subValue}</div>}
     </div>
@@ -372,7 +372,7 @@ export default function ComprasCurvaPage() {
     <DashboardLayout>
       <div className="max-w-[1800px] mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-6 mb-6">
+        <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-4 sm:p-6 mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-xl font-bold text-[#344054]">Compras por Curva ABC</h1>
@@ -438,7 +438,7 @@ export default function ComprasCurvaPage() {
         {/* Main Content */}
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Fornecedores Table */}
-          <div className="lg:col-span-2 bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-5">
+          <div className="lg:col-span-2 bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-4 sm:p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-semibold text-[#344054]">
@@ -460,7 +460,7 @@ export default function ComprasCurvaPage() {
           </div>
 
           {/* Alertas Panel */}
-          <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-5">
+          <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-4 sm:p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-[#344054]">
                 Alertas por Urgencia

@@ -220,7 +220,8 @@ export function ProdutosCurvaTable({
   const allSelected = selectedIds.length === produtosOrdenados.length && produtosOrdenados.length > 0
 
   return (
-    <div className="overflow-auto max-h-[600px] rounded-lg border border-[#EDEDED]">
+    <>
+    <div className="overflow-auto max-h-[600px] rounded-lg border border-[#EDEDED] hidden md:block">
       <table className="w-full text-sm relative">
         <thead className="sticky top-0 z-10 shadow-[0_2px_4px_rgba(0,0,0,0.04)]">
           <tr className="bg-[#FBFBFB] border-b border-[#EDEDED]">
@@ -401,5 +402,75 @@ export function ProdutosCurvaTable({
         </tbody>
       </table>
     </div>
+
+      {/* Mobile select all */}
+      <div className="md:hidden flex items-center gap-3 mb-3 px-1">
+        <input
+          type="checkbox"
+          checked={allSelected}
+          onChange={handleSelectAll}
+          className="w-4 h-4 rounded border-[#D0D5DD] text-[#336FB6] focus:ring-[#336FB6] cursor-pointer"
+        />
+        <span className="text-xs text-[#667085]">Selecionar todos ({produtosOrdenados.length})</span>
+      </div>
+
+      {/* Mobile card list */}
+      <div className="md:hidden space-y-2">
+        {produtosOrdenados.map((p) => (
+          <div
+            key={p.produto_id}
+            className={`rounded-xl border p-3 transition-colors ${
+              p.em_ruptura
+                ? 'border-red-200 bg-red-50/60'
+                : 'border-[#EDEDED] bg-white'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(p.produto_id)}
+                onChange={() => handleSelectOne(p.produto_id)}
+                className="w-4 h-4 mt-0.5 rounded border-[#D0D5DD] text-[#336FB6] focus:ring-[#336FB6] cursor-pointer shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#344054] truncate">{p.nome}</p>
+                    <p className="text-xs text-[#667085] mt-0.5">
+                      <span className="font-mono bg-[#F2F4F7] px-1.5 py-0.5 rounded">{p.codigo}</span>
+                    </p>
+                  </div>
+                  <RupturaIndicator urgencia={p.urgencia} diasCobertura={p.dias_cobertura} />
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <CurvaBadge curva={p.curva_fat} />
+                  <CurvaBadge curva={p.curva_qtd} />
+                  <span className="text-[#EDEDED]">|</span>
+                  <span className={`text-xs font-semibold ${p.em_ruptura ? 'text-red-600' : 'text-[#344054]'}`}>
+                    Est: {formatNumber(p.estoque_atual)}
+                  </span>
+                  <CoberturaBar
+                    diasCobertura={p.dias_cobertura}
+                    diasNecessarios={p.dias_necessarios}
+                    prazoEntrega={prazoEntrega}
+                    urgencia={p.urgencia}
+                    compact
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-2 text-xs text-[#667085]">
+                  <span>
+                    {tipoCurva === 'faturamento'
+                      ? `Vendas: ${formatCurrency(p.faturamento_90d)}`
+                      : `Vendas: ${formatNumber(p.quantidade_90d)} un`
+                    }
+                  </span>
+                  <span>Compra: {formatCurrency(p.valor_compra || 0)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }

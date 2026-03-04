@@ -277,7 +277,7 @@ export function FornecedorCurvaTable({
           <p className="text-sm">Nenhum fornecedor encontrado para &quot;{search}&quot;</p>
         </div>
       ) : (
-      <div className="overflow-auto max-h-[600px] rounded-lg border border-[#EDEDED]">
+      <div className="overflow-auto max-h-[600px] rounded-lg border border-[#EDEDED] hidden md:block">
       <table className="w-full text-sm relative">
         <thead className="sticky top-0 z-10 shadow-[0_2px_4px_rgba(0,0,0,0.04)]">
           <tr className="bg-[#FBFBFB] border-b border-[#EDEDED]">
@@ -439,6 +439,65 @@ export function FornecedorCurvaTable({
       </table>
     </div>
     )}
+
+      {/* Mobile card list */}
+      {fornecedoresFiltrados.length > 0 && (
+        <div className="md:hidden space-y-3">
+          {fornecedoresFiltrados.map((f) => {
+            const curva = tipoCurva === 'faturamento' ? f.curva_faturamento : f.curva_quantidade
+            const hasRupturaA = curva.A.ruptura > 0
+            const diasSemPedidoAlerta = f.dias_sem_pedido && f.dias_sem_pedido > 30
+
+            return (
+              <Link
+                key={f.fornecedor_id}
+                href={`/compras/curva/${f.fornecedor_id}`}
+                className={`block rounded-xl border p-4 transition-colors ${
+                  hasRupturaA
+                    ? 'border-red-200 bg-red-50/40'
+                    : 'border-[#EDEDED] bg-white hover:bg-[#FBFBFB]'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-[#344054] text-sm truncate">{f.fornecedor_nome}</p>
+                    {f.fornecedor_cnpj && (
+                      <p className="text-[10px] text-[#838383] mt-0.5">{formatCNPJ(f.fornecedor_cnpj)}</p>
+                    )}
+                  </div>
+                  {f.ruptura_total > 0 && (
+                    <span className="ml-2 inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                      {f.ruptura_total}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <CurvaCell total={curva.A.total} ruptura={curva.A.ruptura} curva="A" />
+                  <CurvaCell total={curva.B.total} ruptura={curva.B.ruptura} curva="B" />
+                  <CurvaCell total={curva.C.total} ruptura={curva.C.ruptura} curva="C" />
+                </div>
+                <div className="flex items-center justify-between text-xs text-[#667085]">
+                  <span>{f.total_produtos} produtos</span>
+                  <div className="flex items-center gap-3">
+                    {f.pedido_em_aberto ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
+                        Em andamento
+                      </span>
+                    ) : (
+                      <span>Ult: {formatDate(f.ultimo_pedido_data)}</span>
+                    )}
+                    {f.dias_sem_pedido != null && (
+                      <span className={diasSemPedidoAlerta ? 'font-medium text-amber-700' : ''}>
+                        {f.dias_sem_pedido}d
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
