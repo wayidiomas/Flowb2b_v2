@@ -699,8 +699,8 @@ export default function VisualizarPedidoPage() {
       )}
 
       {/* Header simplificado */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
           <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
@@ -881,7 +881,7 @@ export default function VisualizarPedidoPage() {
                 Itens do Pedido ({pedido.itens.length})
               </h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto hidden md:block">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -908,6 +908,27 @@ export default function VisualizarPedidoPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            {/* Mobile card list */}
+            <div className="md:hidden divide-y divide-gray-200">
+              {pedido.itens.map((item, index) => (
+                <div key={item.id || index} className="px-4 py-3">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{item.descricao}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {item.codigo_produto && `SKU: ${item.codigo_produto}`}
+                        {item.codigo_fornecedor && ` | Cod: ${item.codigo_fornecedor}`}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900 ml-3">{formatCurrency(item.quantidade * item.valor)}</p>
+                  </div>
+                  <div className="flex items-center gap-4 mt-1.5 text-xs text-gray-500">
+                    <span>{item.quantidade} {item.unidade}</span>
+                    <span>x {formatCurrency(item.valor)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

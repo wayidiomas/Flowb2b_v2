@@ -544,7 +544,7 @@ export default function EditarPedidoCompraPage() {
     <RequirePermission permission="pedidos">
     <DashboardLayout>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-4">
           <Link
             href="/compras/pedidos"
@@ -582,14 +582,14 @@ export default function EditarPedidoCompraPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column - Form */}
-        <div className="col-span-8">
+        <div className="lg:col-span-8">
           {/* Dados do Pedido */}
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-6 mb-6">
             <h2 className="text-base font-semibold text-[#344054] mb-4">Detalhes da Compra</h2>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Numero do Pedido</label>
                 <input
@@ -642,7 +642,7 @@ export default function EditarPedidoCompraPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Observacoes</label>
                 <textarea
@@ -670,10 +670,10 @@ export default function EditarPedidoCompraPage() {
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
             {/* Tab Header */}
             <div className="border-b border-gray-200">
-              <nav className="flex">
+              <nav className="flex overflow-x-auto">
                 <button
                   onClick={() => setActiveTab('produtos')}
-                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  className={`px-4 sm:px-6 py-3 sm:py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                     activeTab === 'produtos'
                       ? 'border-[#336FB6] text-[#336FB6]'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -683,7 +683,7 @@ export default function EditarPedidoCompraPage() {
                 </button>
                 <button
                   onClick={() => setActiveTab('politicas')}
-                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  className={`px-4 sm:px-6 py-3 sm:py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                     activeTab === 'politicas'
                       ? 'border-[#336FB6] text-[#336FB6]'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -693,7 +693,7 @@ export default function EditarPedidoCompraPage() {
                 </button>
                 <button
                   onClick={() => setActiveTab('pagamento')}
-                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  className={`px-4 sm:px-6 py-3 sm:py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                     activeTab === 'pagamento'
                       ? 'border-[#336FB6] text-[#336FB6]'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -859,7 +859,7 @@ export default function EditarPedidoCompraPage() {
                                   )}
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4 mt-3 text-sm">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 text-sm">
                                   <div>
                                     <span className="text-gray-500">Valor minimo:</span>
                                     <span className="ml-2 font-medium">{formatCurrency(pol.valor_minimo || 0)}</span>
@@ -983,7 +983,7 @@ export default function EditarPedidoCompraPage() {
         </div>
 
         {/* Right Column - Totals */}
-        <div className="col-span-4">
+        <div className="lg:col-span-4">
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-6 sticky top-4">
             <h2 className="text-base font-semibold text-[#344054] mb-4">Totais da Compra</h2>
 

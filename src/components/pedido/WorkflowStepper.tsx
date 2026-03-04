@@ -39,8 +39,8 @@ export function WorkflowStepper({ statusInterno, className = '' }: WorkflowStepp
   const isRejected = statusInterno === 'rejeitado'
 
   return (
-    <div className={`bg-white rounded-xl border border-gray-200 px-6 py-4 border-l-4 border-l-amber-400 ${className}`}>
-      <div className="flex items-center justify-between">
+    <div className={`bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-4 border-l-4 border-l-amber-400 overflow-x-auto ${className}`}>
+      <div className="flex items-center justify-between min-w-[500px] sm:min-w-0">
         {WORKFLOW_STEPS.map((step, index) => {
           const isCompleted = index < currentIndex
           const isCurrent = index === currentIndex

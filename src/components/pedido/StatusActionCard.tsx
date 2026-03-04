@@ -117,7 +117,7 @@ export function StatusActionCard({
             <p className="text-sm text-gray-600 mt-1">
               O pedido foi enviado e esta aguardando a analise do fornecedor. Voce sera notificado quando houver uma resposta.
             </p>
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm text-blue-600">
                 <div className="flex gap-1">
                   <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -358,12 +358,12 @@ export function StatusActionCard({
               className="w-full px-3 py-2 text-sm border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
             />
           </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <button
                 onClick={onAceitarSugestao}
                 disabled={processandoSugestao}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
+                className="inline-flex w-full sm:w-auto items-center justify-center sm:justify-start gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -374,7 +374,7 @@ export function StatusActionCard({
                 <button
                   onClick={onManterOriginal}
                   disabled={processandoSugestao}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg font-medium transition-colors disabled:opacity-50"
+                  className="inline-flex w-full sm:w-auto items-center justify-center sm:justify-start gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
@@ -411,7 +411,7 @@ export function StatusActionCard({
                 &quot;{ultimaSugestao.observacao_lojista}&quot;
               </p>
             )}
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
               {podeFinalizar && onFinalizar && (
                 <button
                   onClick={onFinalizar}

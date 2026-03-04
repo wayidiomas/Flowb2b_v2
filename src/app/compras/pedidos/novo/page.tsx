@@ -854,9 +854,9 @@ function NovoPedidoContent() {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column - Form */}
-        <div className="col-span-8">
+        <div className="lg:col-span-8">
           {/* Alert Politica */}
           {politica && (
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
@@ -876,7 +876,7 @@ function NovoPedidoContent() {
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-6 mb-6">
             <h2 className="text-base font-semibold text-[#344054] mb-4">Detalhes da Compra</h2>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ordem de Compra</label>
                 <input
@@ -930,7 +930,7 @@ function NovoPedidoContent() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Observacoes</label>
                 <textarea
@@ -958,10 +958,10 @@ function NovoPedidoContent() {
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
             {/* Tab Header */}
             <div className="border-b border-gray-200">
-              <nav className="flex">
+              <nav className="flex overflow-x-auto">
                 <button
                   onClick={() => setActiveTab('produtos')}
-                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  className={`whitespace-nowrap px-4 sm:px-6 py-3 sm:py-4 text-sm font-medium border-b-2 transition-colors ${
                     activeTab === 'produtos'
                       ? 'border-[#336FB6] text-[#336FB6]'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -971,7 +971,7 @@ function NovoPedidoContent() {
                 </button>
                 <button
                   onClick={() => setActiveTab('politicas')}
-                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  className={`whitespace-nowrap px-4 sm:px-6 py-3 sm:py-4 text-sm font-medium border-b-2 transition-colors ${
                     activeTab === 'politicas'
                       ? 'border-[#336FB6] text-[#336FB6]'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -981,7 +981,7 @@ function NovoPedidoContent() {
                 </button>
                 <button
                   onClick={() => setActiveTab('pagamento')}
-                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  className={`whitespace-nowrap px-4 sm:px-6 py-3 sm:py-4 text-sm font-medium border-b-2 transition-colors ${
                     activeTab === 'pagamento'
                       ? 'border-[#336FB6] text-[#336FB6]'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -1155,7 +1155,7 @@ function NovoPedidoContent() {
                               </button>
                             )}
                           </div>
-                          <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                             <div>
                               <span className="text-gray-500">Valor minimo:</span>
                               <span className="ml-2 font-medium">{formatCurrency(politica.valor_minimo || 0)}</span>
@@ -1302,7 +1302,7 @@ function NovoPedidoContent() {
         </div>
 
         {/* Right Column - Totals */}
-        <div className="col-span-4">
+        <div className="lg:col-span-4">
           <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] p-6 sticky top-4">
             <h2 className="text-base font-semibold text-[#344054] mb-4">Totais da Compra</h2>
 
