@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { BLING_CONFIG } from './bling'
-import { blingFetch } from './bling-fetch'
+import { blingFetch, BlingRateLimitError } from './bling-fetch'
 
 export interface SyncEstoqueResult {
   total_produtos: number
@@ -109,8 +109,8 @@ export async function syncEstoqueFornecedor(
         },
         {
           context: `sync estoque pre-pedido (lote ${i + 1}/${lotes.length})`,
-          maxRetries: 3,
-          baseDelayMs: 1000,
+          maxRetries: 5,
+          baseDelayMs: 2000,
         }
       )
 
@@ -150,6 +150,13 @@ export async function syncEstoqueFornecedor(
         }
       }
     } catch (loteError) {
+      // Se rate limit esgotou retries, abortar lotes restantes
+      if (loteError instanceof BlingRateLimitError) {
+        console.warn(`[Sync Estoque] Rate limit (429) no lote ${i + 1}, abortando lotes restantes`)
+        const produtosRestantes = lotes.slice(i).reduce((sum, l) => sum + l.length, 0)
+        result.erros += produtosRestantes
+        break
+      }
       console.warn(`[Sync Estoque] Erro no lote ${i + 1}:`, loteError)
       result.erros += lote.length
     }
