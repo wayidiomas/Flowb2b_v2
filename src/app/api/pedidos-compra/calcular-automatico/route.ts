@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
 import { requirePermission } from '@/lib/permissions'
 import { createServerSupabaseClient } from '@/lib/supabase'
+import { getBlingToken } from '@/lib/bling-estoque'
+import { syncEstoqueFornecedor } from '@/lib/bling-estoque-sync'
 
 // Interface para o produto retornado pela API Python
 interface ProdutoAPI {
@@ -52,6 +54,20 @@ export async function POST(request: NextRequest) {
         { error: 'Servico de calculo nao configurado' },
         { status: 500 }
       )
+    }
+
+    // Criar cliente Supabase (usado para sync de estoque e queries posteriores)
+    const supabase = createServerSupabaseClient()
+
+    // Sincronizar estoque do Bling antes de calcular (garante dados atualizados)
+    const blingToken = await getBlingToken(supabase, user.empresaId)
+    if (blingToken) {
+      try {
+        const syncResult = await syncEstoqueFornecedor(supabase, blingToken, fornecedor_id, user.empresaId)
+        console.log(`[Sync Estoque] Fornecedor ${fornecedor_id}: ${syncResult.atualizados} atualizados de ${syncResult.total_produtos} produtos`)
+      } catch (syncError) {
+        console.warn('[Sync Estoque] Falha ao sincronizar, continuando com estoque do banco:', syncError)
+      }
     }
 
     // Chamar API externa com timeout de 5 minutos (300000ms)
@@ -110,7 +126,6 @@ export async function POST(request: NextRequest) {
       })
 
       // Buscar gtin dos produtos no Supabase
-      const supabase = createServerSupabaseClient()
       const { data: produtosGtin } = await supabase
         .from('produtos')
         .select('id, gtin')
