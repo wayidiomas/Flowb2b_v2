@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout, PageHeader } from '@/components/layout'
@@ -10,7 +10,7 @@ import { SidebarAcoes } from '@/components/pedido-compra/SidebarAcoes'
 import { FornecedorSelectModal } from '@/components/pedido-compra/FornecedorSelectModal'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
-import type { PedidoCompraListItem, FornecedorOption, SITUACAO_LABELS, SITUACAO_COLORS, StatusInterno } from '@/types/pedido-compra'
+import type { PedidoCompraListItem, FornecedorOption, StatusInterno } from '@/types/pedido-compra'
 import { STATUS_INTERNO_CONFIG } from '@/types/pedido-compra'
 
 // Tipo para representante vinculado ao fornecedor
@@ -84,22 +84,6 @@ function ChevronRightIcon() {
   return (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-    </svg>
-  )
-}
-
-function ExternalLinkIcon() {
-  return (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-    </svg>
-  )
-}
-
-function EditIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
     </svg>
   )
 }
@@ -231,7 +215,7 @@ export default function PedidoCompraPage() {
   }, [showFilterDropdown])
 
   // Buscar fornecedores com metricas
-  const fetchFornecedores = async () => {
+  const fetchFornecedores = useCallback(async () => {
     if (!user?.id) return
     setLoadingFornecedores(true)
     try {
@@ -280,10 +264,10 @@ export default function PedidoCompraPage() {
     } finally {
       setLoadingFornecedores(false)
     }
-  }
+  }, [user?.id, empresa?.id, user?.empresa_id])
 
   // Buscar representantes vinculados aos fornecedores
-  const fetchRepresentantesPorFornecedor = async () => {
+  const fetchRepresentantesPorFornecedor = useCallback(async () => {
     if (!user?.id) return
     try {
       const empresaId = empresa?.id || user?.empresa_id
@@ -344,15 +328,15 @@ export default function PedidoCompraPage() {
     } catch (err) {
       console.error('Erro ao buscar representantes:', err)
     }
-  }
+  }, [user?.id, empresa?.id, user?.empresa_id])
 
   useEffect(() => {
     fetchFornecedores()
     fetchRepresentantesPorFornecedor()
-  }, [user?.id, user?.empresa_id, empresa?.id])
+  }, [fetchFornecedores, fetchRepresentantesPorFornecedor])
 
   // Buscar pedidos - query direta com TODOS os filtros server-side
-  const fetchPedidos = async () => {
+  const fetchPedidos = useCallback(async () => {
     if (!user?.id) {
       setLoading(false)
       return
@@ -597,12 +581,12 @@ export default function PedidoCompraPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id, empresa?.id, user?.empresa_id, currentPage, debouncedSearch, fornecedorFilter, dataInicioFilter, dataFimFilter, situacaoFilter, workflowFilter])
 
   // Buscar quando mudar filtros (inclui workflowFilter agora que eh server-side)
   useEffect(() => {
     fetchPedidos()
-  }, [user?.id, user?.empresa_id, empresa?.id, currentPage, debouncedSearch, fornecedorFilter, dataInicioFilter, dataFimFilter, situacaoFilter, workflowFilter])
+  }, [fetchPedidos])
 
   // Verificar se ha filtros ativos
   const hasActiveFilters = fornecedorFilter !== '' || dataInicioFilter !== '' || dataFimFilter !== '' || situacaoFilter !== ''
