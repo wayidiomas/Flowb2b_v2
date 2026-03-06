@@ -152,7 +152,7 @@ export default function ColaboradoresPage() {
 
           const { data: users, error: usersError } = await supabase
             .from('users')
-            .select('id, nome, email, role, ativo, created_at')
+            .select('id, nome, email, role, ativo, created_at, telefone, foto')
             .in('id', userIds)
 
           if (usersError) {
@@ -173,7 +173,7 @@ export default function ColaboradoresPage() {
           // Fallback: buscar usuarios diretamente vinculados a empresa
           const { data, error } = await supabase
             .from('users')
-            .select('id, nome, email, role, ativo, created_at')
+            .select('id, nome, email, role, ativo, created_at, telefone, foto')
             .eq('empresa', empresaId)
             .order('nome')
 

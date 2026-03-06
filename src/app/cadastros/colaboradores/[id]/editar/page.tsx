@@ -153,12 +153,12 @@ export default function EditarColaboradorPage() {
         setFormData({
           nome: userData.nome || '',
           email: userData.email || '',
-          telefone: '', // Campo nao existe ainda na tabela users
+          telefone: userData.telefone || '',
           cargo: (role as 'admin' | 'user' | 'viewer') || 'user',
           novaSenha: '',
           confirmarNovaSenha: '',
           ativo: ativo !== false,
-          foto: '', // Campo nao existe ainda na tabela users
+          foto: userData.foto || '',
           permissoes,
         })
       } catch (err) {
@@ -279,6 +279,8 @@ export default function EditarColaboradorPage() {
       const updateData: Record<string, unknown> = {
         nome: formData.nome,
         email: formData.email.toLowerCase(),
+        telefone: formData.telefone || null,
+        foto: formData.foto || null,
         updated_at: new Date().toISOString(),
       }
 
@@ -680,7 +682,7 @@ interface AddToEmpresaModalProps {
 }
 
 function AddToEmpresaModal({ colaboradorId, colaboradorNome, onClose }: AddToEmpresaModalProps) {
-  const { empresa: currentEmpresa } = useAuth()
+  const { user } = useAuth()
   const [empresas, setEmpresas] = useState<Array<{ id: number; nome_fantasia: string | null; razao_social: string }>>([])
   const [selectedEmpresas, setSelectedEmpresas] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
@@ -689,11 +691,30 @@ function AddToEmpresaModal({ colaboradorId, colaboradorNome, onClose }: AddToEmp
 
   useEffect(() => {
     async function fetchEmpresas() {
+      if (!user?.id) return
+
       try {
-        // Buscar todas as empresas
+        // Buscar empresas que o admin atual tem acesso
+        const { data: adminEmpresas, error: adminError } = await supabase
+          .from('users_empresas')
+          .select('empresa_id')
+          .eq('user_id', user.id)
+          .eq('ativo', true)
+
+        if (adminError) throw adminError
+
+        const adminEmpresaIds = adminEmpresas?.map(ae => ae.empresa_id) || []
+
+        if (adminEmpresaIds.length === 0) {
+          setEmpresas([])
+          return
+        }
+
+        // Buscar dados das empresas que o admin tem acesso
         const { data: allEmpresas, error: empresasError } = await supabase
           .from('empresas')
           .select('id, nome_fantasia, razao_social')
+          .in('id', adminEmpresaIds)
           .order('razao_social')
 
         if (empresasError) throw empresasError
@@ -718,7 +739,7 @@ function AddToEmpresaModal({ colaboradorId, colaboradorNome, onClose }: AddToEmp
     }
 
     fetchEmpresas()
-  }, [colaboradorId])
+  }, [colaboradorId, user?.id])
 
   const filteredEmpresas = empresas.filter(e =>
     e.razao_social.toLowerCase().includes(searchTerm.toLowerCase()) ||

@@ -236,6 +236,17 @@ export default function NovoColaboradorPage() {
 
       const { userId } = await response.json()
 
+      // Atualizar telefone e foto se informados
+      if (formData.telefone || formData.foto) {
+        await supabase
+          .from('users')
+          .update({
+            telefone: formData.telefone || null,
+            foto: formData.foto || null,
+          })
+          .eq('id', userId)
+      }
+
       // Vincular usuario a empresa via users_empresas
       const { error: linkError } = await supabase
         .from('users_empresas')
