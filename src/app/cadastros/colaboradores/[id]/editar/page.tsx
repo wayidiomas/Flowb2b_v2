@@ -44,23 +44,45 @@ function UserPlusIcon() {
   )
 }
 
+interface Permissoes {
+  cadastros: boolean
+  pedidos: boolean
+  relatorios: boolean
+  configuracoes: boolean
+  financeiro: boolean
+  estoque: boolean
+}
+
 interface ColaboradorFormData {
   nome: string
   email: string
   telefone: string
-  cargo: 'admin' | 'user' | 'viewer'
   novaSenha: string
   confirmarNovaSenha: string
-  ativo: boolean
   foto: string
-  permissoes: {
-    cadastros: boolean
-    pedidos: boolean
-    relatorios: boolean
-    configuracoes: boolean
-    financeiro: boolean
-    estoque: boolean
-  }
+}
+
+interface EmpresaVinculo {
+  empresa_id: number
+  empresa_nome: string
+  role: string
+  ativo: boolean
+  permissoes: Permissoes
+}
+
+const CARGO_LABELS: Record<string, string> = {
+  admin: 'Administrador',
+  user: 'Usuario',
+  viewer: 'Visualizador',
+}
+
+const DEFAULT_PERMISSOES: Permissoes = {
+  cadastros: true,
+  pedidos: true,
+  relatorios: true,
+  configuracoes: false,
+  financeiro: false,
+  estoque: true,
 }
 
 const PERMISSOES_OPTIONS = [
@@ -84,24 +106,17 @@ export default function EditarColaboradorPage() {
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showAddToEmpresaModal, setShowAddToEmpresaModal] = useState(false)
+  const [empresasVinculadas, setEmpresasVinculadas] = useState<EmpresaVinculo[]>([])
+  const [expandedEmpresa, setExpandedEmpresa] = useState<number | null>(null)
+  const [savingEmpresa, setSavingEmpresa] = useState<number | null>(null)
 
   const [formData, setFormData] = useState<ColaboradorFormData>({
     nome: '',
     email: '',
     telefone: '',
-    cargo: 'user',
     novaSenha: '',
     confirmarNovaSenha: '',
-    ativo: true,
     foto: '',
-    permissoes: {
-      cadastros: true,
-      pedidos: true,
-      relatorios: true,
-      configuracoes: false,
-      financeiro: false,
-      estoque: true,
-    },
   })
 
   // Carregar dados do colaborador
@@ -121,45 +136,33 @@ export default function EditarColaboradorPage() {
 
         if (userError) throw userError
 
-        // Buscar vinculo com empresa
-        let ativo = userData.ativo
-        let role = userData.role
-        let permissoes = {
-          cadastros: true,
-          pedidos: true,
-          relatorios: true,
-          configuracoes: false,
-          financeiro: false,
-          estoque: true,
-        }
+        // Buscar TODOS os vinculos com empresas
+        const { data: allLinks } = await supabase
+          .from('users_empresas')
+          .select('empresa_id, role, ativo, permissoes, empresas(id, nome_fantasia, razao_social)')
+          .eq('user_id', colaboradorId)
 
-        if (empresaId) {
-          const { data: ueData } = await supabase
-            .from('users_empresas')
-            .select('role, ativo, permissoes')
-            .eq('user_id', colaboradorId)
-            .eq('empresa_id', empresaId)
-            .single()
-
-          if (ueData) {
-            role = ueData.role
-            ativo = ueData.ativo
-            if (ueData.permissoes) {
-              permissoes = { ...permissoes, ...ueData.permissoes }
+        if (allLinks && allLinks.length > 0) {
+          const vinculos: EmpresaVinculo[] = allLinks.map((link) => {
+            const emp = link.empresas as unknown as { id: number; nome_fantasia: string | null; razao_social: string }
+            return {
+              empresa_id: link.empresa_id,
+              empresa_nome: emp?.nome_fantasia || emp?.razao_social || `Empresa ${link.empresa_id}`,
+              role: link.role || 'user',
+              ativo: link.ativo !== false,
+              permissoes: { ...DEFAULT_PERMISSOES, ...(link.permissoes as Partial<Permissoes> || {}) },
             }
-          }
+          })
+          setEmpresasVinculadas(vinculos)
         }
 
         setFormData({
           nome: userData.nome || '',
           email: userData.email || '',
           telefone: userData.telefone || '',
-          cargo: (role as 'admin' | 'user' | 'viewer') || 'user',
           novaSenha: '',
           confirmarNovaSenha: '',
-          ativo: ativo !== false,
           foto: userData.foto || '',
-          permissoes,
         })
       } catch (err) {
         console.error('Erro ao buscar colaborador:', err)
@@ -172,18 +175,55 @@ export default function EditarColaboradorPage() {
     fetchColaborador()
   }, [colaboradorId, empresa?.id, user?.empresa_id])
 
-  const handleChange = (field: keyof ColaboradorFormData, value: string | boolean) => {
+  const handleChange = (field: keyof ColaboradorFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handlePermissaoChange = (permissao: keyof ColaboradorFormData['permissoes']) => {
-    setFormData((prev) => ({
-      ...prev,
-      permissoes: {
-        ...prev.permissoes,
-        [permissao]: !prev.permissoes[permissao],
-      },
-    }))
+  const handleEmpresaPermissaoChange = (empresaId: number, permissao: keyof Permissoes) => {
+    setEmpresasVinculadas(prev => prev.map(ev =>
+      ev.empresa_id === empresaId
+        ? { ...ev, permissoes: { ...ev.permissoes, [permissao]: !ev.permissoes[permissao] } }
+        : ev
+    ))
+  }
+
+  const handleEmpresaRoleChange = (empresaId: number, newRole: string) => {
+    setEmpresasVinculadas(prev => prev.map(ev =>
+      ev.empresa_id === empresaId ? { ...ev, role: newRole } : ev
+    ))
+  }
+
+  const handleEmpresaAtivoToggle = (empresaId: number) => {
+    setEmpresasVinculadas(prev => prev.map(ev =>
+      ev.empresa_id === empresaId ? { ...ev, ativo: !ev.ativo } : ev
+    ))
+  }
+
+  const handleSaveEmpresaPermissoes = async (empresaId: number) => {
+    const vinculo = empresasVinculadas.find(ev => ev.empresa_id === empresaId)
+    if (!vinculo) return
+
+    setSavingEmpresa(empresaId)
+    try {
+      const { error: updateError } = await supabase
+        .from('users_empresas')
+        .update({
+          role: vinculo.role,
+          ativo: vinculo.ativo,
+          permissoes: vinculo.permissoes,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', colaboradorId)
+        .eq('empresa_id', empresaId)
+
+      if (updateError) throw updateError
+      setExpandedEmpresa(null)
+    } catch (err) {
+      console.error('Erro ao salvar permissoes da empresa:', err)
+      alert('Erro ao salvar permissoes')
+    } finally {
+      setSavingEmpresa(null)
+    }
   }
 
   const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -266,12 +306,6 @@ export default function EditarColaboradorPage() {
       return
     }
 
-    const empresaId = empresa?.id || user?.empresa_id
-    if (!empresaId) {
-      setError('Empresa nao encontrada')
-      return
-    }
-
     setLoading(true)
 
     try {
@@ -290,35 +324,6 @@ export default function EditarColaboradorPage() {
         .eq('id', colaboradorId)
 
       if (updateError) throw updateError
-
-      // Atualizar vinculo com empresa
-      const { error: ueUpdateError } = await supabase
-        .from('users_empresas')
-        .update({
-          role: formData.cargo,
-          ativo: formData.ativo,
-          permissoes: formData.permissoes,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', colaboradorId)
-        .eq('empresa_id', empresaId)
-
-      if (ueUpdateError) {
-        // Se nao existe vinculo, criar
-        if (ueUpdateError.code === 'PGRST116') {
-          await supabase
-            .from('users_empresas')
-            .insert({
-              user_id: colaboradorId,
-              empresa_id: empresaId,
-              role: formData.cargo,
-              ativo: formData.ativo,
-              permissoes: formData.permissoes,
-            })
-        } else {
-          console.error('Erro ao atualizar vinculo:', ueUpdateError)
-        }
-      }
 
       // Se tem nova senha, atualizar via API route
       if (formData.novaSenha) {
@@ -534,27 +539,6 @@ export default function EditarColaboradorPage() {
                   />
                 </div>
 
-                {/* Cargo */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Cargo *
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={formData.cargo}
-                      onChange={(e) => handleChange('cargo', e.target.value as 'admin' | 'user' | 'viewer')}
-                      className="block w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 appearance-none"
-                    >
-                      <option value="admin">Administrador</option>
-                      <option value="user">Usuario</option>
-                      <option value="viewer">Visualizador</option>
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
-                      <ChevronDownIcon />
-                    </div>
-                  </div>
-                </div>
-
                 {/* Nova Senha */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -584,50 +568,149 @@ export default function EditarColaboradorPage() {
                 </div>
               </div>
 
-              {/* Status Toggle */}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleChange('ativo', !formData.ativo)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    formData.ativo ? 'bg-green-500' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      formData.ativo ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-                <span className="text-sm text-gray-700">
-                  Status: <strong>{formData.ativo ? 'Ativo' : 'Inativo'}</strong>
-                </span>
-              </div>
             </div>
           </div>
 
-          {/* Permissoes */}
+          {/* Permissoes por empresa */}
           <div className="mt-8 pt-8 border-t border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Permissoes</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {PERMISSOES_OPTIONS.map((perm) => (
-                <label
-                  key={perm.key}
-                  className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={formData.permissoes[perm.key as keyof ColaboradorFormData['permissoes']]}
-                    onChange={() => handlePermissaoChange(perm.key as keyof ColaboradorFormData['permissoes'])}
-                    className="mt-0.5 w-4 h-4 text-primary-600 bg-white border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div>
-                    <span className="block text-sm font-medium text-gray-900">{perm.label}</span>
-                    <span className="block text-xs text-gray-500">{perm.description}</span>
-                  </div>
-                </label>
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Acesso por empresa</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Gerencie cargo e permissoes em cada empresa vinculada</p>
+              </div>
             </div>
+
+            {empresasVinculadas.length === 0 ? (
+              <div className="p-4 text-center text-gray-500 border border-gray-200 rounded-lg">
+                Nenhuma empresa vinculada
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {empresasVinculadas.map((ev) => {
+                  const isExpanded = expandedEmpresa === ev.empresa_id
+                  const currentEmpresaId = empresa?.id || user?.empresa_id
+                  const isCurrent = ev.empresa_id === currentEmpresaId
+
+                  return (
+                    <div
+                      key={ev.empresa_id}
+                      className={`border rounded-lg transition-colors ${isCurrent ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200'}`}
+                    >
+                      {/* Header */}
+                      <button
+                        type="button"
+                        onClick={() => setExpandedEmpresa(isExpanded ? null : ev.empresa_id)}
+                        className="w-full flex items-center justify-between p-4 text-left"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-900 truncate">{ev.empresa_nome}</span>
+                              {isCurrent && (
+                                <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                                  Atual
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                ev.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                                ev.role === 'viewer' ? 'bg-gray-100 text-gray-600' :
+                                'bg-green-100 text-green-700'
+                              }`}>
+                                {CARGO_LABELS[ev.role] || ev.role}
+                              </span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                ev.ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                              }`}>
+                                {ev.ativo ? 'Ativo' : 'Inativo'}
+                              </span>
+                              <span className="text-xs text-gray-400">
+                                {Object.values(ev.permissoes).filter(Boolean).length}/{Object.values(ev.permissoes).length} permissoes
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <span className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                          <ChevronDownIcon />
+                        </span>
+                      </button>
+
+                      {/* Expanded content */}
+                      {isExpanded && (
+                        <div className="px-4 pb-4 border-t border-gray-100">
+                          {/* Cargo e Status */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 mb-4">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Cargo</label>
+                              <select
+                                value={ev.role}
+                                onChange={(e) => handleEmpresaRoleChange(ev.empresa_id, e.target.value)}
+                                className="block w-full px-3 py-1.5 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              >
+                                <option value="admin">Administrador</option>
+                                <option value="user">Usuario</option>
+                                <option value="viewer">Visualizador</option>
+                              </select>
+                            </div>
+                            <div className="flex items-end">
+                              <button
+                                type="button"
+                                onClick={() => handleEmpresaAtivoToggle(ev.empresa_id)}
+                                className="flex items-center gap-2"
+                              >
+                                <div className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                                  ev.ativo ? 'bg-green-500' : 'bg-gray-300'
+                                }`}>
+                                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                                    ev.ativo ? 'translate-x-4' : 'translate-x-0.5'
+                                  }`} />
+                                </div>
+                                <span className="text-sm text-gray-700">{ev.ativo ? 'Ativo' : 'Inativo'}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Permissoes */}
+                          <label className="block text-xs font-medium text-gray-600 mb-2">Permissoes</label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {PERMISSOES_OPTIONS.map((perm) => (
+                              <label
+                                key={perm.key}
+                                className="flex items-center gap-2 p-2 border border-gray-100 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={ev.permissoes[perm.key as keyof Permissoes]}
+                                  onChange={() => handleEmpresaPermissaoChange(ev.empresa_id, perm.key as keyof Permissoes)}
+                                  className="w-4 h-4 text-primary-600 bg-white border-gray-300 rounded focus:ring-primary-500"
+                                />
+                                <div>
+                                  <span className="block text-sm text-gray-900">{perm.label}</span>
+                                  <span className="block text-xs text-gray-500">{perm.description}</span>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+
+                          {/* Salvar */}
+                          <div className="flex justify-end mt-4">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveEmpresaPermissoes(ev.empresa_id)}
+                              disabled={savingEmpresa === ev.empresa_id}
+                              className="px-4 py-1.5 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              {savingEmpresa === ev.empresa_id ? 'Salvando...' : 'Salvar permissoes'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Botoes */}
@@ -666,7 +749,13 @@ export default function EditarColaboradorPage() {
         <AddToEmpresaModal
           colaboradorId={colaboradorId}
           colaboradorNome={formData.nome}
-          onClose={() => setShowAddToEmpresaModal(false)}
+          onClose={(added) => {
+            setShowAddToEmpresaModal(false)
+            if (added) {
+              // Recarregar vinculos
+              window.location.reload()
+            }
+          }}
         />
       )}
     </DashboardLayout>
@@ -678,7 +767,7 @@ export default function EditarColaboradorPage() {
 interface AddToEmpresaModalProps {
   colaboradorId: string
   colaboradorNome: string
-  onClose: () => void
+  onClose: (added?: boolean) => void
 }
 
 function AddToEmpresaModal({ colaboradorId, colaboradorNome, onClose }: AddToEmpresaModalProps) {
@@ -776,7 +865,7 @@ function AddToEmpresaModal({ colaboradorId, colaboradorNome, onClose }: AddToEmp
 
       if (error) throw error
 
-      onClose()
+      onClose(true)
     } catch (err) {
       console.error('Erro ao vincular empresas:', err)
       alert('Erro ao vincular colaborador as empresas')
@@ -789,7 +878,7 @@ function AddToEmpresaModal({ colaboradorId, colaboradorNome, onClose }: AddToEmp
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-full items-center justify-center p-4">
         {/* Backdrop */}
-        <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+        <div className="fixed inset-0 bg-black/50" onClick={() => onClose()} />
 
         {/* Modal */}
         <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full">
@@ -873,7 +962,7 @@ function AddToEmpresaModal({ colaboradorId, colaboradorNome, onClose }: AddToEmp
           <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => onClose()}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Cancelar
