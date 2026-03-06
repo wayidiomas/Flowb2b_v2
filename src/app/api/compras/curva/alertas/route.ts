@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
       .eq('empresa_id', user.empresaId)
       .in('situacao', [0, 3])
       .not('status_interno', 'in', '("cancelado","recusado")')
+      .eq('is_excluded', false)
 
     const fornecedoresComPedidoEmAberto = new Set<number>()
     pedidosEmAberto?.forEach(p => {

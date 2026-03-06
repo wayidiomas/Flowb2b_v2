@@ -90,6 +90,7 @@ export async function GET(
       .select('id, status_interno')
       .eq('id', pedidoId)
       .eq('empresa_id', user.empresaId)
+      .eq('is_excluded', false)
       .single()
 
     if (!pedido) {
@@ -161,6 +162,7 @@ export async function POST(
       .select('id, status_interno, bling_id, situacao')
       .eq('id', pedidoId)
       .eq('empresa_id', user.empresaId)
+      .eq('is_excluded', false)
       .single()
 
     if (!pedido) {
@@ -274,6 +276,7 @@ export async function POST(
           .from('pedidos_compra')
           .update(updateData)
           .eq('id', pedidoId)
+          .eq('is_excluded', false)
 
         // Timeline
         await supabase
@@ -331,6 +334,7 @@ export async function POST(
         .from('pedidos_compra')
         .update({ status_interno: 'rejeitado' })
         .eq('id', pedidoId)
+        .eq('is_excluded', false)
 
       // Timeline
       await supabase
@@ -390,6 +394,7 @@ export async function POST(
         .from('pedidos_compra')
         .update(updateData)
         .eq('id', pedidoId)
+        .eq('is_excluded', false)
 
       // Timeline
       await supabase

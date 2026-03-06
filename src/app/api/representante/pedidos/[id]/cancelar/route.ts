@@ -55,6 +55,7 @@ export async function POST(
       .select('id, status_interno, fornecedor_id')
       .eq('id', pedidoId)
       .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {
@@ -82,6 +83,7 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq('id', pedidoId)
+      .eq('is_excluded', false)
 
     if (updateError) {
       console.error('Erro ao cancelar pedido:', updateError)

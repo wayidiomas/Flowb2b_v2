@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
         )
       `, { count: 'exact' })
       .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
       .in('status_interno', ['enviado_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'cancelado', 'contra_proposta'])
 
     // Filtros opcionais

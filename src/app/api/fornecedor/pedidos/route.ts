@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
       .from('pedidos_compra')
       .select('id, numero, data, data_prevista, total, total_produtos, status_interno, empresa_id, fornecedor_id, representante_id')
       .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
       .neq('status_interno', 'rascunho')
       .order('data', { ascending: false })
 

@@ -140,6 +140,7 @@ export default function VisualizarPedidoPage() {
           .select('status_interno')
           .eq('id', parseInt(pedidoId))
           .eq('empresa_id', user.empresa_id)
+          .eq('is_excluded', false)
           .single()
 
         if (pedidoData?.status_interno) {

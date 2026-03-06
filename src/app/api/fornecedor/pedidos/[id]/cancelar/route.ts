@@ -86,6 +86,7 @@ export async function POST(
       .select('id, bling_id, situacao, status_interno, empresa_id')
       .eq('id', pedidoId)
       .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {
@@ -163,6 +164,7 @@ export async function POST(
       .from('pedidos_compra')
       .update(updateData)
       .eq('id', pedidoId)
+      .eq('is_excluded', false)
 
     if (updateError) {
       console.error('Erro ao atualizar Supabase:', updateError)

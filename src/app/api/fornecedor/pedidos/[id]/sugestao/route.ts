@@ -65,6 +65,7 @@ export async function POST(
       .select('id, empresa_id, status_interno, fornecedor_id')
       .eq('id', pedidoId)
       .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {
@@ -128,6 +129,7 @@ export async function POST(
       .from('pedidos_compra')
       .update({ status_interno: 'sugestao_pendente' })
       .eq('id', pedidoId)
+      .eq('is_excluded', false)
 
     // Registrar na timeline
     // Buscar nome do usuario fornecedor

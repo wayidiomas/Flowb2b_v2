@@ -35,6 +35,7 @@ export async function GET() {
       .from('pedidos_compra')
       .select('id, numero, data, total, status_interno, empresa_id, fornecedor_id')
       .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
       .in('status_interno', ['enviado_fornecedor', 'sugestao_pendente', 'aceito'])
       .order('data', { ascending: false })
 
@@ -65,6 +66,7 @@ export async function GET() {
       .from('pedidos_compra')
       .select('id, numero, data, total, status_interno, empresa_id')
       .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
       .neq('status_interno', 'rascunho')
       .order('data', { ascending: false })
       .limit(10)

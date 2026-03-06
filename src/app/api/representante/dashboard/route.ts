@@ -65,6 +65,7 @@ export async function GET() {
       .from('pedidos_compra')
       .select('id, status_interno, total')
       .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
       .in('status_interno', ['enviado_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'cancelado', 'contra_proposta'])
 
     const totalPedidos = pedidos?.length || 0

@@ -241,6 +241,7 @@ export async function PUT(
       .select('id, bling_id, numero, situacao')
       .eq('id', pedidoId)
       .eq('empresa_id', empresaId)
+      .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {
@@ -374,6 +375,7 @@ export async function PUT(
       })
       .eq('id', pedidoId)
       .eq('empresa_id', empresaId)
+      .eq('is_excluded', false)
 
     if (updateError) {
       console.error('Erro ao atualizar cabecalho no Supabase:', updateError)

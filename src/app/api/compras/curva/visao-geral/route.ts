@@ -72,6 +72,7 @@ export async function GET() {
       .select('fornecedor_id, data, total')
       .eq('empresa_id', user.empresaId)
       .eq('situacao', 1) // Apenas finalizados
+      .eq('is_excluded', false)
       .order('data', { ascending: false })
 
     const ultimoPedidoMap = new Map<number, { data: string; total: number }>()
@@ -95,6 +96,7 @@ export async function GET() {
       .eq('empresa_id', user.empresaId)
       .in('situacao', [0, 3])
       .not('status_interno', 'in', '("cancelado","recusado")')
+      .eq('is_excluded', false)
       .gte('data', dataLimiteStr)
       .order('data', { ascending: false })
 

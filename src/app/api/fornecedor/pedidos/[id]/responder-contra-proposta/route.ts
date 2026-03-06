@@ -103,6 +103,7 @@ export async function POST(
       .select('id, status_interno, bling_id, situacao, empresa_id')
       .eq('id', pedidoId)
       .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
       .single()
 
     if (!pedido) {
@@ -204,6 +205,7 @@ export async function POST(
           .from('pedidos_compra')
           .update(updateData)
           .eq('id', pedidoId)
+          .eq('is_excluded', false)
 
         // Timeline
         await supabase
@@ -272,6 +274,7 @@ export async function POST(
         .from('pedidos_compra')
         .update({ status_interno: 'sugestao_pendente' })
         .eq('id', pedidoId)
+        .eq('is_excluded', false)
 
       // Timeline
       await supabase

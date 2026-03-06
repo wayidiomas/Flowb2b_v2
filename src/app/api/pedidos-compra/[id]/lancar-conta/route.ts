@@ -76,6 +76,7 @@ export async function POST(
       .select('id, bling_id, numero, fornecedor_id')
       .eq('id', pedidoId)
       .eq('empresa_id', empresaId)
+      .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {

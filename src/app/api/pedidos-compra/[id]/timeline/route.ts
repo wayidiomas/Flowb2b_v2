@@ -23,6 +23,7 @@ export async function GET(
         .select('id')
         .eq('id', pedidoId)
         .eq('empresa_id', user.empresaId)
+        .eq('is_excluded', false)
         .single()
 
       if (!pedido) {
@@ -44,6 +45,7 @@ export async function GET(
         .from('pedidos_compra')
         .select('id')
         .eq('id', pedidoId)
+        .eq('is_excluded', false)
         .in('fornecedor_id', fornecedorIds)
         .single()
 

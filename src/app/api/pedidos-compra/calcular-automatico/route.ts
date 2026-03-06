@@ -151,6 +151,7 @@ export async function POST(request: NextRequest) {
           .select('id')
           .eq('fornecedor_id', fornecedor_id)
           .eq('empresa_id', user.empresaId)
+          .eq('is_excluded', false)
           .in('situacao', [0, 3]) // 0=aberto, 3=parcial
           .gte('data', dataLimiteStr)
           .order('data', { ascending: false })

@@ -252,6 +252,7 @@ export default function PedidoCompraPage() {
         .from('pedidos_compra')
         .select('fornecedor_id, total')
         .eq('empresa_id', empresaId)
+        .eq('is_excluded', false)
 
       if (pedidosError) throw pedidosError
 
@@ -373,6 +374,7 @@ export default function PedidoCompraPage() {
         .from('pedidos_compra')
         .select('status_interno, situacao')
         .eq('empresa_id', empresaId)
+        .eq('is_excluded', false)
 
       if (workflowData) {
         const counts: Record<string, number> = {
@@ -419,6 +421,7 @@ export default function PedidoCompraPage() {
           itens_pedido_compra(id, descricao, quantidade, valor)
         `, { count: 'exact' })
         .eq('empresa_id', empresaId)
+        .eq('is_excluded', false)
         .order('data', { ascending: false })
         .order('id', { ascending: false })
 
@@ -545,6 +548,7 @@ export default function PedidoCompraPage() {
         .from('pedidos_compra')
         .select('total')
         .eq('empresa_id', empresaId)
+        .eq('is_excluded', false)
 
       if (fornecedorFilter) resumoQuery = resumoQuery.eq('fornecedor_id', parseInt(fornecedorFilter))
       if (dataInicioFilter) resumoQuery = resumoQuery.gte('data', dataInicioFilter)
@@ -638,26 +642,32 @@ export default function PedidoCompraPage() {
     )
   }
 
-  // Excluir pedidos
-  const handleExcluir = async () => {
-    if (selectedPedidos.length === 0) return
-    if (!confirm(`Deseja realmente excluir ${selectedPedidos.length} pedido(s)?`)) return
+  // Excluir pedidos (soft delete via API)
+  const handleExcluir = async (ids?: number[]) => {
+    const pedidoIds = ids || selectedPedidos
+    if (pedidoIds.length === 0) return
+    if (!confirm(`Deseja realmente excluir ${pedidoIds.length} pedido(s)?`)) return
 
     setActionLoading(true)
     try {
-      const empresaId = empresa?.id || user?.empresa_id
+      const results = await Promise.all(
+        pedidoIds.map(id =>
+          fetch(`/api/pedidos-compra/${id}/excluir`, { method: 'POST' })
+            .then(res => res.json())
+        )
+      )
 
-      const { error } = await supabase
-        .from('pedidos_compra')
-        .delete()
-        .eq('empresa_id', empresaId)
-        .in('id', selectedPedidos)
+      const erros = results.filter(r => !r.success)
+      if (erros.length > 0) {
+        console.error('Erros ao excluir pedidos:', erros)
+        alert(`${erros.length} pedido(s) nao puderam ser excluidos: ${erros.map(e => e.error).join(', ')}`)
+      }
 
-      if (error) throw error
       await fetchPedidos()
       setSelectedPedidos([])
     } catch (err) {
       console.error('Erro ao excluir pedidos:', err)
+      alert('Erro ao excluir pedidos')
     } finally {
       setActionLoading(false)
     }
@@ -1023,7 +1033,7 @@ export default function PedidoCompraPage() {
                   {selectedPedidos.length} item(ns) selecionado(s)
                 </span>
                 <button
-                  onClick={handleExcluir}
+                  onClick={() => handleExcluir()}
                   disabled={actionLoading}
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50"
                 >
@@ -1373,21 +1383,14 @@ export default function PedidoCompraPage() {
                                     )
                                   })()}
 
-                                  {/* Excluir - apenas Rascunho */}
-                                  {pedido.status === 'Rascunho' && (
-                                    <button
-                                      onClick={() => {
-                                        if (confirm('Deseja realmente excluir este pedido?')) {
-                                          setSelectedPedidos([pedido.pedido_id])
-                                          handleExcluir()
-                                        }
-                                      }}
-                                      className="inline-flex items-center justify-center w-8 h-8 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                      title="Excluir pedido"
-                                    >
-                                      <TrashIcon />
-                                    </button>
-                                  )}
+                                  {/* Excluir pedido (soft delete) */}
+                                  <button
+                                    onClick={() => handleExcluir([pedido.pedido_id])}
+                                    className="inline-flex items-center justify-center w-8 h-8 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Excluir pedido"
+                                  >
+                                    <TrashIcon />
+                                  </button>
                                 </>
                               )}
                             </div>

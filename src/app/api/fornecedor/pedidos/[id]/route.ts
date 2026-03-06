@@ -47,6 +47,7 @@ export async function GET(
       .select('*')
       .eq('id', id)
       .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {

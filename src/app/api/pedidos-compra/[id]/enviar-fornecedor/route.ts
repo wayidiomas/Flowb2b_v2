@@ -28,6 +28,7 @@ export async function POST(
       .select('id, status_interno, numero, fornecedor_id')
       .eq('id', pedidoId)
       .eq('empresa_id', user.empresaId)
+      .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {
@@ -81,6 +82,7 @@ export async function POST(
           representante_id: representante_id,
         })
         .eq('id', pedidoId)
+        .eq('is_excluded', false)
 
       if (updateError) {
         return NextResponse.json({ error: 'Erro ao atualizar status' }, { status: 500 })
@@ -159,6 +161,7 @@ export async function POST(
       .from('pedidos_compra')
       .update({ status_interno: 'enviado_fornecedor' })
       .eq('id', pedidoId)
+      .eq('is_excluded', false)
 
     if (updateError) {
       return NextResponse.json({ error: 'Erro ao atualizar status' }, { status: 500 })

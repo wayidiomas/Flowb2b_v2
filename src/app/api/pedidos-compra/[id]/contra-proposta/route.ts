@@ -40,6 +40,7 @@ export async function POST(
       .select('id, status_interno, empresa_id, fornecedor_id')
       .eq('id', pedidoId)
       .eq('empresa_id', user.empresaId)
+      .eq('is_excluded', false)
       .single()
 
     if (!pedido) {
@@ -121,6 +122,7 @@ export async function POST(
       .from('pedidos_compra')
       .update({ status_interno: 'contra_proposta_pendente' })
       .eq('id', pedidoId)
+      .eq('is_excluded', false)
 
     // Registrar na timeline
     await supabase
