@@ -11,17 +11,18 @@ export interface SyncEstoqueResult {
 
 interface ProdutoParaSync {
   id: number
-  id_produto_bling: number
+  id_produto_bling: string // varchar no banco
   estoque_atual: number | null
 }
 
 interface BlingEstoqueSaldo {
   produto: { id: number }
+  saldoFisicoTotal: number
+  saldoVirtualTotal: number
   depositos: Array<{
     id: number
-    nome: string
-    saldo: number
-    desconsiderar: boolean
+    saldoFisico: number
+    saldoVirtual: number
   }>
 }
 
@@ -78,8 +79,9 @@ export async function syncEstoqueFornecedor(
   result.total_produtos = produtosParaSync.length
 
   // Criar mapa id_produto_bling -> produto local
-  const produtosMap = new Map<number, ProdutoParaSync>()
-  produtosParaSync.forEach(p => produtosMap.set(p.id_produto_bling, p))
+  // Chave como string pois id_produto_bling eh varchar no banco
+  const produtosMap = new Map<string, ProdutoParaSync>()
+  produtosParaSync.forEach(p => produtosMap.set(String(p.id_produto_bling), p))
 
   // 3. Dividir em lotes de 100 (limite da API Bling)
   const lotes: ProdutoParaSync[][] = []
@@ -125,11 +127,12 @@ export async function syncEstoqueFornecedor(
 
       // 5. Comparar e atualizar
       for (const item of blingData) {
-        const saldoTotal = item.depositos
-          .filter(d => !d.desconsiderar)
-          .reduce((sum, d) => sum + d.saldo, 0)
+        // Bling v3 retorna saldoFisicoTotal direto, ou somar saldoFisico dos depositos
+        const saldoTotal = item.saldoFisicoTotal ?? item.depositos
+          .reduce((sum, d) => sum + (d.saldoFisico ?? 0), 0)
 
-        const produtoLocal = produtosMap.get(item.produto.id)
+        // Converter para string pois id_produto_bling eh varchar no banco
+        const produtoLocal = produtosMap.get(String(item.produto.id))
         if (!produtoLocal) continue
 
         if (produtoLocal.estoque_atual !== saldoTotal) {

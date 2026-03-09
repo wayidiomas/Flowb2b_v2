@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     if (blingToken) {
       try {
         const syncResult = await syncEstoqueFornecedor(supabase, blingToken, fornecedor_id, user.empresaId)
-        console.log(`[Sync Estoque] Fornecedor ${fornecedor_id}: ${syncResult.atualizados} atualizados de ${syncResult.total_produtos} produtos`)
+        console.log(`[Sync Estoque] Fornecedor ${fornecedor_id}: ${syncResult.atualizados} atualizados, ${syncResult.sem_alteracao} sem alteracao, ${syncResult.erros} erros de ${syncResult.total_produtos} produtos`)
       } catch (syncError) {
         console.warn('[Sync Estoque] Falha ao sincronizar, continuando com estoque do banco:', syncError)
       }
