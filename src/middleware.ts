@@ -40,6 +40,8 @@ const publicApiRoutes = [
   '/api/auth/representante/login',
   '/api/auth/representante/registro',
   '/api/auth/representante/convite',
+  '/api/cron/',
+  '/api/diagnostico/',
 ]
 
 // Padroes de API publicas (com regex)
