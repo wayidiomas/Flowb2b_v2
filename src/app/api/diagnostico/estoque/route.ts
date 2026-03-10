@@ -85,27 +85,39 @@ export async function GET(request: NextRequest) {
 
   const accessToken = tokenData.access_token
 
-  // 2. Buscar produtos do Supabase
-  let query = supabase
-    .from('produtos')
-    .select('id, codigo, nome, id_produto_bling, estoque_atual, fornecedor_id')
-    .eq('empresa_id', empresaId)
-    .not('id_produto_bling', 'is', null)
+  // 2. Buscar produtos do Supabase (paginado para pegar todos)
+  const allProdutos: ProdutoLocal[] = []
+  let from = 0
+  const pageSize = 1000
 
-  if (fornecedorIdFilter) {
-    query = query.eq('fornecedor_id', fornecedorIdFilter)
+  while (true) {
+    let query = supabase
+      .from('produtos')
+      .select('id, codigo, nome, id_produto_bling, estoque_atual, fornecedor_id')
+      .eq('empresa_id', empresaId)
+      .not('id_produto_bling', 'is', null)
+      .range(from, from + pageSize - 1)
+
+    if (fornecedorIdFilter) {
+      query = query.eq('fornecedor_id', fornecedorIdFilter)
+    }
+
+    const { data, error: prodError } = await query
+
+    if (prodError) {
+      return NextResponse.json(
+        { error: 'Erro ao buscar produtos', details: prodError.message },
+        { status: 500 }
+      )
+    }
+
+    if (!data || data.length === 0) break
+    allProdutos.push(...(data as ProdutoLocal[]))
+    if (data.length < pageSize) break
+    from += pageSize
   }
 
-  const { data: produtos, error: prodError } = await query
-
-  if (prodError) {
-    return NextResponse.json(
-      { error: 'Erro ao buscar produtos', details: prodError.message },
-      { status: 500 }
-    )
-  }
-
-  let produtosParaCheck = (produtos || []) as ProdutoLocal[]
+  let produtosParaCheck = allProdutos
 
   if (limite && limite > 0) {
     produtosParaCheck = produtosParaCheck.slice(0, limite)
