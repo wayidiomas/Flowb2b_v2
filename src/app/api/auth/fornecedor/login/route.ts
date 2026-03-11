@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { verifyPassword, generateToken, setAuthCookie } from '@/lib/auth'
+import { logActivity, updateLastLogin } from '@/lib/activity-log'
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,6 +47,23 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+
+    // Track login activity (fire-and-forget)
+    void Promise.all([
+      updateLastLogin('users_fornecedor', String(user.id)),
+      logActivity({
+        userId: String(user.id),
+        userType: 'fornecedor',
+        userEmail: user.email,
+        userNome: user.nome,
+        action: 'login',
+        empresaId: null,
+        metadata: {
+          ip: request.headers.get('x-forwarded-for') || 'unknown',
+          user_agent: request.headers.get('user-agent') || 'unknown',
+        },
+      }),
+    ]).catch(console.error)
 
     // Gerar token JWT com tipo fornecedor
     const token = await generateToken({

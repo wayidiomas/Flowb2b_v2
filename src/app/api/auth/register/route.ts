@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { hashPassword } from '@/lib/auth'
+import { logActivity } from '@/lib/activity-log'
 // import { sendEmailConfirmation } from '@/lib/email' // TODO: Reabilitar quando domínio verificado
 import type { RegisterCredentials, AuthResponse } from '@/types/auth'
 
@@ -100,6 +101,16 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Log registration activity
+    void logActivity({
+      userId: String(newUser.id),
+      userType: 'lojista',
+      userEmail: newUser.email,
+      userNome: nome,
+      action: 'registro',
+      empresaId: empresa_id || null,
+    }).catch(console.error)
 
     // TODO: Reabilitar verificação de email quando domínio estiver verificado no Resend
     // const confirmationToken = crypto.randomUUID()

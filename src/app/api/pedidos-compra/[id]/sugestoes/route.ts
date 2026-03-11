@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { requirePermission } from '@/lib/permissions'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 import { blingFetch } from '@/lib/bling-fetch'
+import { logActivity } from '@/lib/activity-log'
 
 // Funcao para obter e validar o token do Bling
 async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeof createServerSupabaseClient>) {
@@ -315,6 +316,17 @@ export async function POST(
         })
         .eq('id', sugestao_id)
 
+      // Log activity - fire and forget
+      void logActivity({
+        userId: String(user.userId),
+        userType: 'lojista',
+        userEmail: user.email,
+        userNome: user.nome || user.email,
+        action: 'sugestao_aceita',
+        empresaId: user.empresaId,
+        metadata: { pedido_id: pedidoId, empresa_id: user.empresaId, sugestao_id },
+      }).catch(console.error)
+
       return NextResponse.json({ success: true, message: 'Sugestao aceita com sucesso' })
     }
 
@@ -348,6 +360,17 @@ export async function POST(
           autor_tipo: 'lojista',
           autor_nome: user.email,
         })
+
+      // Log activity - fire and forget
+      void logActivity({
+        userId: String(user.userId),
+        userType: 'lojista',
+        userEmail: user.email,
+        userNome: user.nome || user.email,
+        action: 'sugestao_rejeitada',
+        empresaId: user.empresaId,
+        metadata: { pedido_id: pedidoId, empresa_id: user.empresaId, sugestao_id },
+      }).catch(console.error)
 
       return NextResponse.json({ success: true, message: 'Sugestao rejeitada' })
     }
@@ -421,6 +444,17 @@ export async function POST(
             autor_nome: 'FlowB2B',
           })
       }
+
+      // Log activity - fire and forget
+      void logActivity({
+        userId: String(user.userId),
+        userType: 'lojista',
+        userEmail: user.email,
+        userNome: user.nome || user.email,
+        action: 'sugestao_rejeitada',
+        empresaId: user.empresaId,
+        metadata: { pedido_id: pedidoId, empresa_id: user.empresaId, sugestao_id, manter_original: true },
+      }).catch(console.error)
 
       return NextResponse.json({
         success: true,

@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/permissions'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 import { blingFetch, BlingRateLimitError } from '@/lib/bling-fetch'
 import { FRETE_POR_CONTA_MAP, FretePorContaLabel } from '@/types/pedido-compra'
+import { logActivity } from '@/lib/activity-log'
 
 // Interface para item do pedido
 interface ItemPedidoRequest {
@@ -627,6 +628,17 @@ export async function POST(request: NextRequest) {
     }
 
     const pedidoId = typeof pedido === 'object' ? pedido?.pedido_id : pedido
+
+    // Log activity - fire and forget
+    void logActivity({
+      userId: String(user.userId),
+      userType: 'lojista',
+      userEmail: user.email,
+      userNome: user.nome || user.email,
+      action: 'pedido_criado',
+      empresaId: user.empresaId,
+      metadata: { pedido_id: pedidoId, empresa_id: user.empresaId, fornecedor_id: body.fornecedor_id, numero: numeroPedido },
+    }).catch(console.error)
 
     // Se teve warning de estorno, retornar como warning (yellow alert)
     if (estornoWarning) {

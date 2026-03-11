@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { hashPassword, generateToken, setAuthCookie } from '@/lib/auth'
+import { logActivity } from '@/lib/activity-log'
 
 export async function POST(request: NextRequest) {
   try {
@@ -103,6 +104,16 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Log registration activity
+    void logActivity({
+      userId: String(newUser.id),
+      userType: 'representante',
+      userEmail: newUser.email,
+      userNome: newUser.nome,
+      action: 'registro',
+      empresaId: representante.empresa_id || null,
+    }).catch(console.error)
 
     // Gerar token JWT com empresaId null
     const token = await generateToken({

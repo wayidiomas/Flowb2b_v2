@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { requirePermission } from '@/lib/permissions'
+import { logActivity } from '@/lib/activity-log'
 
 interface ContraPropostaItem {
   item_pedido_compra_id: number
@@ -136,6 +137,17 @@ export async function POST(
         autor_tipo: 'lojista',
         autor_nome: user.email,
       })
+
+    // Log activity - fire and forget
+    void logActivity({
+      userId: String(user.userId),
+      userType: 'lojista',
+      userEmail: user.email,
+      userNome: user.nome || user.email,
+      action: 'contra_proposta_enviada',
+      empresaId: user.empresaId,
+      metadata: { pedido_id: pedidoId, empresa_id: user.empresaId },
+    }).catch(console.error)
 
     return NextResponse.json({
       success: true,

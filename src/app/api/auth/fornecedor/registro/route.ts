@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { hashPassword } from '@/lib/auth'
+import { logActivity } from '@/lib/activity-log'
 
 export async function POST(request: NextRequest) {
   try {
@@ -95,6 +96,16 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Log registration activity
+    void logActivity({
+      userId: String(newUser.id),
+      userType: 'fornecedor',
+      userEmail: newUser.email,
+      userNome: nome,
+      action: 'registro',
+      empresaId: null,
+    }).catch(console.error)
 
     return NextResponse.json({
       success: true,

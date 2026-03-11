@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity-log'
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -141,6 +142,16 @@ export async function POST(
       usuario_tipo: 'representante',
       usuario_id: user.representanteUserId,
     })
+
+    void logActivity({
+      userId: String(user.representanteUserId),
+      userType: 'representante',
+      userEmail: user.email || undefined,
+      userNome: user.nome || undefined,
+      action: 'sugestao_enviada',
+      empresaId: null,
+      metadata: { pedido_id: pedidoId },
+    }).catch(() => {})
 
     return NextResponse.json({
       success: true,

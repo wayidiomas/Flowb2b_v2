@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
+import { logActivity } from '@/lib/activity-log'
 
 interface SugestaoItemRequest {
   item_pedido_compra_id: number
@@ -150,6 +151,16 @@ export async function POST(
         autor_tipo: 'fornecedor',
         autor_nome: fornecedorUser?.nome || user.email,
       })
+
+    void logActivity({
+      userId: String(user.fornecedorUserId),
+      userType: 'fornecedor',
+      userEmail: user.email || undefined,
+      userNome: user.nome || undefined,
+      action: 'sugestao_enviada',
+      empresaId: null,
+      metadata: { pedido_id: pedidoId, cnpj: user.cnpj },
+    }).catch(() => {})
 
     return NextResponse.json({
       success: true,

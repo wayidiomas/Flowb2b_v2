@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
+import { logActivity } from '@/lib/activity-log'
 
 // Funcao para obter e validar o token do Bling
 async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeof createServerSupabaseClient>) {
@@ -231,6 +232,16 @@ export async function POST(
         })
         .eq('id', sugestao_id)
 
+      void logActivity({
+        userId: String(user.fornecedorUserId),
+        userType: 'fornecedor',
+        userEmail: user.email || undefined,
+        userNome: user.nome || undefined,
+        action: 'sugestao_aceita',
+        empresaId: null,
+        metadata: { pedido_id: pedidoId, cnpj: user.cnpj, tipo: 'resposta_contra_proposta' },
+      }).catch(() => {})
+
       return NextResponse.json({ success: true, message: 'Contra-proposta aceita com sucesso' })
     }
 
@@ -288,6 +299,16 @@ export async function POST(
           autor_tipo: 'fornecedor',
           autor_nome: autorNome,
         })
+
+      void logActivity({
+        userId: String(user.fornecedorUserId),
+        userType: 'fornecedor',
+        userEmail: user.email || undefined,
+        userNome: user.nome || undefined,
+        action: 'sugestao_rejeitada',
+        empresaId: null,
+        metadata: { pedido_id: pedidoId, cnpj: user.cnpj, tipo: 'resposta_contra_proposta' },
+      }).catch(() => {})
 
       return NextResponse.json({ success: true, message: 'Contra-proposta rejeitada - negociacao encerrada' })
     }

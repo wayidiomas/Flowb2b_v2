@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { verifyPassword, generateToken, setAuthCookie } from '@/lib/auth'
+import { logActivity, updateLastLogin } from '@/lib/activity-log'
+import type { UserType } from '@/lib/activity-log'
 import type { LoginCredentials, AuthResponse } from '@/types/auth'
 
 export async function POST(request: NextRequest) {
@@ -60,13 +62,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Determinar tipo baseado no role
+    const tipo: UserType = user.role === 'superadmin' ? 'superadmin' : 'lojista'
+
+    // Track login activity (fire-and-forget)
+    void Promise.all([
+      updateLastLogin('users', user.id),
+      logActivity({
+        userId: String(user.id),
+        userType: tipo,
+        userEmail: user.email,
+        userNome: user.nome,
+        action: 'login',
+        empresaId: user.empresa_id,
+        metadata: {
+          ip: request.headers.get('x-forwarded-for') || 'unknown',
+          user_agent: request.headers.get('user-agent') || 'unknown',
+        },
+      }),
+    ]).catch(console.error)
+
     // Gerar token JWT
     const token = await generateToken({
       userId: user.id,
       empresaId: user.empresa_id,
       email: user.email,
       role: user.role,
-      tipo: 'lojista',
+      tipo,
     })
 
     // Definir cookie

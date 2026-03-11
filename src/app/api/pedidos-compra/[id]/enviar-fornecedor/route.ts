@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { requirePermission } from '@/lib/permissions'
+import { logActivity } from '@/lib/activity-log'
 
 export async function POST(
   request: NextRequest,
@@ -103,6 +104,17 @@ export async function POST(
           autor_nome: user.email,
         })
 
+      // Log activity - fire and forget
+      void logActivity({
+        userId: String(user.userId),
+        userType: 'lojista',
+        userEmail: user.email,
+        userNome: user.nome || user.email,
+        action: 'pedido_enviado',
+        empresaId: user.empresaId,
+        metadata: { pedido_id: pedidoId, empresa_id: user.empresaId },
+      }).catch(console.error)
+
       // Se o representante esta cadastrado na Flow, retorna sucesso simples
       if (representanteCadastrado) {
         return NextResponse.json({
@@ -181,6 +193,17 @@ export async function POST(
         autor_tipo: 'lojista',
         autor_nome: user.email,
       })
+
+    // Log activity - fire and forget
+    void logActivity({
+      userId: String(user.userId),
+      userType: 'lojista',
+      userEmail: user.email,
+      userNome: user.nome || user.email,
+      action: 'pedido_enviado',
+      empresaId: user.empresaId,
+      metadata: { pedido_id: pedidoId, empresa_id: user.empresaId },
+    }).catch(console.error)
 
     // Se o fornecedor esta cadastrado na Flow, retorna sucesso simples
     if (fornecedorCadastrado) {
