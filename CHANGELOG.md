@@ -341,3 +341,78 @@
 - Email: `superadmin@flowb2b.com`
 - Senha: `DuubPets@00112233`
 - ID: `bf201f0f-a8c9-49d0-adc0-48adcabf733b`
+
+**2. Tracking de Atividade de Usuarios** — 11/03 | FlowB2B_Client
+- Tabela `user_activity_log` no Supabase com indexes em `created_at`, `user_id`, `action`, `user_type`
+- Coluna `last_login_at` adicionada em `users`, `users_fornecedor`, `users_representante`
+- Utilitario `logActivity()` fire-and-forget (nunca bloqueia o fluxo principal)
+- **Login** instrumentado nos 3 tipos de usuario (lojista/superadmin, fornecedor, representante)
+- **Logout** instrumentado com captura de dados antes de remover cookie
+- **Registro** instrumentado nos 3 endpoints de cadastro
+- **Acoes do lojista:** `pedido_criado`, `pedido_enviado`, `sugestao_aceita`, `sugestao_rejeitada`, `contra_proposta_enviada`
+- **Acoes do fornecedor:** `sugestao_enviada`, `sugestao_aceita`/`rejeitada` (resposta a contra-proposta)
+- **Acoes do representante:** `sugestao_enviada`, `sugestao_aceita`/`rejeitada` (resposta a contra-proposta)
+- `empresa_id` armazenado como campo top-level para filtragem multi-tenant
+- Dashboard admin exibe: usuarios ativos (24h/7d/30d), logins recentes, feed de atividades, novos cadastros
+
+**3. Paginas de Detalhe de Usuarios no Admin** — 11/03 | FlowB2B_Client
+- Detalhe de lojista: empresa vinculada, pedidos, colaboradores, stats
+- Detalhe de fornecedor: empresas atendidas, pedidos, total movimentado
+- Detalhe de representante: fornecedores vinculados, pedidos, empresas atendidas
+- APIs otimizadas com queries paralelas via `Promise.all`
+
+**4. Negociacoes no Admin** — 11/03 | FlowB2B_Client
+- Pagina dedicada `/admin/negociacoes/[id]` com timeline visual rica e barra de progresso
+- Comparativo lado-a-lado: quantidade original vs sugerida, desconto, bonificacao
+- Comparativo de condicoes comerciais entre rodadas de negociacao
+- Secao de comparativo adicionada tambem em `/admin/pedidos/[id]`
+
+---
+
+### FIXES
+
+**5. Mismatch de Campos na API de Activity do Dashboard** — 11/03 | FlowB2B_Client
+- Frontend usava nomes errados (`user_name`, `new_registrations`, `logged_at`) que nao batiam com a API (`user_nome`, `registrations_recent`, `created_at`)
+- Toda a secao de atividade do dashboard estava quebrada/vazia
+- Corrigidas interfaces TypeScript e JSX para alinhar com resposta real da API
+
+**6. Queries de Active Users Truncadas em 1000 Rows** — 11/03 | FlowB2B_Client
+- Supabase retorna no maximo 1000 rows por padrao; queries de usuarios ativos (24h/7d/30d) nao tinham `.limit()`
+- Contagens ficavam silenciosamente erradas quando havia mais de 1000 logins no periodo
+- Adicionado `.limit(10000)` nas 3 queries
+
+**7. Bugs na Tabela de Comparativo de Negociacao** — 11/03 | FlowB2B_Client
+- Cor do ternario sempre amber em ambos os branches (aumento e diminuicao) → verde para aumento, vermelho para diminuicao
+- Coluna "Final" mostrava quantidade original em vez da quantidade da sugestao aceita
+- Footer de totais nao aplicava `desconto_geral` do fornecedor
+- Badge de status `enviado_fornecedor` era amber em pedidos mas azul em negociacoes → padronizado para azul
+
+**8. Error Handlers Silenciosos nos Endpoints Lojista** — 11/03 | FlowB2B_Client
+- `.catch(() => {})` em 7 locais silenciava erros do activity log
+- Trocado por `.catch(console.error)` para manter visibilidade
+
+**9. getCurrentUser() Nao Retornava Nome** — 11/03 | FlowB2B_Client
+- Funcao sempre retornava `nome: ''`, fazendo logs de atividade perderem o nome do usuario
+- Agora busca `nome` do banco na tabela correta por tipo (users/users_fornecedor/users_representante)
+- Query leve (apenas coluna `nome`, `.single()`) com fallback para `''`
+
+**10. userId Sem String() no Login Lojista** — 11/03 | FlowB2B_Client
+- `logActivity` esperava `userId: string` mas login do lojista passava `user.id` sem conversao
+- Fornecedor e representante ja usavam `String(user.id)` — padronizado
+
+---
+
+### Resumo da Semana
+
+| Projeto | Commits |
+|---------|---------|
+| FlowB2B_Client | 7 |
+| validacao_ean | 0 |
+| flowB2BAPI | 0 |
+| **Total** | **7** |
+
+| Tipo | Qtd |
+|------|-----|
+| feat | 4 |
+| fix | 6 |
+| docs | 1 |
