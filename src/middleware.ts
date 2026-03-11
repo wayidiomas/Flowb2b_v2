@@ -100,6 +100,33 @@ export async function middleware(request: NextRequest) {
 
     const userTipo = String(payload.tipo || 'lojista')
 
+    // Super admin tem acesso total a /admin/* e /api/admin/*
+    const isAdminRoute = pathname.startsWith('/admin') || pathname.startsWith('/api/admin')
+    if (isAdminRoute && userTipo !== 'superadmin') {
+      // Redirecionar para dashboard do tipo correspondente
+      const redirectMap: Record<string, string> = {
+        lojista: '/dashboard',
+        fornecedor: '/fornecedor/dashboard',
+        representante: '/representante/dashboard',
+      }
+      return NextResponse.redirect(new URL(redirectMap[userTipo] || '/login', request.url))
+    }
+
+    // Super admin acessando rota que nao eh /admin — permitir (ele pode ver tudo)
+    if (userTipo === 'superadmin' && !isAdminRoute) {
+      // Super admin tentando acessar rota de outro portal — redirecionar para /admin
+      const requestHeaders = new Headers(request.headers)
+      requestHeaders.set('x-user-id', String(payload.userId))
+      requestHeaders.set('x-empresa-id', String(payload.empresaId))
+      requestHeaders.set('x-user-role', String(payload.role))
+      requestHeaders.set('x-user-tipo', userTipo)
+      // Para rotas raiz (/) redirecionar para admin dashboard
+      if (pathname === '/') {
+        return NextResponse.redirect(new URL('/admin/dashboard', request.url))
+      }
+      return NextResponse.next({ request: { headers: requestHeaders } })
+    }
+
     // Protecao por tipo de usuario
     // IMPORTANTE: /api/fornecedores (lojista) != /api/fornecedor/* (portal fornecedor)
     // IMPORTANTE: /api/representantes (lojista) != /api/representante/* (portal representante)

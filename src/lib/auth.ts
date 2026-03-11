@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from 'jose'
 import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
 import type { JWTPayload, SessionUser } from '@/types/auth'
+import { createServerSupabaseClient } from '@/lib/supabase'
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret-change-in-production'
@@ -71,11 +72,37 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   const payload = await verifyToken(token)
   if (!payload) return null
 
+  // Fetch nome from the appropriate table based on user type
+  let nome = ''
+  try {
+    const supabase = createServerSupabaseClient()
+    const tipo = payload.tipo || 'lojista'
+
+    let table: string
+    if (tipo === 'fornecedor') {
+      table = 'users_fornecedor'
+    } else if (tipo === 'representante') {
+      table = 'users_representante'
+    } else {
+      table = 'users'
+    }
+
+    const { data } = await supabase
+      .from(table)
+      .select('nome')
+      .eq('id', payload.userId)
+      .single()
+
+    nome = data?.nome || ''
+  } catch {
+    // Don't let nome fetch failure break auth
+  }
+
   return {
     userId: payload.userId,
     empresaId: payload.empresaId,
     email: payload.email,
-    nome: '', // Precisa buscar do banco se necessário
+    nome,
     role: payload.role,
     tipo: payload.tipo || 'lojista',
     cnpj: payload.cnpj,

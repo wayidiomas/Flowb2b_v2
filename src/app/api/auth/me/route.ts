@@ -170,10 +170,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Determinar tipo baseado no role (mesmo mapeamento do login)
+    const tipo = user.role === 'superadmin' ? 'superadmin' : (sessionUser.tipo || 'lojista')
+
     return NextResponse.json({
       success: true,
       user: {
         ...user,
+        tipo,
         empresa_id: empresaId,
         empresa,
         empresas: empresasVinculadas?.map(ue => ({

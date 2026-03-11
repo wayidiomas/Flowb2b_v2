@@ -3,7 +3,7 @@ export interface User {
   email: string
   nome: string
   empresa_id: number | null
-  role: 'admin' | 'user'
+  role: 'admin' | 'user' | 'superadmin'
   ativo: boolean
   created_at: string
   updated_at: string
@@ -13,8 +13,8 @@ export interface JWTPayload {
   userId: string // UUID
   empresaId: number | null
   email: string
-  role: 'admin' | 'user'
-  tipo: 'lojista' | 'fornecedor' | 'representante'
+  role: 'admin' | 'user' | 'superadmin'
+  tipo: 'lojista' | 'fornecedor' | 'representante' | 'superadmin'
   cnpj?: string
   fornecedorUserId?: number
   representanteUserId?: number
@@ -84,8 +84,8 @@ export interface SessionUser {
   empresaId: number | null
   email: string
   nome: string
-  role: 'admin' | 'user'
-  tipo: 'lojista' | 'fornecedor' | 'representante'
+  role: 'admin' | 'user' | 'superadmin'
+  tipo: 'lojista' | 'fornecedor' | 'representante' | 'superadmin'
   cnpj?: string
   fornecedorUserId?: number
   representanteUserId?: number
