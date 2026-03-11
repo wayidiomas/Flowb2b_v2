@@ -189,3 +189,155 @@
 | feat | 6 |
 | fix | 6 |
 | ui/ux | 1 |
+
+---
+
+## Semana 3 — 26/02 a 04/03/2026
+
+### FEATURES
+
+**1. Sistema de Permissoes do Lojista** — 27/02 | FlowB2B_Client
+- Enforcement do sistema de permissoes em todas as paginas e APIs do portal do lojista
+- Paginas protegidas redirecionam ou exibem mensagem de acesso negado conforme permissoes do usuario
+
+**2. Responsividade Mobile do Portal Lojista** — 04/03 | FlowB2B_Client
+- Refatoracao completa em 9 etapas para tornar todo o portal do lojista responsivo (mobile-first)
+- **Etapa 1:** Navegacao mobile com menu hamburger e sidebar colapsavel
+- **Etapa 2:** Dashboard com cards empilhados e graficos adaptados para telas pequenas
+- **Etapa 3:** Lista de pedidos de compra com cards em vez de tabela no mobile
+- **Etapa 4:** Detalhe e edicao de pedido responsivos com layout empilhado
+- **Etapa 5:** Curva ABC responsiva com tabelas convertidas para cards
+- **Etapa 6:** Modulo de estoque responsivo
+- **Etapa 7:** Cadastros (fornecedores, clientes, produtos) responsivos
+- **Etapa 8:** Fiscal, suprimentos e configuracoes responsivos
+- **Etapa 9:** Componentes UI base (`Button`, `Input`, `Modal`, `Table`) com variantes responsivas
+- Code review final com correcoes de inconsistencias restantes
+
+---
+
+### FIXES
+
+**3. Portal do Representante — Pedidos Nao Apareciam** — 26/02 | FlowB2B_Client
+- Pedidos enviados ao representante nao apareciam por filtro de `origem` incorreto
+- Botao "Adicionar Representante" nao funcionava na listagem de fornecedores
+
+**4. Filtro Rascunhos com Status Incorretos** — 26/02 | FlowB2B_Client
+- Pedidos com status Registrada/Emitida do Bling eram exibidos erroneamente na aba de rascunhos
+
+**5. Bipagem de Conferencia do Representante** — 26/02 | FlowB2B_Client
+- Representante so conseguia bipar produtos de um fornecedor; agora permite todos os fornecedores vinculados
+
+**6. Verificacao de Pedidos em Aberto** — 27/02 | FlowB2B_Client
+- Pedidos cancelados e recusados eram contabilizados como "em aberto", gerando falsos avisos ao criar novo pedido
+
+---
+
+### Resumo da Semana
+
+| Projeto | Commits |
+|---------|---------|
+| FlowB2B_Client | 16 |
+| validacao_ean | 0 |
+| flowB2BAPI | 0 |
+| **Total** | **16** |
+
+| Tipo | Qtd |
+|------|-----|
+| feat | 8 |
+| fix | 6 |
+| refactor | 3 |
+
+---
+
+## Semana 4 — 04/03 a 11/03/2026
+
+### FEATURES
+
+**1. Soft Delete de Pedidos de Compra** — 06/03 | FlowB2B_Client
+- Pedidos de compra agora usam exclusao logica (`is_excluded`) em vez de DELETE fisico
+- Permite recuperar pedidos excluidos por engano e manter historico
+
+**2. Permissoes por Empresa na Edicao de Colaborador** — 06/03 | FlowB2B_Client
+- Edicao de colaborador agora respeita permissoes por empresa
+- Correcoes no fluxo de colaboradores: telefone, foto de perfil e seguranca no modal de empresa
+
+**3. Sync de Estoque Pre-Pedido Automatico** — 06/03 | FlowB2B_Client
+- Antes de calcular pedido automatico, sistema agora sincroniza estoque do Bling para o fornecedor
+- Garante que a sugestao de compra usa estoque atualizado, nao dados potencialmente defasados
+- Nova funcao `syncEstoqueFornecedor()` em `src/lib/bling-estoque-sync.ts`
+
+**4. Cron de Sync Estoque via Next.js (Nova Arquitetura)** — 10/03 | FlowB2B_Client
+- Novo endpoint `/api/cron/sync-estoque` chamado diretamente pelo pg_cron do Supabase
+- Elimina cadeia intermediaria: ~~pg_cron → Edge Function → flowb2bapi → Edge Function → Bling~~ → agora pg_cron → Next.js → Bling
+- Nova funcao `syncEstoqueEmpresa()` que sincroniza TODOS os produtos de uma empresa (nao apenas por fornecedor)
+- Batching de 100 produtos por chamada, delay 400ms entre lotes, retry com backoff exponencial (5 tentativas)
+- Resiliente a 429 (rate limit): respeita header `Retry-After`, aborta lotes restantes se esgotou retries
+- Endpoint de diagnostico `/api/diagnostico/estoque` para comparacao em tempo real Bling vs Supabase
+- pg_cron job 8 atualizado para chamar Next.js a cada hora
+- Resultado: 16.772 produtos sincronizados em 3 empresas, 0 erros, 99.94% de precisao
+
+---
+
+### FIXES
+
+**5. Sync de Estoque Bling que Nunca Atualizava** — 09/03 | FlowB2B_Client
+- **Root cause:** Empresas 2 e 5 tinham `sync_status = 'error'` na tabela `empresas`, e a Edge Function `cron-inventory-sync` filtrava por `sync_status = 'completed'` — resultado: 2 de 3 empresas ignoradas pela cron
+- Correcao: `sync_status` corrigido para `'completed'` e limpeza de 4.882 registros legados na tabela `cron_jobs`
+
+**6. Resiliencia ao Rate Limit do Bling (429)** — 06/03 | FlowB2B_Client
+- Nova lib `src/lib/bling-fetch.ts` com `blingFetch()`: wrapper de fetch com retry exponencial, jitter ±20%, suporte ao header `Retry-After`
+- Classe `BlingRateLimitError` para tratamento especifico quando todos os retries se esgotam
+- Retries em 429 (rate limit) e 5xx (server error), abort inteligente para nao desperdicar requisicoes
+
+**7. Middleware Auth Bloqueando Cron** — 10/03 | FlowB2B_Client
+- Rotas `/api/cron/` e `/api/diagnostico/` eram interceptadas pelo middleware de autenticacao e redirecionadas para `/login`
+- Adicionadas como rotas publicas (usam autenticacao propria via `CRON_SECRET`)
+
+**8. Paginacao do Diagnostico de Estoque** — 10/03 | FlowB2B_Client
+- Endpoint de diagnostico so checava 1.000 produtos (limite padrao do Supabase)
+- Corrigido para paginar e checar todos os produtos da empresa
+
+**9. ESLint Warnings na Listagem de Pedidos** — 06/03 | FlowB2B_Client
+- Correcao de warnings de lint na pagina de listagem de pedidos de compra
+
+---
+
+### Resumo da Semana
+
+| Projeto | Commits |
+|---------|---------|
+| FlowB2B_Client | 10 |
+| validacao_ean | 0 |
+| flowB2BAPI | 0 |
+| **Total** | **10** |
+
+| Tipo | Qtd |
+|------|-----|
+| feat | 4 |
+| fix | 5 |
+| refactor | 0 |
+| chore | 1 |
+
+---
+
+## Semana 5 — 11/03 a 18/03/2026
+
+### FEATURES
+
+**1. Modulo Super Admin** — 11/03 | FlowB2B_Client
+- Novo tipo de usuario `superadmin` com acesso a toda a plataforma
+- 28 arquivos criados (10 paginas, 13 APIs, 5 infra)
+- **Dashboard:** metricas globais (empresas, usuarios, pedidos, alertas Bling)
+- **Gestao de Usuarios:** 3 abas (lojistas, fornecedores, representantes) com busca, paginacao, reset senha, ativar/desativar
+- **Auditoria de Pedidos:** lista global de pedidos sem filtro de empresa, timeline visual completa com todas as rodadas de negociacao (sugestao, contra-proposta, aceite)
+- **Gestao do Bling:** status de todas as conexoes, revogar token (dispara BlingRevokeModal bloqueante pro lojista), forcar re-sync de estoque
+- **Mapa de Relacoes:** arvore visual lojista → fornecedor → representante com contagem de produtos e pedidos
+- **Empresas:** lista e detalhe com usuarios vinculados, fornecedores, status Bling
+- Layout dedicado com sidebar escura (gray-900) e acentos em vermelho (red-600)
+- Middleware protege `/admin/*` e `/api/admin/*` — apenas superadmin acessa
+- Login via tela padrao `/login` com deteccao automatica de tipo
+
+**Credenciais Super Admin:**
+- Email: `superadmin@flowb2b.com`
+- Senha: `DuubPets@00112233`
+- ID: `bf201f0f-a8c9-49d0-adc0-48adcabf733b`
