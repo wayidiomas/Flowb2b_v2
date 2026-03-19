@@ -111,7 +111,14 @@ function ChevronRightIcon() {
 
 interface ToastState {
   message: string
-  type: 'success' | 'error'
+  type: 'success' | 'error' | 'warning'
+}
+
+interface SyncResult {
+  empresa_id: number
+  empresa_nome: string
+  supabase: boolean
+  bling: boolean
 }
 
 function Toast({ toast, onDismiss }: { toast: ToastState | null; onDismiss: () => void }) {
@@ -129,12 +136,18 @@ function Toast({ toast, onDismiss }: { toast: ToastState | null; onDismiss: () =
         className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium ${
           toast.type === 'success'
             ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+            : toast.type === 'warning'
+            ? 'bg-amber-50 text-amber-800 border border-amber-200'
             : 'bg-red-50 text-red-800 border border-red-200'
         }`}
       >
         {toast.type === 'success' ? (
           <svg className="w-5 h-5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        ) : toast.type === 'warning' ? (
+          <svg className="w-5 h-5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
         ) : (
           <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -159,15 +172,18 @@ function Toast({ toast, onDismiss }: { toast: ToastState | null; onDismiss: () =
 function InlinePriceEditor({
   value,
   onSave,
+  saving,
 }: {
   value: number | null
   onSave: (newValue: number) => void
+  saving?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const startEdit = () => {
+    if (saving) return
     setEditValue(value != null ? value.toFixed(2).replace('.', ',') : '0,00')
     setEditing(true)
   }
@@ -190,6 +206,18 @@ function InlinePriceEditor({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') commit()
     if (e.key === 'Escape') setEditing(false)
+  }
+
+  if (saving) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm text-gray-400">
+        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+        <span>Sincronizando...</span>
+      </span>
+    )
   }
 
   if (editing) {
@@ -717,12 +745,14 @@ function ProductCard({
   onToggleAtivo,
   onUpdatePreco,
   onPersonalizar,
+  saving,
 }: {
   item: CatalogoItem
   lojistaFilter: number | null
   onToggleAtivo: (id: number, ativo: boolean) => void
   onUpdatePreco: (id: number, preco: number) => void
   onPersonalizar: (item: CatalogoItem) => void
+  saving?: boolean
 }) {
   const hasCustomPrice = lojistaFilter && item.preco_customizado != null
 
@@ -763,6 +793,7 @@ function ProductCard({
           <InlinePriceEditor
             value={item.preco_base}
             onSave={(val) => onUpdatePreco(item.id, val)}
+            saving={saving}
           />
         </div>
         <div className="text-right">
@@ -827,6 +858,12 @@ export default function FornecedorCatalogoPage() {
 
   // Toast
   const [toast, setToast] = useState<ToastState | null>(null)
+
+  // Sync Bling toggle
+  const [syncBling, setSyncBling] = useState(true)
+
+  // Track which item is currently saving price (for loading indicator)
+  const [savingItemId, setSavingItemId] = useState<number | null>(null)
 
   // Modal
   const [modalItem, setModalItem] = useState<CatalogoItem | null>(null)
@@ -977,15 +1014,19 @@ export default function FornecedorCatalogoPage() {
     }
   }
 
-  // ------ Update price ------
+  // ------ Update price (individual endpoint with Bling sync) ------
   const handleUpdatePreco = async (id: number, preco: number) => {
     const oldItem = itens.find((i) => i.id === id)
     setItens((prev) => prev.map((i) => (i.id === id ? { ...i, preco_base: preco } : i)))
+    setSavingItemId(id)
     try {
-      const res = await fetch('/api/fornecedor/catalogo/itens', {
+      const res = await fetch(`/api/fornecedor/catalogo/itens/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itens: [{ id, preco_base: preco }] }),
+        body: JSON.stringify({
+          preco_base: preco,
+          sync_bling: syncBling,
+        }),
       })
       if (!res.ok) {
         if (oldItem) {
@@ -993,13 +1034,40 @@ export default function FornecedorCatalogoPage() {
         }
         setToast({ message: 'Erro ao atualizar preco.', type: 'error' })
       } else {
-        setToast({ message: 'Preco atualizado!', type: 'success' })
+        const data = await res.json()
+
+        if (data.sync_results && Array.isArray(data.sync_results)) {
+          const results: SyncResult[] = data.sync_results
+          const totalEmpresas = results.length
+          const blingFailed = results.filter((r) => !r.bling)
+          const allFailed = results.filter((r) => !r.supabase)
+
+          if (allFailed.length === totalEmpresas && totalEmpresas > 0) {
+            setToast({ message: 'Erro ao atualizar preco em todas as empresas.', type: 'error' })
+          } else if (blingFailed.length > 0) {
+            setToast({
+              message: `Preco atualizado localmente. Sync Bling falhou em ${blingFailed.length} empresa(s).`,
+              type: 'warning',
+            })
+          } else {
+            setToast({
+              message: totalEmpresas > 0
+                ? 'Preco atualizado em todas as empresas!'
+                : 'Preco atualizado!',
+              type: 'success',
+            })
+          }
+        } else {
+          setToast({ message: 'Preco atualizado!', type: 'success' })
+        }
       }
     } catch {
       if (oldItem) {
         setItens((prev) => prev.map((i) => (i.id === id ? { ...i, preco_base: oldItem.preco_base } : i)))
       }
       setToast({ message: 'Erro de conexao.', type: 'error' })
+    } finally {
+      setSavingItemId(null)
     }
   }
 
@@ -1138,6 +1206,17 @@ export default function FornecedorCatalogoPage() {
             />
             <span className="text-sm text-gray-600">Inativos</span>
           </label>
+
+          {/* Sync Bling toggle */}
+          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-500">
+            <input
+              type="checkbox"
+              checked={syncBling}
+              onChange={(e) => setSyncBling(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20"
+            />
+            Sincronizar precos com Bling
+          </label>
         </div>
 
         {/* Content */}
@@ -1192,6 +1271,7 @@ export default function FornecedorCatalogoPage() {
                             <InlinePriceEditor
                               value={item.preco_base}
                               onSave={(val) => handleUpdatePreco(item.id, val)}
+                              saving={savingItemId === item.id}
                             />
                           </td>
                           {lojistaFilter && (
@@ -1238,6 +1318,7 @@ export default function FornecedorCatalogoPage() {
                     onToggleAtivo={handleToggleAtivo}
                     onUpdatePreco={handleUpdatePreco}
                     onPersonalizar={setModalItem}
+                    saving={savingItemId === item.id}
                   />
                 ))}
               </div>

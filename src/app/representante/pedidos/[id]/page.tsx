@@ -87,6 +87,7 @@ interface ItemSugestao {
   desconto_percentual: number
   bonificacao_quantidade: number
   validade: string
+  preco_editado?: number | null            // preco editado pelo representante (null = usar original)
   // Campos para busca de produtos (substituicao/adicao)
   gtin?: string | null
   codigo_fornecedor?: string | null
@@ -291,8 +292,8 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
     data.itens.forEach(item => {
       const sug = sugestoes.find(s => s.item_id === item.id)
       if (sug) {
-        // Para itens com substituicao, usar preco_unitario se disponivel
-        const valorUnit = sug.is_substituicao && sug.preco_unitario != null ? sug.preco_unitario : item.valor
+        // Prioridade: preco_editado > preco_unitario (substituicao) > item.valor (original)
+        const valorUnit = sug.preco_editado != null ? sug.preco_editado : (sug.is_substituicao && sug.preco_unitario != null ? sug.preco_unitario : item.valor)
         const subtotalOriginal = valorUnit * sug.quantidade_sugerida
         const descontoItem = subtotalOriginal * (sug.desconto_percentual / 100)
         const subtotalComDesconto = subtotalOriginal - descontoItem
@@ -364,7 +365,8 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
         sug.quantidade_sugerida !== itemOriginal.quantidade ||
         sug.desconto_percentual > 0 ||
         sug.bonificacao_quantidade > 0 ||
-        sug.is_substituicao
+        sug.is_substituicao ||
+        (sug.preco_editado != null && sug.preco_editado !== itemOriginal.valor)
 
       return foiAlterado && !sug.validade
     })
@@ -423,7 +425,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
           is_substituicao: s.is_substituicao || false,
           is_novo: s.is_novo || false,
           produto_nome: s.produto_nome || null,
-          preco_unitario: s.preco_unitario || null,
+          preco_unitario: s.preco_editado ?? s.preco_unitario ?? null,
         })),
         observacao: observacao || undefined,
         condicoes_comerciais: {
@@ -1124,7 +1126,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                 <tbody className="divide-y divide-gray-200">
                   {itens.map((item) => {
                     const sug = sugestoes.find(s => s.item_id === item.id)
-                    const valorUnitarioEfetivo = sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : item.valor
+                    const valorUnitarioEfetivo = sug?.preco_editado != null ? sug.preco_editado : (sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : item.valor)
                     return (
                       <tr key={item.id} className="hover:bg-gray-50">
                         {canSuggest && (
@@ -1193,10 +1195,21 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500">{item.unidade}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                          {sug?.is_substituicao && sug.preco_unitario != null ? (
+                          {canSuggest && sug ? (
                             <div>
-                              <p className="line-through text-gray-400 text-xs">{item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                              <p className="font-medium">{sug.preco_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={sug.preco_editado ?? item.valor}
+                                onChange={(e) => updateSugestao(item.id, 'preco_editado', parseFloat(e.target.value) || 0)}
+                                className={`w-20 px-2 py-1 text-sm text-right border rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] bg-[#336FB6]/5 ${sug.preco_editado != null && sug.preco_editado !== item.valor ? 'border-[#336FB6]' : 'border-gray-300'}`}
+                              />
+                              {sug.preco_editado != null && sug.preco_editado !== item.valor && (
+                                <span className="text-xs text-gray-400 line-through block mt-0.5">
+                                  {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </span>
+                              )}
                             </div>
                           ) : (
                             item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
@@ -1396,7 +1409,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
               {itens.map((item) => {
                 const sug = sugestoes.find(s => s.item_id === item.id)
                 const subtotalOriginal = item.valor * item.quantidade
-                const valorUnitMobile = sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : item.valor
+                const valorUnitMobile = sug?.preco_editado != null ? sug.preco_editado : (sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : item.valor)
 
                 let subtotalSugerido = subtotalOriginal
                 let diferenca = 0
@@ -1452,10 +1465,21 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                     <div className="grid grid-cols-3 gap-2 text-xs">
                       <div className="bg-gray-50 rounded-lg p-2">
                         <p className="text-gray-400">Valor unit.</p>
-                        {sug?.is_substituicao && sug.preco_unitario != null ? (
+                        {canSuggest && sug ? (
                           <div>
-                            <p className="text-gray-400 line-through text-[10px]">R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                            <p className="text-gray-900 font-medium">R$ {sug.preco_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={sug.preco_editado ?? item.valor}
+                              onChange={(e) => updateSugestao(item.id, 'preco_editado', parseFloat(e.target.value) || 0)}
+                              className={`w-full px-2 py-1 text-xs text-right border rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] bg-[#336FB6]/5 ${sug.preco_editado != null && sug.preco_editado !== item.valor ? 'border-[#336FB6]' : 'border-gray-300'}`}
+                            />
+                            {sug.preco_editado != null && sug.preco_editado !== item.valor && (
+                              <span className="text-[10px] text-gray-400 line-through block mt-0.5">
+                                R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <p className="text-gray-900 font-medium">R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
