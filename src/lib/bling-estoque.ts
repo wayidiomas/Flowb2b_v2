@@ -72,6 +72,44 @@ interface AtualizarEstoqueResult {
 }
 
 /**
+ * Busca o ID do depósito padrão no Bling.
+ * Cacheia o resultado para evitar chamadas repetidas.
+ */
+let depositoCache: Map<string, number> = new Map()
+
+async function getDepositoPadrao(accessToken: string): Promise<number | null> {
+  if (depositoCache.has(accessToken)) {
+    return depositoCache.get(accessToken)!
+  }
+
+  try {
+    const { response } = await blingFetch(
+      `${BLING_CONFIG.apiUrl}/depositos`,
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+      { maxRetries: 2, context: 'buscar deposito padrao' }
+    )
+
+    if (response.ok) {
+      const data = await response.json()
+      const depositos = data?.data || []
+      // Buscar depósito padrão, ou o primeiro ativo
+      const padrao = depositos.find((d: { padrao: boolean }) => d.padrao) || depositos[0]
+      if (padrao?.id) {
+        depositoCache.set(accessToken, padrao.id)
+        return padrao.id
+      }
+    }
+  } catch (err) {
+    console.warn('[getDepositoPadrao] Falha ao buscar depositos:', err)
+  }
+
+  return null
+}
+
+/**
  * Atualiza o estoque de um produto no Bling usando operação de Balanço (B).
  * A operação "B" DEFINE o estoque para o valor absoluto especificado.
  */
@@ -81,11 +119,17 @@ export async function atualizarEstoqueBling(
   quantidade: number,
   observacao: string
 ): Promise<AtualizarEstoqueResult> {
+  // Buscar depósito padrão (obrigatório no Bling v3)
+  const depositoId = await getDepositoPadrao(accessToken)
+  if (!depositoId) {
+    return { success: false, error: 'Deposito padrao nao encontrado no Bling' }
+  }
+
   const url = `${BLING_CONFIG.apiUrl}/estoques`
 
   const body = {
     produto: { id: idProdutoBling },
-    deposito: { id: 0 },
+    deposito: { id: depositoId },
     operacao: 'B',
     quantidade,
     observacoes: observacao,
