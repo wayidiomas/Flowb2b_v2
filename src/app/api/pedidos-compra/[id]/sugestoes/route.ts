@@ -609,23 +609,109 @@ export async function POST(
             // ---- NORMAL: fluxo atual (atualiza quantidade/desconto no item existente) ----
             const itemAtual = itensMap.get(sItem.item_pedido_compra_id)
             if (itemAtual) {
-              // Calcular valor com desconto
+              // Se fornecedor sugeriu novo preço, usar ele como base
+              const precoAlterado = sItem.preco_unitario != null && sItem.preco_unitario !== itemAtual.valor
+              const valorBase = precoAlterado ? sItem.preco_unitario : itemAtual.valor
               const descontoItem = sItem.desconto_percentual || 0
-              const valorComDesconto = itemAtual.valor * (1 - descontoItem / 100)
-
-              // bonificacao_quantidade eh quantidade direta de unidades, nao percentual
+              const valorComDesconto = valorBase * (1 - descontoItem / 100)
               const qtdBonificacao = sItem.bonificacao_quantidade || 0
+
+              const updateData: Record<string, unknown> = {
+                quantidade: sItem.quantidade_sugerida,
+                valor_unitario_final: valorComDesconto,
+                quantidade_bonificacao: qtdBonificacao,
+              }
+
+              // Se preço foi alterado, atualizar o valor base do item também
+              if (precoAlterado) {
+                updateData.valor = valorBase
+              }
 
               await supabase
                 .from('itens_pedido_compra')
-                .update({
-                  quantidade: sItem.quantidade_sugerida,
-                  valor_unitario_final: valorComDesconto,
-                  quantidade_bonificacao: qtdBonificacao,
-                })
+                .update(updateData)
                 .eq('id', sItem.item_pedido_compra_id)
             }
           }
+        }
+
+        // ---- SYNC PREÇOS: atualizar fornecedores_produtos para itens com preço alterado ----
+        const itensComPrecoAlterado = (sugestaoItens || []).filter(sItem => {
+          if (!sItem.preco_unitario || sItem.preco_unitario <= 0) return false
+          if (sItem.is_novo) return false // novos já são criados com preço certo
+          const itemOriginal = itensMap.get(sItem.item_pedido_compra_id)
+          return itemOriginal && sItem.preco_unitario !== itemOriginal.valor
+        })
+
+        if (itensComPrecoAlterado.length > 0) {
+          // Fire-and-forget: atualizar preços em fornecedores_produtos (todas as empresas)
+          void (async () => {
+            try {
+              // Buscar CNPJ do fornecedor
+              const { data: fornecedorData } = await supabase
+                .from('fornecedores')
+                .select('cnpj')
+                .eq('id', fornecedorId)
+                .single()
+
+              if (!fornecedorData?.cnpj) return
+
+              // Buscar todos os fornecedores com mesmo CNPJ
+              const { data: todosFornecedores } = await supabase
+                .from('fornecedores')
+                .select('id, empresa_id')
+                .eq('cnpj', fornecedorData.cnpj)
+
+              if (!todosFornecedores?.length) return
+
+              for (const sItem of itensComPrecoAlterado) {
+                // Buscar gtin do produto para encontrar em outras empresas
+                const itemOriginal = itensMap.get(sItem.item_pedido_compra_id)
+                if (!itemOriginal) continue
+
+                const { data: produto } = await supabase
+                  .from('itens_pedido_compra')
+                  .select('produto_id, produtos!inner(gtin)')
+                  .eq('id', sItem.item_pedido_compra_id)
+                  .single()
+
+                const gtin = (produto?.produtos as any)?.gtin
+                if (!gtin) {
+                  // Sem EAN, atualizar só na empresa do pedido
+                  await supabase
+                    .from('fornecedores_produtos')
+                    .update({ valor_de_compra: sItem.preco_unitario })
+                    .eq('fornecedor_id', fornecedorId)
+                    .eq('produto_id', produto?.produto_id)
+                    .eq('empresa_id', empresaId)
+                  continue
+                }
+
+                // Atualizar em todas as empresas pelo EAN
+                for (const forn of todosFornecedores) {
+                  const { data: produtoEmpresa } = await supabase
+                    .from('produtos')
+                    .select('id')
+                    .eq('gtin', gtin)
+                    .eq('empresa_id', forn.empresa_id)
+                    .limit(1)
+                    .maybeSingle()
+
+                  if (produtoEmpresa) {
+                    await supabase
+                      .from('fornecedores_produtos')
+                      .update({ valor_de_compra: sItem.preco_unitario })
+                      .eq('fornecedor_id', forn.id)
+                      .eq('produto_id', produtoEmpresa.id)
+                      .eq('empresa_id', forn.empresa_id)
+                  }
+                }
+              }
+              console.log(`[aceitar] Precos atualizados em fornecedores_produtos para ${itensComPrecoAlterado.length} item(ns)`)
+            } catch (err) {
+              console.warn('[aceitar] Falha ao sincronizar precos (best-effort):', err)
+            }
+          })().catch(console.error)
         }
 
         // Recalcular total do pedido COM DESCONTO APLICADO (inclui novos itens)
