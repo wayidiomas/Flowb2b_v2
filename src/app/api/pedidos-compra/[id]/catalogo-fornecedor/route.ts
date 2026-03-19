@@ -57,6 +57,7 @@ export async function GET(
           id,
           nome,
           gtin,
+          codigo,
           marca,
           unidade,
           preco
@@ -69,7 +70,7 @@ export async function GET(
     if (search) {
       // Usar or filter across multiple fields
       query = query.or(
-        `codigo_fornecedor.ilike.%${search}%,produtos.nome.ilike.%${search}%,produtos.gtin.ilike.%${search}%`
+        `codigo_fornecedor.ilike.%${search}%,produtos.nome.ilike.%${search}%,produtos.gtin.ilike.%${search}%,produtos.codigo.ilike.%${search}%`
       )
     }
 
@@ -116,7 +117,8 @@ export async function GET(
           const nome = ((prod.nome as string) || '').toLowerCase()
           const gtin = ((prod.gtin as string) || '').toLowerCase()
           const codForn = ((fp.codigo_fornecedor as string) || '').toLowerCase()
-          return nome.includes(searchLower) || gtin.includes(searchLower) || codForn.includes(searchLower)
+          const codLoja = ((prod.codigo as string) || '').toLowerCase()
+          return nome.includes(searchLower) || gtin.includes(searchLower) || codForn.includes(searchLower) || codLoja.includes(searchLower)
         })
 
         const produtos = filtered.map((fp: Record<string, unknown>) => {

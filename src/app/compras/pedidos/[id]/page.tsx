@@ -994,11 +994,11 @@ export default function VisualizarPedidoPage() {
 
           {/* Botao Adicionar Produto */}
           {pedido && !['cancelado', 'finalizado'].includes(statusInterno) && (
-            <div className="mt-4 flex justify-center">
+            <div className="-mt-3 mb-2 flex justify-end px-6 pb-4">
               <button
                 onClick={() => setModalAdicionarAberto(true)}
                 disabled={adicionandoProduto}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-50 to-primary-100 hover:from-primary-100 hover:to-primary-200 text-primary-700 font-semibold rounded-xl border border-primary-300/60 transition-all shadow-sm hover:shadow-md disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-secondary-50 to-secondary-100/80 hover:from-secondary-100 hover:to-secondary-200/80 text-secondary-700 font-semibold rounded-xl border border-secondary-300/60 transition-all shadow-sm hover:shadow-md disabled:opacity-50"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
