@@ -57,7 +57,14 @@ export async function GET(request: NextRequest) {
 
     query = query.order('ordem', { ascending: true, nullsFirst: false })
       .order('nome', { ascending: true })
-      .range(offset, offset + limit - 1)
+
+    // Se nao filtra por empresa, buscar tudo para deduplicar corretamente
+    // (a dedup acontece client-side, paginacao vem depois)
+    if (!empresaId) {
+      query = query.limit(5000) // buscar todos para deduplicar
+    } else {
+      query = query.range(offset, offset + limit - 1)
+    }
 
     const { data: itens, error: itensError, count } = await query
 
@@ -66,10 +73,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar itens' }, { status: 500 })
     }
 
+    // Deduplicar quando NAO esta filtrando por empresa_id
+    // Agrupa por nome (key), mantendo o primeiro encontrado e o preco mais recente
+    let itensDedup = itens || []
+    if (!empresaId && itensDedup.length > 0) {
+      const seen = new Map<string, typeof itensDedup[0]>()
+      for (const item of itensDedup) {
+        // Chave de deduplicacao: codigo > nome (codigo eh o SKU do fornecedor, unico por produto)
+        const key = item.codigo || item.nome || String(item.id)
+        if (!seen.has(key)) {
+          seen.set(key, item)
+        } else {
+          // Se ja existe, manter o que tem preco_base mais recente/maior
+          const existing = seen.get(key)!
+          if (item.preco_base && (!existing.preco_base || item.preco_base > existing.preco_base)) {
+            seen.set(key, item)
+          }
+        }
+      }
+      const allDedup = Array.from(seen.values())
+      // Paginar após dedup
+      itensDedup = allDedup.slice(offset, offset + limit)
+      // Guardar total dedup para a resposta
+      ;(itensDedup as any)._totalDedup = allDedup.length
+    }
+
     // Se empresa_id fornecido, buscar precos customizados
-    let itensComPreco = itens || []
-    if (empresaId && itens && itens.length > 0) {
-      const itemIds = itens.map(i => i.id)
+    let itensComPreco = itensDedup
+    if (empresaId && itensDedup.length > 0) {
+      const itemIds = itensDedup.map(i => i.id)
       const { data: precos } = await supabase
         .from('catalogo_precos_lojista')
         .select('catalogo_item_id, preco_customizado, desconto_percentual, ativo')
@@ -78,7 +110,7 @@ export async function GET(request: NextRequest) {
 
       if (precos && precos.length > 0) {
         const precoMap = new Map(precos.map(p => [p.catalogo_item_id, p]))
-        itensComPreco = itens.map(item => {
+        itensComPreco = itensDedup.map(item => {
           const override = precoMap.get(item.id) as { preco_customizado: number | null; desconto_percentual: number | null; ativo: boolean } | undefined
           return {
             ...item,
@@ -92,7 +124,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       itens: itensComPreco,
-      total: count || 0,
+      total: !empresaId ? ((itensDedup as any)._totalDedup || itensDedup.length) : (count || 0),
       page,
       limit,
     })
