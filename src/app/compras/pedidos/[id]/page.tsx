@@ -95,6 +95,16 @@ export default function VisualizarPedidoPage() {
   const [modalAdicionarAberto, setModalAdicionarAberto] = useState(false)
   const [adicionandoProduto, setAdicionandoProduto] = useState(false)
 
+  // Espelho do pedido
+  const [espelhoInfo, setEspelhoInfo] = useState<{
+    espelho_url: string | null
+    espelho_nome: string | null
+    espelho_status: string | null
+    espelho_enviado_em: string | null
+    prazo_entrega_fornecedor: string | null
+  } | null>(null)
+  const [processandoEspelho, setProcessandoEspelho] = useState(false)
+
   // Modais de escolha destinatario (fornecedor vs representante)
   const [showTipoDestinatarioModal, setShowTipoDestinatarioModal] = useState(false)
   const [showRepresentanteSelectModal, setShowRepresentanteSelectModal] = useState(false)
@@ -162,6 +172,17 @@ export default function VisualizarPedidoPage() {
             setSugestaoItens(data.sugestaoItens || null)
           }
         }
+
+        // Buscar info do espelho
+        try {
+          const espelhoRes = await fetch(`/api/pedidos-compra/${pedidoId}/espelho`)
+          if (espelhoRes.ok) {
+            const espelhoData = await espelhoRes.json()
+            setEspelhoInfo(espelhoData)
+          }
+        } catch (espelhoErr) {
+          console.error('Erro ao buscar espelho:', espelhoErr)
+        }
       } catch (err) {
         console.error('Erro ao buscar status/sugestoes:', err)
       }
@@ -169,6 +190,31 @@ export default function VisualizarPedidoPage() {
 
     fetchStatusEsugestoes()
   }, [pedidoId, user?.empresa_id])
+
+  // Handler para aprovar/rejeitar espelho
+  const handleEspelhoAction = async (action: 'aprovar' | 'rejeitar') => {
+    if (!pedido) return
+    setProcessandoEspelho(true)
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedido.id}/espelho`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setEspelhoInfo(data)
+      } else {
+        const errData = await res.json()
+        alert(errData.error || 'Erro ao processar espelho')
+      }
+    } catch (err) {
+      console.error('Erro ao processar espelho:', err)
+      alert('Erro ao processar espelho')
+    } finally {
+      setProcessandoEspelho(false)
+    }
+  }
 
   // Handlers
   // Abre modal de escolha: fornecedor direto ou representante
@@ -906,6 +952,105 @@ export default function VisualizarPedidoPage() {
               situacaoBling={pedido.situacao}
             />
           </div>
+
+          {/* Espelho do Pedido */}
+          {espelhoInfo?.espelho_url && (
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100/50 border-b border-gray-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Espelho do Pedido</h3>
+                    <p className="text-sm text-gray-500">
+                      Enviado pelo fornecedor em {espelhoInfo.espelho_enviado_em ? new Date(espelhoInfo.espelho_enviado_em).toLocaleString('pt-BR') : '-'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* Arquivo para visualizacao */}
+                <div className="flex items-center gap-3 p-4 bg-primary-50 rounded-xl border border-primary-200">
+                  <svg className="w-8 h-8 text-primary-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{espelhoInfo.espelho_nome}</p>
+                    {espelhoInfo.prazo_entrega_fornecedor && (
+                      <p className="text-sm text-gray-500">
+                        Prazo de entrega: {formatDate(espelhoInfo.prazo_entrega_fornecedor)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={espelhoInfo.espelho_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 bg-white border border-primary-300 rounded-lg text-sm font-medium text-primary-700 hover:bg-primary-50 transition-colors"
+                    >
+                      Visualizar
+                    </a>
+                    <a
+                      href={espelhoInfo.espelho_url}
+                      download
+                      className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Download
+                    </a>
+                  </div>
+                </div>
+
+                {/* Botoes de aprovacao (so se pendente) */}
+                {espelhoInfo.espelho_status === 'pendente' && (
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => handleEspelhoAction('aprovar')}
+                      disabled={processandoEspelho}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-semibold transition-all disabled:opacity-50 shadow-lg shadow-green-200/50"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      {processandoEspelho ? 'Processando...' : 'Aprovar Espelho'}
+                    </button>
+                    <button
+                      onClick={() => handleEspelhoAction('rejeitar')}
+                      disabled={processandoEspelho}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-red-300 text-red-600 hover:bg-red-50 rounded-xl font-semibold transition-all disabled:opacity-50"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Rejeitar
+                    </button>
+                  </div>
+                )}
+
+                {espelhoInfo.espelho_status === 'aprovado' && (
+                  <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-4 py-2 rounded-lg">
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Espelho aprovado
+                  </div>
+                )}
+
+                {espelhoInfo.espelho_status === 'rejeitado' && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg">
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Espelho rejeitado -- aguardando novo envio do fornecedor
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Dados do Pedido */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">

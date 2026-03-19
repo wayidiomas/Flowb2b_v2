@@ -179,6 +179,18 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
   const [itemParaSubstituirNome, setItemParaSubstituirNome] = useState('')
   const router = useRouter()
 
+  // Espelho do pedido
+  const [espelhoFile, setEspelhoFile] = useState<File | null>(null)
+  const [prazoEntrega, setPrazoEntrega] = useState('')
+  const [enviandoEspelho, setEnviandoEspelho] = useState(false)
+  const [espelhoInfo, setEspelhoInfo] = useState<{
+    espelho_url: string | null
+    espelho_nome: string | null
+    espelho_status: string | null
+    espelho_enviado_em: string | null
+    prazo_entrega_fornecedor: string | null
+  } | null>(null)
+
   useEffect(() => {
     if (!user) return
 
@@ -203,6 +215,20 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
             }
           })
           setSugestoes(initialSugestoes)
+
+          // Buscar info do espelho apos carregar o pedido
+          try {
+            const espelhoRes = await fetch(`/api/representante/pedidos/${id}/espelho`)
+            if (espelhoRes.ok) {
+              const espelhoData = await espelhoRes.json()
+              setEspelhoInfo(espelhoData)
+              if (espelhoData.prazo_entrega_fornecedor) {
+                setPrazoEntrega(espelhoData.prazo_entrega_fornecedor)
+              }
+            }
+          } catch (espelhoErr) {
+            console.error('Erro ao carregar espelho:', espelhoErr)
+          }
         }
       } catch (err) {
         console.error('Erro ao carregar pedido:', err)
@@ -278,6 +304,39 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
 
   const handleRemoverItemNovo = (index: number) => {
     setSugestoes(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Handler para enviar espelho do pedido
+  const handleEnviarEspelho = async () => {
+    if (!espelhoFile) return
+    setEnviandoEspelho(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', espelhoFile)
+      if (prazoEntrega) formData.append('prazo_entrega', prazoEntrega)
+
+      const res = await fetch(`/api/representante/pedidos/${id}/espelho`, {
+        method: 'POST',
+        body: formData,
+      })
+      if (res.ok) {
+        const espelhoData = await res.json()
+        setEspelhoInfo(espelhoData)
+        setEspelhoFile(null)
+        setToast({ type: 'success', msg: 'Espelho enviado com sucesso!' })
+        setTimeout(() => setToast(null), 4000)
+      } else {
+        const errData = await res.json()
+        setToast({ type: 'error', msg: errData.error || 'Erro ao enviar espelho' })
+        setTimeout(() => setToast(null), 4000)
+      }
+    } catch (err) {
+      console.error('Erro ao enviar espelho:', err)
+      setToast({ type: 'error', msg: 'Erro ao enviar espelho' })
+      setTimeout(() => setToast(null), 4000)
+    } finally {
+      setEnviandoEspelho(false)
+    }
   }
 
   const calcularTotaisSugeridos = () => {
@@ -790,6 +849,174 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                     Se rejeitar, o pedido voltara para aguardando resposta e voce podera enviar uma nova sugestao.
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Espelho do Pedido */}
+          {pedido && ['aceito', 'sugestao_pendente', 'enviado_fornecedor'].includes(pedido.status_interno) && (
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100/50 border-b border-gray-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-[#336FB6] to-[#2a5a94] rounded-xl flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Espelho do Pedido</h3>
+                    <p className="text-sm text-gray-500">Anexe o espelho de confirmacao e informe o prazo de entrega</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6">
+                {espelhoInfo?.espelho_url ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
+                      <svg className="w-6 h-6 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-green-800 truncate">{espelhoInfo.espelho_nome}</p>
+                        <p className="text-sm text-green-600">
+                          Enviado em {espelhoInfo.espelho_enviado_em ? new Date(espelhoInfo.espelho_enviado_em).toLocaleString('pt-BR') : '-'}
+                        </p>
+                      </div>
+                      <a
+                        href={espelhoInfo.espelho_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 px-3 py-1.5 bg-white border border-green-300 rounded-lg text-sm font-medium text-green-700 hover:bg-green-50 transition-colors"
+                      >
+                        Visualizar
+                      </a>
+                    </div>
+
+                    {espelhoInfo.espelho_status === 'pendente' && (
+                      <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 px-4 py-2 rounded-lg">
+                        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Aguardando aprovacao do lojista
+                      </div>
+                    )}
+                    {espelhoInfo.espelho_status === 'aprovado' && (
+                      <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-4 py-2 rounded-lg">
+                        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Espelho aprovado pelo lojista
+                      </div>
+                    )}
+                    {espelhoInfo.espelho_status === 'rejeitado' && (
+                      <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg">
+                        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Espelho rejeitado -- envie um novo
+                      </div>
+                    )}
+
+                    {espelhoInfo.prazo_entrega_fornecedor && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                        </svg>
+                        Prazo de entrega: <strong>{new Date(espelhoInfo.prazo_entrega_fornecedor + 'T00:00:00').toLocaleDateString('pt-BR')}</strong>
+                      </div>
+                    )}
+
+                    {/* Permitir reenvio se rejeitado */}
+                    {espelhoInfo.espelho_status === 'rejeitado' && (
+                      <div className="pt-4 border-t border-gray-200 space-y-4">
+                        <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-[#336FB6] transition-colors">
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            onChange={(e) => setEspelhoFile(e.target.files?.[0] || null)}
+                            className="hidden"
+                            id="espelho-reupload"
+                          />
+                          <label htmlFor="espelho-reupload" className="cursor-pointer">
+                            <svg className="w-10 h-10 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                            </svg>
+                            {espelhoFile ? (
+                              <p className="text-sm font-medium text-[#336FB6]">{espelhoFile.name}</p>
+                            ) : (
+                              <>
+                                <p className="text-sm font-medium text-gray-600">Clique para selecionar um novo arquivo</p>
+                                <p className="text-xs text-gray-400 mt-1">PDF, JPG ou PNG (max 10MB)</p>
+                              </>
+                            )}
+                          </label>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de entrega</label>
+                          <input
+                            type="date"
+                            value={prazoEntrega}
+                            onChange={(e) => setPrazoEntrega(e.target.value)}
+                            className="w-full max-w-xs px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#336FB6]/30 focus:border-[#336FB6] text-sm"
+                          />
+                        </div>
+
+                        <button
+                          onClick={handleEnviarEspelho}
+                          disabled={!espelhoFile || enviandoEspelho}
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#336FB6] to-[#2a5a94] hover:from-[#2a5a94] hover:to-[#1e4a7a] text-white rounded-xl font-semibold transition-all disabled:opacity-50 shadow-lg shadow-[#336FB6]/20"
+                        >
+                          {enviandoEspelho ? 'Enviando...' : 'Reenviar Espelho'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-[#336FB6] transition-colors">
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.webp"
+                        onChange={(e) => setEspelhoFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                        id="espelho-upload"
+                      />
+                      <label htmlFor="espelho-upload" className="cursor-pointer">
+                        <svg className="w-10 h-10 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                        </svg>
+                        {espelhoFile ? (
+                          <p className="text-sm font-medium text-[#336FB6]">{espelhoFile.name}</p>
+                        ) : (
+                          <>
+                            <p className="text-sm font-medium text-gray-600">Clique para selecionar ou arraste o arquivo</p>
+                            <p className="text-xs text-gray-400 mt-1">PDF, JPG ou PNG (max 10MB)</p>
+                          </>
+                        )}
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Prazo de entrega</label>
+                      <input
+                        type="date"
+                        value={prazoEntrega}
+                        onChange={(e) => setPrazoEntrega(e.target.value)}
+                        className="w-full max-w-xs px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#336FB6]/30 focus:border-[#336FB6] text-sm"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleEnviarEspelho}
+                      disabled={!espelhoFile || enviandoEspelho}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#336FB6] to-[#2a5a94] hover:from-[#2a5a94] hover:to-[#1e4a7a] text-white rounded-xl font-semibold transition-all disabled:opacity-50 shadow-lg shadow-[#336FB6]/20"
+                    >
+                      {enviandoEspelho ? 'Enviando...' : 'Enviar Espelho'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
