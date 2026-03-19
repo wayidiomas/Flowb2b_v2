@@ -10,6 +10,8 @@ import { PedidoTimeline } from '@/components/pedido/PedidoTimeline'
 import { WorkflowStepper } from '@/components/pedido/WorkflowStepper'
 import { StatusActionCard } from '@/components/pedido/StatusActionCard'
 import { CancelamentoModal } from '@/components/pedido/CancelamentoModal'
+import { ProductSearchModal } from '@/components/pedido/ProductSearchModal'
+import type { CatalogoProduto } from '@/components/pedido/ProductSearchModal'
 import { TipoDestinatarioModal } from '@/components/representante/TipoDestinatarioModal'
 import { RepresentanteSelectModal } from '@/components/representante/RepresentanteSelectModal'
 import { useAuth } from '@/contexts/AuthContext'
@@ -88,6 +90,10 @@ export default function VisualizarPedidoPage() {
   const [numeroPedidoEnvio, setNumeroPedidoEnvio] = useState('')
   const [telefoneEnvioInput, setTelefoneEnvioInput] = useState('')
   const [salvandoTelefoneEnvio, setSalvandoTelefoneEnvio] = useState(false)
+
+  // Adicionar produto ao pedido
+  const [modalAdicionarAberto, setModalAdicionarAberto] = useState(false)
+  const [adicionandoProduto, setAdicionandoProduto] = useState(false)
 
   // Modais de escolha destinatario (fornecedor vs representante)
   const [showTipoDestinatarioModal, setShowTipoDestinatarioModal] = useState(false)
@@ -450,6 +456,34 @@ export default function VisualizarPedidoPage() {
       alert('Erro ao processar sugestao')
     } finally {
       setProcessandoSugestao(false)
+    }
+  }
+
+  const handleAdicionarProduto = async (produto: CatalogoProduto) => {
+    if (!pedido) return
+    setAdicionandoProduto(true)
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedido.id}/itens`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          produto_nome: produto.nome,
+          produto_gtin: produto.gtin,
+          codigo_fornecedor: produto.codigo_fornecedor,
+          quantidade: 1,
+          valor: produto.preco || 0,
+          unidade: produto.unidade || 'UN',
+        }),
+      })
+      if (res.ok) {
+        window.location.reload()
+      } else {
+        const error = await res.json()
+        alert(error.error || 'Erro ao adicionar produto')
+      }
+    } finally {
+      setAdicionandoProduto(false)
+      setModalAdicionarAberto(false)
     }
   }
 
@@ -958,6 +992,22 @@ export default function VisualizarPedidoPage() {
             </div>
           </div>
 
+          {/* Botao Adicionar Produto */}
+          {pedido && !['cancelado', 'finalizado'].includes(statusInterno) && (
+            <div className="mt-4 flex justify-center">
+              <button
+                onClick={() => setModalAdicionarAberto(true)}
+                disabled={adicionandoProduto}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-50 to-primary-100 hover:from-primary-100 hover:to-primary-200 text-primary-700 font-semibold rounded-xl border border-primary-300/60 transition-all shadow-sm hover:shadow-md disabled:opacity-50"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Adicionar Produto
+              </button>
+            </div>
+          )}
+
           {/* Parcelas */}
           {pedido.parcelas && pedido.parcelas.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -1199,6 +1249,16 @@ export default function VisualizarPedidoPage() {
         fornecedores={fornecedoresForRepresentante}
         fornecedorAtual={pedido ? { id: pedido.fornecedor_id, nome: pedido.fornecedor_nome } : undefined}
         loading={loadingRepresentantes}
+      />
+
+      {/* Modal Adicionar Produto do Catalogo do Fornecedor */}
+      <ProductSearchModal
+        isOpen={modalAdicionarAberto}
+        onClose={() => setModalAdicionarAberto(false)}
+        onSelect={handleAdicionarProduto}
+        pedidoId={pedido?.id || ''}
+        mode="adicionar"
+        apiEndpoint={pedido ? `/api/pedidos-compra/${pedido.id}/catalogo-fornecedor` : undefined}
       />
 
       {/* Estilos de impressao */}

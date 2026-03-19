@@ -20,6 +20,7 @@ interface ProductSearchModalProps {
   mode: 'substituir' | 'adicionar'
   itemOriginalNome?: string
   apiBasePath?: string  // default: '/api/fornecedor/pedidos'
+  apiEndpoint?: string  // URL completa, ex: "/api/pedidos-compra/123/catalogo-fornecedor"
 }
 
 export function ProductSearchModal({
@@ -30,6 +31,7 @@ export function ProductSearchModal({
   mode,
   itemOriginalNome,
   apiBasePath = '/api/fornecedor/pedidos',
+  apiEndpoint,
 }: ProductSearchModalProps) {
   const [search, setSearch] = useState('')
   const [produtos, setProdutos] = useState<CatalogoProduto[]>([])
@@ -50,7 +52,10 @@ export function ProductSearchModal({
       })
       if (searchTerm) params.set('search', searchTerm)
 
-      const res = await fetch(`${apiBasePath}/${pedidoId}/catalogo-produtos?${params}`)
+      const url = apiEndpoint
+        ? `${apiEndpoint}?${params}`
+        : `${apiBasePath}/${pedidoId}/catalogo-produtos?${params}`
+      const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
         setProdutos(data.produtos)
@@ -59,7 +64,7 @@ export function ProductSearchModal({
     } finally {
       setLoading(false)
     }
-  }, [pedidoId, apiBasePath])
+  }, [pedidoId, apiBasePath, apiEndpoint])
 
   // Load on open
   useEffect(() => {
