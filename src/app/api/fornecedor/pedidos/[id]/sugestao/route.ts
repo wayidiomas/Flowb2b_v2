@@ -4,12 +4,19 @@ import { getCurrentUser } from '@/lib/auth'
 import { logActivity } from '@/lib/activity-log'
 
 interface SugestaoItemRequest {
-  item_pedido_compra_id: number
+  item_pedido_compra_id: number | null  // null para itens novos
   produto_id: number | null
   quantidade_sugerida: number
   desconto_percentual: number
   bonificacao_quantidade: number  // Quantidade direta de unidades bonificadas
   validade: string | null
+  // Novos campos para troca e adição de produtos
+  gtin?: string | null
+  codigo_fornecedor?: string | null
+  is_substituicao?: boolean
+  is_novo?: boolean
+  produto_nome?: string | null
+  preco_unitario?: number | null
 }
 
 interface CondicoesComerciais {
@@ -44,6 +51,30 @@ export async function POST(
 
     if (!itens || itens.length === 0) {
       return NextResponse.json({ error: 'Itens da sugestao sao obrigatorios' }, { status: 400 })
+    }
+
+    // Validação extra para itens novos e substituições
+    for (const item of itens) {
+      if (item.is_novo) {
+        if (!item.produto_nome) {
+          return NextResponse.json(
+            { error: 'produto_nome e obrigatorio para itens novos' },
+            { status: 400 }
+          )
+        }
+        if (!item.gtin && !item.codigo_fornecedor) {
+          return NextResponse.json(
+            { error: 'gtin ou codigo_fornecedor e obrigatorio para itens novos' },
+            { status: 400 }
+          )
+        }
+      }
+      if (item.is_substituicao && !item.item_pedido_compra_id) {
+        return NextResponse.json(
+          { error: 'item_pedido_compra_id e obrigatorio para substituicoes' },
+          { status: 400 }
+        )
+      }
     }
 
     const supabase = createServerSupabaseClient()
@@ -109,12 +140,18 @@ export async function POST(
     // Inserir itens da sugestao
     const sugestaoItens = itens.map(item => ({
       sugestao_id: sugestao.id,
-      item_pedido_compra_id: item.item_pedido_compra_id,
-      produto_id: item.produto_id,
+      item_pedido_compra_id: item.item_pedido_compra_id || null,
+      produto_id: item.produto_id || null,
       quantidade_sugerida: item.quantidade_sugerida,
       desconto_percentual: item.desconto_percentual || 0,
       bonificacao_quantidade: item.bonificacao_quantidade || 0,  // Quantidade direta de unidades
       validade: item.validade || null,
+      gtin: item.gtin || null,
+      codigo_fornecedor: item.codigo_fornecedor || null,
+      is_substituicao: item.is_substituicao || false,
+      is_novo: item.is_novo || false,
+      produto_nome: item.produto_nome || null,
+      preco_unitario: item.preco_unitario || null,
     }))
 
     const { error: itensError } = await supabase

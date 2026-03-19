@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useFornecedorAuth } from '@/contexts/FornecedorAuthContext'
 import { FornecedorLayout } from '@/components/layout/FornecedorLayout'
 import { CancelamentoModal } from '@/components/pedido/CancelamentoModal'
+import { ProductSearchModal } from '@/components/pedido/ProductSearchModal'
+import type { CatalogoProduto } from '@/components/pedido/ProductSearchModal'
 import { Button, Skeleton } from '@/components/ui'
 
 interface PedidoItem {
@@ -82,12 +84,20 @@ interface PedidoDetail {
 
 // Mapeamento para o formulario de sugestao por item
 interface ItemSugestao {
-  item_id: number
+  item_id: number | null          // null para itens novos
   produto_id: number | null
   quantidade_sugerida: number
   desconto_percentual: number
   bonificacao_quantidade: number
   validade: string
+  // Campos para busca de produtos (substituicao/adicao)
+  gtin?: string | null
+  codigo_fornecedor?: string | null
+  is_substituicao?: boolean
+  is_novo?: boolean
+  produto_nome?: string | null
+  produto_nome_original?: string | null  // nome do item original (para mostrar riscado)
+  preco_unitario?: number | null          // preco do produto (novo ou substituto)
 }
 
 // Condicoes comerciais gerais da sugestao
@@ -166,6 +176,10 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const [cancelando, setCancelando] = useState(false)
   const [processandoContraProposta, setProcessandoContraProposta] = useState(false)
   const [observacaoRespostaCP, setObservacaoRespostaCP] = useState('')
+  const [modalBuscaAberto, setModalBuscaAberto] = useState(false)
+  const [modalBuscaMode, setModalBuscaMode] = useState<'substituir' | 'adicionar'>('adicionar')
+  const [itemParaSubstituir, setItemParaSubstituir] = useState<number | null>(null)
+  const [itemParaSubstituirNome, setItemParaSubstituirNome] = useState('')
   const router = useRouter()
 
   useEffect(() => {
@@ -205,10 +219,71 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     fetchPedido()
   }, [user, id])
 
-  const updateSugestao = (itemId: number, field: keyof ItemSugestao, value: number | string) => {
+  const updateSugestao = (itemIdOrIndex: number | null, field: keyof ItemSugestao, value: number | string, index?: number) => {
     setSugestoes(prev =>
-      prev.map(s => (s.item_id === itemId ? { ...s, [field]: value } : s))
+      prev.map((s, i) => {
+        if (itemIdOrIndex !== null && s.item_id === itemIdOrIndex) return { ...s, [field]: value }
+        if (itemIdOrIndex === null && i === index) return { ...s, [field]: value }
+        return s
+      })
     )
+  }
+
+  const handleProdutoSelecionado = (produto: CatalogoProduto) => {
+    if (modalBuscaMode === 'substituir' && itemParaSubstituir !== null) {
+      // TROCAR: atualizar item existente com novo produto
+      setSugestoes(prev => prev.map(s => {
+        if (s.item_id !== itemParaSubstituir) return s
+        return {
+          ...s,
+          gtin: produto.gtin,
+          codigo_fornecedor: produto.codigo_fornecedor,
+          is_substituicao: true,
+          produto_nome: produto.nome,
+          produto_nome_original: s.produto_nome_original || null, // sera setado no click
+          preco_unitario: produto.preco,
+        }
+      }))
+    } else {
+      // ADICIONAR: novo item na lista
+      const novoItem: ItemSugestao = {
+        item_id: null,
+        produto_id: null,
+        quantidade_sugerida: 1,
+        desconto_percentual: 0,
+        bonificacao_quantidade: 0,
+        validade: '',
+        gtin: produto.gtin,
+        codigo_fornecedor: produto.codigo_fornecedor,
+        is_novo: true,
+        produto_nome: produto.nome,
+        preco_unitario: produto.preco,
+      }
+      setSugestoes(prev => [...prev, novoItem])
+    }
+    setModalBuscaAberto(false)
+  }
+
+  const handleTrocarProduto = (itemId: number, nomeOriginal: string) => {
+    // Pre-setar o nome original no item para exibir riscado apos substituicao
+    setSugestoes(prev => prev.map(s =>
+      s.item_id === itemId ? { ...s, produto_nome_original: s.produto_nome_original || nomeOriginal } : s
+    ))
+    setItemParaSubstituir(itemId)
+    setItemParaSubstituirNome(nomeOriginal)
+    setModalBuscaMode('substituir')
+    setModalBuscaAberto(true)
+  }
+
+  const handleAdicionarProduto = () => {
+    setItemParaSubstituir(null)
+    setItemParaSubstituirNome('')
+    setModalBuscaMode('adicionar')
+    setModalBuscaAberto(true)
+  }
+
+  const handleRemoverItemNovo = (index: number) => {
+    setSugestoes(prev => prev.filter((_, i) => i !== index))
   }
 
   // Calculo em tempo real dos valores sugeridos
@@ -226,7 +301,9 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     data.itens.forEach(item => {
       const sug = sugestoes.find(s => s.item_id === item.id)
       if (sug) {
-        const subtotalOriginal = item.valor * sug.quantidade_sugerida
+        // Para itens com substituicao, usar preco_unitario se disponivel
+        const valorUnit = sug.is_substituicao && sug.preco_unitario != null ? sug.preco_unitario : item.valor
+        const subtotalOriginal = valorUnit * sug.quantidade_sugerida
         const descontoItem = subtotalOriginal * (sug.desconto_percentual / 100)
         const subtotalComDesconto = subtotalOriginal - descontoItem
 
@@ -240,6 +317,14 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       } else {
         totalSugeridoItens += item.valor * item.quantidade
       }
+    })
+
+    // Incluir itens novos adicionados via busca
+    sugestoes.filter(s => s.is_novo).forEach(s => {
+      const preco = s.preco_unitario || 0
+      const valorComDesconto = preco * (1 - (s.desconto_percentual || 0) / 100)
+      totalSugeridoItens += valorComDesconto * s.quantidade_sugerida
+      totalBonificacaoUnidades += s.bonificacao_quantidade || 0
     })
 
     // Aplicar desconto geral se atingir valor minimo
@@ -281,14 +366,20 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
 
     // Validacao: itens alterados precisam ter validade preenchida
     const itensAlteradosSemValidade = sugestoes.filter(sug => {
+      // Itens novos que foram modificados precisam de validade
+      if (sug.is_novo) {
+        return !sug.validade
+      }
+
       const itemOriginal = data.itens.find(item => item.id === sug.item_id)
       if (!itemOriginal) return false
 
-      // Verifica se o item foi alterado (quantidade, desconto ou bonificacao)
+      // Verifica se o item foi alterado (quantidade, desconto, bonificacao ou substituicao)
       const foiAlterado =
         sug.quantidade_sugerida !== itemOriginal.quantidade ||
         sug.desconto_percentual > 0 ||
-        sug.bonificacao_quantidade > 0
+        sug.bonificacao_quantidade > 0 ||
+        sug.is_substituicao
 
       // Se foi alterado, precisa ter validade
       return foiAlterado && !sug.validade
@@ -297,6 +388,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     if (itensAlteradosSemValidade.length > 0) {
       const nomesItens = itensAlteradosSemValidade
         .map(sug => {
+          if (sug.is_novo) return sug.produto_nome || 'Novo item'
           const item = data.itens.find(i => i.id === sug.item_id)
           return item?.descricao || `Item #${sug.item_id}`
         })
@@ -313,8 +405,11 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
 
       // Scroll para o primeiro item sem validade
       setTimeout(() => {
-        const primeiroItemId = itensAlteradosSemValidade[0].item_id
-        const inputElement = document.getElementById(`validade-${primeiroItemId}`)
+        const primeiroItem = itensAlteradosSemValidade[0]
+        const elementId = primeiroItem.is_novo
+          ? `validade-novo-${sugestoes.indexOf(primeiroItem)}`
+          : `validade-${primeiroItem.item_id}`
+        const inputElement = document.getElementById(elementId)
         if (inputElement) {
           inputElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
           inputElement.focus()
@@ -333,12 +428,19 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     try {
       const payload = {
         itens: sugestoes.map(s => ({
-          item_pedido_compra_id: s.item_id,
+          item_pedido_compra_id: s.item_id,  // null para novos
           produto_id: s.produto_id,
           quantidade_sugerida: s.quantidade_sugerida,
           desconto_percentual: s.desconto_percentual,
           bonificacao_quantidade: s.bonificacao_quantidade,
           validade: s.validade || null,
+          // Campos de busca de produtos
+          gtin: s.gtin || null,
+          codigo_fornecedor: s.codigo_fornecedor || null,
+          is_substituicao: s.is_substituicao || false,
+          is_novo: s.is_novo || false,
+          produto_nome: s.produto_nome || null,
+          preco_unitario: s.preco_unitario || null,
         })),
         observacao: observacao || undefined,
         condicoes_comerciais: {
@@ -1043,6 +1145,9 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             <table className="w-full">
               <thead>
                 <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
+                  {canSuggest && (
+                    <th className="px-2 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Acao</th>
+                  )}
                   <th className="px-4 py-3">Produto</th>
                   <th className="px-4 py-3">Codigos</th>
                   <th className="px-4 py-3">Und</th>
@@ -1063,35 +1168,83 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               <tbody className="divide-y divide-gray-200">
                 {itens.map((item) => {
                   const sug = sugestoes.find(s => s.item_id === item.id)
+                  const valorUnitarioEfetivo = sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : item.valor
                   return (
                     <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-900 max-w-[200px] truncate" title={item.descricao}>
-                        {item.descricao}
+                      {canSuggest && (
+                        <td className="px-2 py-2 text-center">
+                          <button
+                            onClick={() => handleTrocarProduto(item.id, item.descricao)}
+                            className="p-1.5 text-gray-400 hover:text-secondary-600 hover:bg-secondary-50 rounded-lg transition-colors"
+                            title="Trocar produto"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                            </svg>
+                          </button>
+                        </td>
+                      )}
+                      <td className="px-4 py-3 text-sm text-gray-900 max-w-[200px]" title={item.descricao}>
+                        {sug?.is_substituicao ? (
+                          <div>
+                            <p className="line-through text-gray-400 text-xs truncate">{item.descricao}</p>
+                            <p className="font-semibold text-gray-900 truncate">{sug.produto_nome}</p>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-secondary-100 text-secondary-700 mt-0.5">Substituido</span>
+                          </div>
+                        ) : (
+                          <span className="truncate block">{item.descricao}</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {item.codigo_fornecedor && (
-                          <div className="font-medium text-gray-900" title="SKU Fornecedor">
-                            <span className="text-xs text-gray-400 mr-1">SKU:</span>
-                            {item.codigo_fornecedor}
+                        {sug?.is_substituicao ? (
+                          <div>
+                            {sug.codigo_fornecedor && (
+                              <div className="font-medium text-gray-900" title="SKU Fornecedor">
+                                <span className="text-xs text-gray-400 mr-1">SKU:</span>
+                                {sug.codigo_fornecedor}
+                              </div>
+                            )}
+                            {sug.gtin && (
+                              <div className="text-xs text-gray-500" title="EAN/GTIN">
+                                <span className="text-gray-400 mr-1">EAN:</span>
+                                {sug.gtin}
+                              </div>
+                            )}
                           </div>
+                        ) : (
+                          <>
+                            {item.codigo_fornecedor && (
+                              <div className="font-medium text-gray-900" title="SKU Fornecedor">
+                                <span className="text-xs text-gray-400 mr-1">SKU:</span>
+                                {item.codigo_fornecedor}
+                              </div>
+                            )}
+                            {item.ean && (
+                              <div className="text-xs text-gray-500" title="EAN/GTIN">
+                                <span className="text-gray-400 mr-1">EAN:</span>
+                                {item.ean}
+                              </div>
+                            )}
+                            {item.codigo_produto && (
+                              <div className="text-xs text-gray-400" title="Codigo Lojista">
+                                <span className="mr-1">Lojista:</span>
+                                {item.codigo_produto}
+                              </div>
+                            )}
+                            {!item.codigo_fornecedor && !item.ean && !item.codigo_produto && '-'}
+                          </>
                         )}
-                        {item.ean && (
-                          <div className="text-xs text-gray-500" title="EAN/GTIN">
-                            <span className="text-gray-400 mr-1">EAN:</span>
-                            {item.ean}
-                          </div>
-                        )}
-                        {item.codigo_produto && (
-                          <div className="text-xs text-gray-400" title="Codigo Lojista">
-                            <span className="mr-1">Lojista:</span>
-                            {item.codigo_produto}
-                          </div>
-                        )}
-                        {!item.codigo_fornecedor && !item.ean && !item.codigo_produto && '-'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">{item.unidade}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                        {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        {sug?.is_substituicao && sug.preco_unitario != null ? (
+                          <div>
+                            <p className="line-through text-gray-400 text-xs">{item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            <p className="font-medium">{sug.preco_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          </div>
+                        ) : (
+                          item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
                         {item.quantidade}
@@ -1141,7 +1294,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                           </td>
                           <td className="px-4 py-3 bg-[#336FB6]/5">
                             {(() => {
-                              const subtotalBase = item.valor * sug.quantidade_sugerida
+                              const subtotalBase = valorUnitarioEfetivo * sug.quantidade_sugerida
                               const desconto = subtotalBase * (sug.desconto_percentual / 100)
                               const subtotalComDesconto = subtotalBase - desconto
                               const bonifUnidades = sug.bonificacao_quantidade || 0
@@ -1171,6 +1324,112 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                     </tr>
                   )
                 })}
+                {/* Itens novos adicionados via busca */}
+                {sugestoes.filter(s => s.is_novo).map((sug, idx) => {
+                  const globalIndex = sugestoes.indexOf(sug)
+                  const preco = sug.preco_unitario || 0
+                  const subtotalBase = preco * sug.quantidade_sugerida
+                  const descontoVal = subtotalBase * (sug.desconto_percentual / 100)
+                  const subtotalComDesconto = subtotalBase - descontoVal
+                  return (
+                    <tr key={`novo-${idx}`} className="bg-secondary-50/30 border-l-4 border-secondary-400">
+                      {canSuggest && (
+                        <td className="px-2 py-2 text-center">
+                          <button
+                            onClick={() => handleRemoverItemNovo(globalIndex)}
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Remover item"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </td>
+                      )}
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-secondary-100 text-secondary-700">Novo</span>
+                          <span className="font-medium text-gray-900 text-sm truncate">{sug.produto_nome}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-sm">
+                        {sug.codigo_fornecedor && (
+                          <div className="font-medium text-gray-900">
+                            <span className="text-xs text-gray-400 mr-1">SKU:</span>
+                            {sug.codigo_fornecedor}
+                          </div>
+                        )}
+                        {sug.gtin && (
+                          <div className="text-xs text-gray-500">
+                            <span className="text-gray-400 mr-1">EAN:</span>
+                            {sug.gtin}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-500">-</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 text-right">
+                        {preco > 0 ? preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '-'}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-400 text-right">-</td>
+                      {canSuggest && (
+                        <>
+                          <td className="px-4 py-2 bg-[#FFAA11]/5">
+                            <input
+                              type="number"
+                              min={1}
+                              value={sug.quantidade_sugerida}
+                              onChange={(e) => updateSugestao(null, 'quantidade_sugerida', Number(e.target.value), globalIndex)}
+                              className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                            />
+                          </td>
+                          <td className="px-4 py-2 bg-[#FFAA11]/5">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.5}
+                              value={sug.desconto_percentual || ''}
+                              onChange={(e) => updateSugestao(null, 'desconto_percentual', Number(e.target.value) || 0, globalIndex)}
+                              className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                              placeholder="0"
+                            />
+                          </td>
+                          <td className="px-4 py-2 bg-[#FFAA11]/5">
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={sug.bonificacao_quantidade || ''}
+                              onChange={(e) => updateSugestao(null, 'bonificacao_quantidade', Number(e.target.value) || 0, globalIndex)}
+                              className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                              placeholder="0"
+                            />
+                          </td>
+                          <td className="px-4 py-2 bg-[#FFAA11]/5">
+                            <input
+                              id={`validade-novo-${globalIndex}`}
+                              type="date"
+                              value={sug.validade}
+                              onChange={(e) => updateSugestao(null, 'validade', e.target.value, globalIndex)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] transition-all"
+                            />
+                          </td>
+                          <td className="px-4 py-3 bg-[#336FB6]/5">
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-[#336FB6]">
+                                R$ {subtotalComDesconto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                              {sug.bonificacao_quantidade > 0 && (
+                                <p className="text-xs text-blue-500">+{sug.bonificacao_quantidade} gratis</p>
+                              )}
+                            </div>
+                          </td>
+                        </>
+                      )}
+                      <td className="px-4 py-2 text-sm text-gray-400 text-right">-</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -1180,13 +1439,14 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             {itens.map((item) => {
               const sug = sugestoes.find(s => s.item_id === item.id)
               const subtotalOriginal = item.valor * item.quantidade
+              const valorUnitMobile = sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : item.valor
 
               // Calculo do subtotal sugerido
               let subtotalSugerido = subtotalOriginal
               let diferenca = 0
               let bonifUnidades = 0
               if (canSuggest && sug) {
-                const subtotalBase = item.valor * sug.quantidade_sugerida
+                const subtotalBase = valorUnitMobile * sug.quantidade_sugerida
                 const desconto = subtotalBase * (sug.desconto_percentual / 100)
                 subtotalSugerido = subtotalBase - desconto
                 diferenca = subtotalSugerido - subtotalOriginal
@@ -1195,21 +1455,55 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
 
               return (
                 <div key={item.id} className="p-4 space-y-3">
-                  {/* Nome do produto */}
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 leading-tight">{item.descricao}</p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
-                      {item.codigo_fornecedor && <span>SKU: {item.codigo_fornecedor}</span>}
-                      {item.ean && <span>EAN: {item.ean}</span>}
-                      {item.codigo_produto && <span>Lojista: {item.codigo_produto}</span>}
+                  {/* Nome do produto + botao trocar */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      {sug?.is_substituicao ? (
+                        <div>
+                          <p className="text-xs text-gray-400 line-through truncate">{item.descricao}</p>
+                          <p className="text-sm font-semibold text-gray-900 leading-tight">{sug.produto_nome}</p>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-secondary-100 text-secondary-700 mt-0.5">Substituido</span>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+                            {sug.codigo_fornecedor && <span>SKU: {sug.codigo_fornecedor}</span>}
+                            {sug.gtin && <span>EAN: {sug.gtin}</span>}
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900 leading-tight">{item.descricao}</p>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+                            {item.codigo_fornecedor && <span>SKU: {item.codigo_fornecedor}</span>}
+                            {item.ean && <span>EAN: {item.ean}</span>}
+                            {item.codigo_produto && <span>Lojista: {item.codigo_produto}</span>}
+                          </div>
+                        </div>
+                      )}
                     </div>
+                    {canSuggest && (
+                      <button
+                        onClick={() => handleTrocarProduto(item.id, item.descricao)}
+                        className="p-1.5 text-gray-400 hover:text-secondary-600 hover:bg-secondary-50 rounded-lg transition-colors flex-shrink-0"
+                        title="Trocar produto"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
 
                   {/* Info basica: valor, qtd, subtotal */}
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="bg-gray-50 rounded-lg p-2">
                       <p className="text-gray-400">Valor unit.</p>
-                      <p className="text-gray-900 font-medium">R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      {sug?.is_substituicao && sug.preco_unitario != null ? (
+                        <div>
+                          <p className="text-gray-400 line-through text-[10px]">R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          <p className="text-gray-900 font-medium">R$ {sug.preco_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                      ) : (
+                        <p className="text-gray-900 font-medium">R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      )}
                     </div>
                     <div className="bg-gray-50 rounded-lg p-2">
                       <p className="text-gray-400">Qtd original</p>
@@ -1295,7 +1589,137 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 </div>
               )
             })}
+
+            {/* Mobile: itens novos adicionados via busca */}
+            {sugestoes.filter(s => s.is_novo).map((sug, idx) => {
+              const globalIndex = sugestoes.indexOf(sug)
+              const preco = sug.preco_unitario || 0
+              const subtotalBase = preco * sug.quantidade_sugerida
+              const descontoValMobile = subtotalBase * (sug.desconto_percentual / 100)
+              const subtotalComDescontoMobile = subtotalBase - descontoValMobile
+
+              return (
+                <div key={`novo-mobile-${idx}`} className="p-4 space-y-3 border-l-4 border-secondary-400 bg-secondary-50/30">
+                  {/* Nome do produto novo + botao remover */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-secondary-100 text-secondary-700">Novo</span>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-900 leading-tight">{sug.produto_nome}</p>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+                        {sug.gtin && <span>EAN: {sug.gtin}</span>}
+                        {sug.codigo_fornecedor && <span>SKU: {sug.codigo_fornecedor}</span>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRemoverItemNovo(globalIndex)}
+                      className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                      title="Remover item"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Info basica */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-gray-400">Valor unit.</p>
+                      <p className="text-gray-900 font-medium">{preco > 0 ? `R$ ${preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-gray-400">Subtotal</p>
+                      <p className="text-gray-900 font-semibold">R$ {subtotalComDescontoMobile.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                  </div>
+
+                  {/* Campos de sugestao para item novo */}
+                  {canSuggest && (
+                    <div className="bg-[#FFAA11]/5 border border-[#FFAA11]/20 rounded-xl p-3 space-y-3">
+                      <p className="text-xs font-semibold text-[#FFAA11] uppercase tracking-wider">Sua sugestao</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Qtd sugerida</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={sug.quantidade_sugerida}
+                            onChange={(e) => updateSugestao(null, 'quantidade_sugerida', Number(e.target.value), globalIndex)}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Desconto %</label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.5}
+                            value={sug.desconto_percentual || ''}
+                            onChange={(e) => updateSugestao(null, 'desconto_percentual', Number(e.target.value) || 0, globalIndex)}
+                            placeholder="0"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Bonificacao (un)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={sug.bonificacao_quantidade || ''}
+                            onChange={(e) => updateSugestao(null, 'bonificacao_quantidade', Number(e.target.value) || 0, globalIndex)}
+                            placeholder="0"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Validade</label>
+                          <input
+                            id={`validade-novo-${globalIndex}`}
+                            type="date"
+                            value={sug.validade}
+                            onChange={(e) => updateSugestao(null, 'validade', e.target.value, globalIndex)}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Subtotal sugerido */}
+                      <div className="flex items-center justify-between pt-2 border-t border-[#FFAA11]/20">
+                        <span className="text-xs text-gray-500">Subtotal sugerido</span>
+                        <div className="text-right">
+                          <span className="text-sm font-bold text-[#336FB6]">
+                            R$ {subtotalComDescontoMobile.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                          {sug.bonificacao_quantidade > 0 && (
+                            <span className="text-xs text-blue-500 ml-1.5">+{sug.bonificacao_quantidade} gratis</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
+
+          {/* Botao Adicionar Produto */}
+          {canSuggest && (
+            <div className="mt-4 flex justify-center px-4 pb-4">
+              <button
+                onClick={handleAdicionarProduto}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-secondary-50 to-secondary-100 hover:from-secondary-100 hover:to-secondary-200 text-secondary-700 font-semibold rounded-xl border border-secondary-300/60 transition-all shadow-sm hover:shadow-md"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Adicionar Produto
+              </button>
+            </div>
+          )}
 
           {/* Observacao + Submit */}
           {canSuggest && (
@@ -1417,6 +1841,16 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           loading={cancelando}
           titulo="Cancelar Pedido"
           subtitulo="Informe o motivo do cancelamento. O lojista sera notificado."
+        />
+
+        {/* Modal de Busca de Produtos */}
+        <ProductSearchModal
+          isOpen={modalBuscaAberto}
+          onClose={() => setModalBuscaAberto(false)}
+          onSelect={handleProdutoSelecionado}
+          pedidoId={id}
+          mode={modalBuscaMode}
+          itemOriginalNome={itemParaSubstituirNome}
         />
       </div>
     </FornecedorLayout>

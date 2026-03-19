@@ -3,6 +3,38 @@
 import type { StatusInterno, SugestaoFornecedor, SugestaoItem } from '@/types/pedido-compra'
 import { ESTADOS_FINAIS } from '@/types/pedido-compra'
 
+// Botao CTA principal com shimmer animado
+function ShimmerButton({ onClick, disabled, children, className }: {
+  onClick: () => void
+  disabled: boolean
+  children: React.ReactNode
+  className: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`relative overflow-hidden ${className}`}
+    >
+      <span className="relative z-10 inline-flex items-center gap-2.5">{children}</span>
+      <span
+        className="absolute inset-0 z-0"
+        style={{
+          background: 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.25) 45%, rgba(255,255,255,0.35) 50%, rgba(255,255,255,0.25) 55%, transparent 70%)',
+          backgroundSize: '250% 100%',
+          animation: 'shimmer-wave 3s ease-in-out infinite',
+        }}
+      />
+      <style>{`
+        @keyframes shimmer-wave {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
+    </button>
+  )
+}
+
 interface StatusActionCardProps {
   statusInterno: StatusInterno
   sugestoes: SugestaoFornecedor[]
@@ -11,7 +43,7 @@ interface StatusActionCardProps {
   onEnviarFornecedor: () => void
   onAceitarSugestao: () => void
   onRejeitarSugestao: () => void
-  onManterOriginal?: () => void // Rejeita sugestao mas mantem pedido original
+  onManterOriginal?: () => void
   onCancelar?: () => void
   onRecolher?: () => void
   recolhendo?: boolean
@@ -23,7 +55,6 @@ interface StatusActionCardProps {
   setObservacaoResposta: (value: string) => void
   formatCurrency: (value: number) => string
   formatDate: (date: string) => string
-  // Indica se pedido ja esta em estado final no Bling (situacao 1 ou 2)
   situacaoBling?: number
 }
 
@@ -50,24 +81,17 @@ export function StatusActionCard({
   situacaoBling,
 }: StatusActionCardProps) {
   const pendenteSugestao = sugestoes.find(s => s.status === 'pendente')
-
-  // Verifica se pode cancelar (nao esta em estado final e Bling nao esta finalizado/cancelado)
   const podeCancelar = !ESTADOS_FINAIS.includes(statusInterno) && situacaoBling !== 1 && situacaoBling !== 2
-
-  // Pode recolher envio se esta em estado de negociacao ativa (nao rascunho, nao final)
   const podeRecolher = ['enviado_fornecedor', 'sugestao_pendente', 'contra_proposta_pendente'].includes(statusInterno)
-
-  // Verifica se pode finalizar (apenas quando aceito e Bling nao esta finalizado/cancelado)
   const podeFinalizar = statusInterno === 'aceito' && situacaoBling !== 1 && situacaoBling !== 2
 
-  // Botao de cancelar compartilhado para estados que permitem
   const CancelarButton = () => (
     podeCancelar && onCancelar ? (
       <button
         onClick={onCancelar}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50/80 rounded-xl transition-all duration-200"
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
         Cancelar Pedido
@@ -80,7 +104,7 @@ export function StatusActionCard({
       <button
         onClick={onRecolher}
         disabled={recolhendo}
-        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors disabled:opacity-50"
+        className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-secondary-700 bg-gradient-to-r from-secondary-50 to-secondary-100/80 hover:from-secondary-100 hover:to-secondary-200/80 border border-secondary-300/60 rounded-xl transition-all duration-200 disabled:opacity-50 shadow-sm hover:shadow-md"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
@@ -90,33 +114,37 @@ export function StatusActionCard({
     ) : null
   )
 
-  // Rascunho - Enviar ao Fornecedor
+  // ─── Rascunho ───
   if (statusInterno === 'rascunho') {
     return (
-      <div className="bg-gradient-to-br from-primary-50 to-blue-50 rounded-xl border border-primary-200 p-6">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center flex-shrink-0">
-            <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900">Enviar ao Fornecedor</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Envie este pedido para o fornecedor revisar e sugerir ajustes comerciais como quantidade, desconto, bonificacao e validade.
-            </p>
-            <div className="mt-4 flex items-center gap-3">
-              <button
-                onClick={onEnviarFornecedor}
-                disabled={enviandoFornecedor}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                </svg>
-                {enviandoFornecedor ? 'Enviando...' : 'Enviar ao Fornecedor'}
-              </button>
-              <CancelarButton />
+      <div className="relative overflow-hidden rounded-2xl border border-primary-200/60 bg-white shadow-lg shadow-primary-100/30">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-50/80 via-white to-blue-50/50" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary-100/30 rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="relative p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary-200/50">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xl font-bold text-gray-900 tracking-tight">Enviar ao Fornecedor</h3>
+              <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+                Envie este pedido para revisao. O fornecedor podera sugerir ajustes em quantidade, desconto, bonificacao e validade.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <ShimmerButton
+                  onClick={onEnviarFornecedor}
+                  disabled={enviandoFornecedor}
+                  className="px-7 py-3.5 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 shadow-lg shadow-primary-200/50 hover:shadow-xl hover:shadow-primary-300/40 hover:-translate-y-0.5"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                  </svg>
+                  {enviandoFornecedor ? 'Enviando...' : 'Enviar ao Fornecedor'}
+                </ShimmerButton>
+                <CancelarButton />
+              </div>
             </div>
           </div>
         </div>
@@ -124,31 +152,48 @@ export function StatusActionCard({
     )
   }
 
-  // Enviado - Aguardando
+  // ─── Enviado - Aguardando ───
   if (statusInterno === 'enviado_fornecedor') {
     return (
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-6">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-            <svg className="w-6 h-6 text-blue-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900">Aguardando Fornecedor</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              O pedido foi enviado e esta aguardando a analise do fornecedor. Voce sera notificado quando houver uma resposta.
-            </p>
-            <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm text-blue-600">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+      <div className="relative overflow-hidden rounded-2xl border border-secondary-300/60 bg-white shadow-lg shadow-secondary-100/40">
+        <div className="absolute inset-0 bg-gradient-to-br from-secondary-50/70 via-white to-amber-50/40" />
+        <div className="absolute top-0 right-0 w-40 h-40 bg-secondary-200/20 rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-secondary-100/20 rounded-full translate-y-1/2 -translate-x-1/2" />
+        <div className="relative p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 bg-gradient-to-br from-secondary-400 to-secondary-500 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-secondary-200/50">
+              <svg className="w-7 h-7 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xl font-bold text-gray-900 tracking-tight">Aguardando Fornecedor</h3>
+              <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+                O pedido foi enviado e esta aguardando analise. Voce sera notificado quando houver uma resposta.
+              </p>
+              <div className="mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-2.5 px-4 py-2 bg-secondary-50/80 rounded-xl border border-secondary-200/40">
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-secondary-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 bg-secondary-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 bg-secondary-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-sm font-medium text-secondary-600">Aguardando resposta</span>
                 </div>
-                <span>Aguardando resposta do fornecedor</span>
+                <div className="flex items-center gap-2">
+                  <ShimmerButton
+                    onClick={onRecolher || (() => {})}
+                    disabled={recolhendo || !onRecolher}
+                    className="px-5 py-2.5 bg-gradient-to-r from-secondary-500 to-secondary-600 hover:from-secondary-600 hover:to-secondary-700 text-white rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 shadow-lg shadow-secondary-200/50 hover:shadow-xl hover:shadow-secondary-300/40 hover:-translate-y-0.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                    </svg>
+                    {recolhendo ? 'Recolhendo...' : 'Recolher Envio'}
+                  </ShimmerButton>
+                  <CancelarButton />
+                </div>
               </div>
-              <div className="flex items-center gap-2"><RecolherButton /><CancelarButton /></div>
             </div>
           </div>
         </div>
@@ -156,9 +201,8 @@ export function StatusActionCard({
     )
   }
 
-  // Sugestao Pendente - Analisar
+  // ─── Sugestao Pendente ───
   if (statusInterno === 'sugestao_pendente' && sugestaoItens && sugestaoItens.length > 0) {
-    // Calcular totais e economia
     let totalOriginal = 0
     let totalComDescontoItem = 0
     let totalBonificacaoUnidades = 0
@@ -169,10 +213,7 @@ export function StatusActionCard({
       const qtdOriginal = itemOriginal?.quantidade || 0
       const qtdSugerida = sItem.quantidade_sugerida
       const descontoItem = sItem.desconto_percentual || 0
-      // bonificacao_quantidade eh quantidade direta de unidades, nao percentual
       const unidadesBonificadas = sItem.bonificacao_quantidade || 0
-
-      // Calculos
       const subtotalOriginal = valorUnitario * qtdOriginal
       const valorComDesconto = valorUnitario * (1 - descontoItem / 100)
       const subtotalSugerido = valorComDesconto * qtdSugerida
@@ -181,27 +222,15 @@ export function StatusActionCard({
       totalComDescontoItem += subtotalSugerido
       totalBonificacaoUnidades += unidadesBonificadas
 
-      return {
-        ...sItem,
-        itemOriginal,
-        valorUnitario,
-        qtdOriginal,
-        valorComDesconto,
-        subtotalOriginal,
-        subtotalSugerido,
-        unidadesBonificadas,
-      }
+      return { ...sItem, itemOriginal, valorUnitario, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas }
     })
 
-    // Condicoes comerciais gerais
     const valorMinimo = pendenteSugestao?.valor_minimo_pedido || 0
     const descontoGeral = pendenteSugestao?.desconto_geral || 0
-    // bonificacao_quantidade_geral eh quantidade direta de unidades, nao percentual
     const bonificacaoGeral = pendenteSugestao?.bonificacao_quantidade_geral || 0
     const prazoEntrega = pendenteSugestao?.prazo_entrega_dias
     const validadeProposta = pendenteSugestao?.validade_proposta
 
-    // Aplicar desconto geral se atingir valor minimo
     let descontoGeralValor = 0
     let totalFinal = totalComDescontoItem
     if (valorMinimo > 0 && totalComDescontoItem >= valorMinimo && descontoGeral > 0) {
@@ -209,26 +238,27 @@ export function StatusActionCard({
       totalFinal = totalComDescontoItem - descontoGeralValor
     }
 
-    // Calcular economia
     const economia = totalOriginal - totalFinal
     const economiaPercent = totalOriginal > 0 ? (economia / totalOriginal) * 100 : 0
 
     return (
-      <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border-2 border-amber-300 overflow-hidden">
-        <div className="px-6 py-4 border-b border-amber-200 bg-amber-100/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-200 rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <div className="relative overflow-hidden rounded-2xl border border-secondary-300/60 bg-white shadow-lg shadow-secondary-100/40">
+        {/* Header */}
+        <div className="relative px-6 py-5 bg-gradient-to-r from-secondary-50 via-secondary-100/50 to-amber-50/30 border-b border-secondary-200/60">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-secondary-200/20 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="relative flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-secondary-400 to-secondary-500 rounded-xl flex items-center justify-center shadow-lg shadow-secondary-200/40">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
               </svg>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-amber-900">Sugestao do Fornecedor</h3>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-bold text-gray-900 tracking-tight">Sugestao do Fornecedor</h3>
               {pendenteSugestao && (
-                <p className="text-sm text-amber-700">
-                  Enviada por {pendenteSugestao.users_fornecedor?.nome || 'Fornecedor'}
+                <p className="text-sm text-secondary-700/80">
+                  Enviada por <span className="font-medium">{pendenteSugestao.users_fornecedor?.nome || 'Fornecedor'}</span>
                   {pendenteSugestao.observacao_fornecedor && (
-                    <span className="italic"> - &quot;{pendenteSugestao.observacao_fornecedor}&quot;</span>
+                    <span className="italic text-gray-500"> — &quot;{pendenteSugestao.observacao_fornecedor}&quot;</span>
                   )}
                 </p>
               )}
@@ -236,96 +266,81 @@ export function StatusActionCard({
           </div>
         </div>
 
-        {/* Condicoes comerciais gerais (se houver) */}
+        {/* Condicoes comerciais */}
         {(valorMinimo > 0 || prazoEntrega || validadeProposta) && (
-          <div className="px-6 py-3 bg-blue-50 border-b border-amber-200">
-            <div className="flex flex-wrap gap-4 text-sm">
+          <div className="px-6 py-3.5 bg-primary-50/40 border-b border-secondary-200/40">
+            <div className="flex flex-wrap gap-5 text-sm">
               {valorMinimo > 0 && (
-                <div>
-                  <span className="text-gray-500">Compra acima de:</span>{' '}
-                  <span className="font-medium text-blue-700">{formatCurrency(valorMinimo)}</span>
-                  {descontoGeral > 0 && (
-                    <span className="text-green-600 ml-1">({descontoGeral}% desc)</span>
-                  )}
-                  {bonificacaoGeral > 0 && (
-                    <span className="text-purple-600 ml-1">(+{bonificacaoGeral} un bonif)</span>
-                  )}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400">Minimo:</span>
+                  <span className="font-semibold text-primary-700">{formatCurrency(valorMinimo)}</span>
+                  {descontoGeral > 0 && <span className="text-green-600 font-medium">({descontoGeral}% desc)</span>}
+                  {bonificacaoGeral > 0 && <span className="text-purple-600 font-medium">(+{bonificacaoGeral} un)</span>}
                 </div>
               )}
               {prazoEntrega && (
-                <div>
-                  <span className="text-gray-500">Prazo:</span>{' '}
-                  <span className="font-medium">{prazoEntrega} dias uteis</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400">Prazo:</span>
+                  <span className="font-semibold text-gray-700">{prazoEntrega} dias uteis</span>
                 </div>
               )}
               {validadeProposta && (
-                <div>
-                  <span className="text-gray-500">Valida ate:</span>{' '}
-                  <span className="font-medium">{formatDate(validadeProposta)}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400">Valida ate:</span>
+                  <span className="font-semibold text-gray-700">{formatDate(validadeProposta)}</span>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Tabela comparativa com valores calculados */}
+        {/* Tabela comparativa */}
         <div className="overflow-x-auto max-h-64 overflow-y-auto">
           <table className="w-full text-sm">
-            <thead className="bg-amber-50 sticky top-0">
+            <thead className="bg-gray-50/80 sticky top-0">
               <tr>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase">Produto</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qtd Orig</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-amber-700 uppercase">Qtd Sug</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-amber-700 uppercase">Desc%</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-amber-700 uppercase">Bonif</th>
-                <th className="px-3 py-2 text-center text-xs font-medium text-amber-700 uppercase">Validade</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Valor c/Desc</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Subtotal Orig</th>
-                <th className="px-3 py-2 text-right text-xs font-medium text-green-700 uppercase">Subtotal Sug</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Produto</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Qtd Orig</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-secondary-600 uppercase tracking-wider">Qtd Sug</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-secondary-600 uppercase tracking-wider">Desc%</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-secondary-600 uppercase tracking-wider">Bonif</th>
+                <th className="px-3 py-2.5 text-center text-xs font-semibold text-secondary-600 uppercase tracking-wider">Validade</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Valor c/Desc</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Sub Orig</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-green-600 uppercase tracking-wider">Sub Sug</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-amber-100">
+            <tbody className="divide-y divide-gray-100">
               {itensCalculados.map((item) => {
                 const qtdMudou = item.qtdOriginal !== item.quantidade_sugerida
                 return (
-                  <tr key={item.id} className="hover:bg-amber-50/50">
-                    <td className="px-3 py-2 text-gray-900 truncate max-w-[150px]" title={item.itemOriginal?.descricao}>
+                  <tr key={item.id} className="hover:bg-secondary-50/30 transition-colors">
+                    <td className="px-4 py-2.5 text-gray-900 truncate max-w-[150px] font-medium" title={item.itemOriginal?.descricao}>
                       {item.itemOriginal?.descricao || `Item #${item.item_pedido_compra_id}`}
                     </td>
-                    <td className="px-3 py-2 text-gray-500 text-right">{item.qtdOriginal}</td>
-                    <td className={`px-3 py-2 text-right font-medium ${qtdMudou ? 'text-amber-700' : 'text-gray-900'}`}>
+                    <td className="px-3 py-2.5 text-gray-400 text-right tabular-nums">{item.qtdOriginal}</td>
+                    <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${qtdMudou ? 'text-secondary-700' : 'text-gray-700'}`}>
                       {item.quantidade_sugerida}
                       {qtdMudou && (
-                        <span className="ml-1 text-xs">
-                          ({item.quantidade_sugerida > item.qtdOriginal ? '+' : ''}
-                          {item.quantidade_sugerida - item.qtdOriginal})
+                        <span className="ml-1 text-xs font-normal">
+                          ({item.quantidade_sugerida > item.qtdOriginal ? '+' : ''}{item.quantidade_sugerida - item.qtdOriginal})
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      {item.desconto_percentual > 0 ? (
-                        <span className="text-green-600 font-medium">{item.desconto_percentual}%</span>
-                      ) : '-'}
+                    <td className="px-3 py-2.5 text-right">
+                      {item.desconto_percentual > 0 ? <span className="text-green-600 font-semibold">{item.desconto_percentual}%</span> : <span className="text-gray-300">-</span>}
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      {item.unidadesBonificadas > 0 ? (
-                        <span className="text-purple-600 font-medium">+{item.unidadesBonificadas}</span>
-                      ) : '-'}
+                    <td className="px-3 py-2.5 text-right">
+                      {item.unidadesBonificadas > 0 ? <span className="text-purple-600 font-semibold">+{item.unidadesBonificadas}</span> : <span className="text-gray-300">-</span>}
                     </td>
-                    <td className="px-3 py-2 text-center">
-                      {item.validade ? (
-                        <span className="text-amber-700 font-medium">{formatDate(item.validade)}</span>
-                      ) : '-'}
+                    <td className="px-3 py-2.5 text-center">
+                      {item.validade ? <span className="text-secondary-700 font-medium">{formatDate(item.validade)}</span> : <span className="text-gray-300">-</span>}
                     </td>
-                    <td className="px-3 py-2 text-right text-gray-600">
-                      {item.desconto_percentual > 0 ? formatCurrency(item.valorComDesconto) : '-'}
+                    <td className="px-3 py-2.5 text-right text-gray-500 tabular-nums">
+                      {item.desconto_percentual > 0 ? formatCurrency(item.valorComDesconto) : <span className="text-gray-300">-</span>}
                     </td>
-                    <td className="px-3 py-2 text-right text-gray-500">
-                      {formatCurrency(item.subtotalOriginal)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-medium text-green-700">
-                      {formatCurrency(item.subtotalSugerido)}
-                    </td>
+                    <td className="px-3 py-2.5 text-right text-gray-400 tabular-nums">{formatCurrency(item.subtotalOriginal)}</td>
+                    <td className="px-3 py-2.5 text-right font-semibold text-green-700 tabular-nums">{formatCurrency(item.subtotalSugerido)}</td>
                   </tr>
                 )
               })}
@@ -333,70 +348,70 @@ export function StatusActionCard({
           </table>
         </div>
 
-        {/* Resumo da sugestao */}
-        <div className="px-6 py-4 bg-gradient-to-r from-green-50 to-emerald-50 border-t border-amber-200">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        {/* Resumo financeiro */}
+        <div className="px-6 py-5 bg-gradient-to-r from-green-50/80 via-emerald-50/50 to-white border-t border-gray-100">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-gray-500">Total Original</p>
-              <p className="text-lg font-semibold text-gray-700">{formatCurrency(totalOriginal)}</p>
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Original</p>
+              <p className="text-lg font-bold text-gray-600 tabular-nums mt-0.5">{formatCurrency(totalOriginal)}</p>
             </div>
             <div>
-              <p className="text-gray-500">Total c/ Desconto Item</p>
-              <p className="text-lg font-semibold text-gray-700">{formatCurrency(totalComDescontoItem)}</p>
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">c/ Desconto Item</p>
+              <p className="text-lg font-bold text-gray-600 tabular-nums mt-0.5">{formatCurrency(totalComDescontoItem)}</p>
             </div>
             {descontoGeralValor > 0 && (
               <div>
-                <p className="text-gray-500">Desconto Geral ({descontoGeral}%)</p>
-                <p className="text-lg font-semibold text-green-600">-{formatCurrency(descontoGeralValor)}</p>
+                <p className="text-xs font-medium text-green-500 uppercase tracking-wider">Desc. Geral ({descontoGeral}%)</p>
+                <p className="text-lg font-bold text-green-600 tabular-nums mt-0.5">-{formatCurrency(descontoGeralValor)}</p>
               </div>
             )}
-            <div className="bg-green-100 rounded-lg p-2 -m-1">
-              <p className="text-green-700 font-medium">Total Final</p>
-              <p className="text-xl font-bold text-green-700">{formatCurrency(totalFinal)}</p>
+            <div className="bg-gradient-to-br from-green-100/80 to-emerald-50 rounded-xl p-3 -m-1 border border-green-200/60">
+              <p className="text-xs font-bold text-green-600 uppercase tracking-wider">Total Final</p>
+              <p className="text-xl font-extrabold text-green-700 tabular-nums mt-0.5">{formatCurrency(totalFinal)}</p>
               {economia > 0 && (
-                <p className="text-xs text-green-600">
+                <p className="text-xs text-green-600 font-medium mt-0.5">
                   Economia: {formatCurrency(economia)} (-{economiaPercent.toFixed(1)}%)
                 </p>
               )}
             </div>
           </div>
           {totalBonificacaoUnidades > 0 && (
-            <div className="mt-3 p-2 bg-purple-50 rounded-lg">
+            <div className="mt-3 px-3 py-2 bg-purple-50/80 rounded-xl border border-purple-100">
               <p className="text-sm text-purple-700">
-                <span className="font-medium">Bonificacao:</span> +{totalBonificacaoUnidades} unidade{totalBonificacaoUnidades > 1 ? 's' : ''} gratis
+                <span className="font-semibold">Bonificacao:</span> +{totalBonificacaoUnidades} unidade{totalBonificacaoUnidades > 1 ? 's' : ''} gratis
               </p>
             </div>
           )}
         </div>
 
         {/* Acoes */}
-        <div className="px-6 py-4 border-t border-amber-200 bg-amber-50/50">
-          <div className="mb-3">
+        <div className="px-6 py-5 border-t border-gray-100 bg-gray-50/30">
+          <div className="mb-4">
             <input
               type="text"
               value={observacaoResposta}
               onChange={(e) => setObservacaoResposta(e.target.value)}
               placeholder="Observacao para o fornecedor (opcional)"
-              className="w-full px-3 py-2 text-sm border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+              className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/30 focus:border-primary-400 outline-none bg-white transition-all"
             />
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <button
+              <ShimmerButton
                 onClick={onAceitarSugestao}
                 disabled={processandoSugestao}
-                className="inline-flex w-full sm:w-auto items-center justify-center sm:justify-start gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
+                className="w-full sm:w-auto px-7 py-3.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 shadow-lg shadow-green-200/50 hover:shadow-xl hover:shadow-green-300/40 hover:-translate-y-0.5"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
                 {processandoSugestao ? 'Processando...' : 'Aceitar Sugestao'}
-              </button>
+              </ShimmerButton>
               {onManterOriginal && (
                 <button
                   onClick={onManterOriginal}
                   disabled={processandoSugestao}
-                  className="inline-flex w-full sm:w-auto items-center justify-center sm:justify-start gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg font-medium transition-colors disabled:opacity-50"
+                  className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 rounded-xl font-medium transition-all duration-200 disabled:opacity-50"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
@@ -405,47 +420,8 @@ export function StatusActionCard({
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2"><RecolherButton /><CancelarButton /></div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Aceito
-  if (statusInterno === 'aceito') {
-    const ultimaSugestao = sugestoes.find(s => s.status === 'aceita')
-    return (
-      <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200 p-6">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
-            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900">Sugestao Aceita</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Voce aceitou a sugestao do fornecedor. Os itens do pedido foram atualizados com os novos valores.
-            </p>
-            {ultimaSugestao?.observacao_lojista && (
-              <p className="mt-2 text-sm text-green-700 italic">
-                &quot;{ultimaSugestao.observacao_lojista}&quot;
-              </p>
-            )}
-            <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
-              {podeFinalizar && onFinalizar && (
-                <button
-                  onClick={onFinalizar}
-                  disabled={finalizando}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 shadow-sm"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                  </svg>
-                  {finalizando ? 'Finalizando...' : 'Finalizar Pedido'}
-                </button>
-              )}
+            <div className="flex items-center gap-2">
+              <RecolherButton />
               <CancelarButton />
             </div>
           </div>
@@ -454,74 +430,131 @@ export function StatusActionCard({
     )
   }
 
-  // Rejeitado
+  // ─── Aceito ───
+  if (statusInterno === 'aceito') {
+    const ultimaSugestao = sugestoes.find(s => s.status === 'aceita')
+    return (
+      <div className="relative overflow-hidden rounded-2xl border border-green-200/60 bg-white shadow-lg shadow-green-100/30">
+        <div className="absolute inset-0 bg-gradient-to-br from-green-50/60 via-white to-emerald-50/30" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-green-100/20 rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="relative p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-green-200/50">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xl font-bold text-gray-900 tracking-tight">Sugestao Aceita</h3>
+              <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+                Os itens do pedido foram atualizados com os novos valores negociados.
+              </p>
+              {ultimaSugestao?.observacao_lojista && (
+                <p className="mt-2 text-sm text-green-600 italic bg-green-50/60 px-3 py-1.5 rounded-lg">
+                  &quot;{ultimaSugestao.observacao_lojista}&quot;
+                </p>
+              )}
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                {podeFinalizar && onFinalizar && (
+                  <ShimmerButton
+                    onClick={onFinalizar}
+                    disabled={finalizando || false}
+                    className="px-7 py-3.5 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 shadow-lg shadow-purple-200/50 hover:shadow-xl hover:shadow-purple-300/40 hover:-translate-y-0.5"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                    </svg>
+                    {finalizando ? 'Finalizando...' : 'Finalizar Pedido'}
+                  </ShimmerButton>
+                )}
+                <CancelarButton />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ─── Rejeitado ───
   if (statusInterno === 'rejeitado') {
     const ultimaSugestao = sugestoes.find(s => s.status === 'rejeitada')
     return (
-      <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-xl border border-red-200 p-6">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
-            <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900">Sugestao Rejeitada</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Voce rejeitou a sugestao do fornecedor. O fornecedor pode enviar uma nova proposta.
-            </p>
-            {ultimaSugestao?.observacao_lojista && (
-              <p className="mt-2 text-sm text-red-700 italic">
-                Motivo: &quot;{ultimaSugestao.observacao_lojista}&quot;
+      <div className="relative overflow-hidden rounded-2xl border border-red-200/60 bg-white shadow-lg shadow-red-100/20">
+        <div className="absolute inset-0 bg-gradient-to-br from-red-50/50 via-white to-rose-50/30" />
+        <div className="relative p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-red-200/40">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xl font-bold text-gray-900 tracking-tight">Sugestao Rejeitada</h3>
+              <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+                O fornecedor pode enviar uma nova proposta, ou voce pode recolher o envio e editar o pedido.
               </p>
-            )}
-            {(podeCancelar || podeRecolher) && (
-              <div className="mt-4">
-                <div className="flex items-center gap-2"><RecolherButton /><CancelarButton /></div>
-              </div>
-            )}
+              {ultimaSugestao?.observacao_lojista && (
+                <p className="mt-2 text-sm text-red-600 italic bg-red-50/60 px-3 py-1.5 rounded-lg">
+                  Motivo: &quot;{ultimaSugestao.observacao_lojista}&quot;
+                </p>
+              )}
+              {(podeCancelar || podeRecolher) && (
+                <div className="mt-5 flex items-center gap-3">
+                  <RecolherButton />
+                  <CancelarButton />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
     )
   }
 
-  // Cancelado
+  // ─── Cancelado ───
   if (statusInterno === 'cancelado') {
     return (
-      <div className="bg-gradient-to-br from-gray-100 to-gray-50 rounded-xl border border-gray-300 p-6">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 bg-gray-200 rounded-xl flex items-center justify-center flex-shrink-0">
-            <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900">Pedido Cancelado</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Este pedido foi cancelado e nao pode mais ser alterado.
-            </p>
+      <div className="relative overflow-hidden rounded-2xl border border-gray-200/60 bg-white shadow-sm">
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-50/80 via-white to-gray-50/40" />
+        <div className="relative p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 bg-gradient-to-br from-gray-300 to-gray-400 rounded-2xl flex items-center justify-center flex-shrink-0">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xl font-bold text-gray-900 tracking-tight">Pedido Cancelado</h3>
+              <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+                Este pedido foi cancelado e nao pode mais ser alterado.
+              </p>
+            </div>
           </div>
         </div>
       </div>
     )
   }
 
-  // Finalizado
+  // ─── Finalizado ───
   if (statusInterno === 'finalizado') {
     return (
-      <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl border border-purple-200 p-6">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
-            <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900">Pedido Finalizado</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Este pedido foi concluido com sucesso. Todas as negociacoes foram finalizadas.
-            </p>
+      <div className="relative overflow-hidden rounded-2xl border border-purple-200/60 bg-white shadow-lg shadow-purple-100/20">
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-50/60 via-white to-violet-50/30" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-purple-100/20 rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="relative p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-violet-600 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-purple-200/40">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xl font-bold text-gray-900 tracking-tight">Pedido Finalizado</h3>
+              <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+                Este pedido foi concluido com sucesso. Todas as negociacoes foram finalizadas.
+              </p>
+            </div>
           </div>
         </div>
       </div>

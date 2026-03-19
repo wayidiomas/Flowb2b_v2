@@ -8,13 +8,20 @@ interface RouteContext {
 }
 
 interface SugestaoItem {
-  item_id: number
+  item_id: number | null  // null para itens novos
   quantidade_sugerida: number
   valor_unitario_sugerido: number
   desconto_percentual?: number
   bonificacao_quantidade?: number
   validade?: string
   observacao?: string
+  // Novos campos para troca e adição de produtos
+  gtin?: string | null
+  codigo_fornecedor?: string | null
+  is_substituicao?: boolean
+  is_novo?: boolean
+  produto_nome?: string | null
+  preco_unitario?: number | null
 }
 
 export async function POST(
@@ -46,6 +53,30 @@ export async function POST(
         { success: false, error: 'Sugestoes sao obrigatorias' },
         { status: 400 }
       )
+    }
+
+    // Validação extra para itens novos e substituições
+    for (const item of sugestoes) {
+      if (item.is_novo) {
+        if (!item.produto_nome) {
+          return NextResponse.json(
+            { success: false, error: 'produto_nome e obrigatorio para itens novos' },
+            { status: 400 }
+          )
+        }
+        if (!item.gtin && !item.codigo_fornecedor) {
+          return NextResponse.json(
+            { success: false, error: 'gtin ou codigo_fornecedor e obrigatorio para itens novos' },
+            { status: 400 }
+          )
+        }
+      }
+      if (item.is_substituicao && !item.item_id) {
+        return NextResponse.json(
+          { success: false, error: 'item_id e obrigatorio para substituicoes' },
+          { status: 400 }
+        )
+      }
     }
 
     const supabase = createServerSupabaseClient()
@@ -100,13 +131,19 @@ export async function POST(
     // Inserir novas sugestoes
     const sugestoesParaInserir = sugestoes.map(s => ({
       pedido_compra_id: pedidoId,
-      item_id: s.item_id,
+      item_id: s.item_id || null,
       quantidade_sugerida: s.quantidade_sugerida,
       valor_unitario_sugerido: s.valor_unitario_sugerido,
       desconto_percentual: s.desconto_percentual || 0,
       bonificacao_quantidade: s.bonificacao_quantidade || 0,
       validade: s.validade || null,
       observacao: s.observacao || null,
+      gtin: s.gtin || null,
+      codigo_fornecedor: s.codigo_fornecedor || null,
+      is_substituicao: s.is_substituicao || false,
+      is_novo: s.is_novo || false,
+      produto_nome: s.produto_nome || null,
+      preco_unitario: s.preco_unitario || null,
     }))
 
     const { error: insertError } = await supabase

@@ -6,6 +6,178 @@ import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 import { blingFetch } from '@/lib/bling-fetch'
 import { logActivity } from '@/lib/activity-log'
 
+// ============================================================
+// Funcoes auxiliares para resolucao de produtos (troca/novos)
+// ============================================================
+
+/**
+ * Resolve um produto pelo EAN (gtin) ou codigo_fornecedor.
+ * Retorna produto_id, nome e valor se encontrado, null caso contrario.
+ */
+async function resolverProduto(
+  gtin: string | null,
+  codigoFornecedor: string | null,
+  empresaId: number,
+  fornecedorId: number,
+  supabase: ReturnType<typeof createServerSupabaseClient>
+): Promise<{ produto_id: number; nome: string; valor: number } | null> {
+  // 1. Tentar por EAN
+  if (gtin) {
+    const { data } = await supabase
+      .from('produtos')
+      .select('id, nome, preco')
+      .eq('gtin', gtin)
+      .eq('empresa_id', empresaId)
+      .limit(1)
+      .maybeSingle()
+    if (data) return { produto_id: data.id, nome: data.nome, valor: data.preco || 0 }
+  }
+
+  // 2. Tentar por codigo do fornecedor
+  if (codigoFornecedor) {
+    const { data } = await supabase
+      .from('fornecedores_produtos')
+      .select('produto_id, produtos!inner(id, nome, preco)')
+      .eq('codigo_fornecedor', codigoFornecedor)
+      .eq('empresa_id', empresaId)
+      .eq('fornecedor_id', fornecedorId)
+      .limit(1)
+      .maybeSingle()
+    if (data) {
+      const produto = data.produtos as unknown as { id: number; nome: string; preco: number | null }
+      return {
+        produto_id: data.produto_id,
+        nome: produto.nome,
+        valor: produto.preco || 0,
+      }
+    }
+  }
+
+  return null // Nao encontrou — precisa vincular no Bling
+}
+
+/**
+ * Tenta vincular produto ao fornecedor no Bling e no Supabase.
+ * Best-effort: se falhar, loga warning e retorna o que puder.
+ * Retorna produto_id/nome/valor quando possivel.
+ */
+async function vincularProdutoBling(
+  gtin: string | null,
+  codigoFornecedor: string | null,
+  produtoNome: string | null,
+  valorSugerido: number,
+  empresaId: number,
+  fornecedorId: number,
+  supabase: ReturnType<typeof createServerSupabaseClient>
+): Promise<{ produto_id: number | null; nome: string; valor: number }> {
+  const fallback = { produto_id: null, nome: produtoNome || 'Produto sugerido', valor: valorSugerido }
+
+  try {
+    // 1. Buscar produto pelo gtin em QUALQUER empresa
+    let produtoLocal: { id: number; id_produto_bling: number | null; nome: string; preco: number | null; empresa_id: number } | null = null
+
+    if (gtin) {
+      const { data } = await supabase
+        .from('produtos')
+        .select('id, id_produto_bling, nome, preco, empresa_id')
+        .eq('gtin', gtin)
+        .limit(1)
+        .maybeSingle()
+      produtoLocal = data
+    }
+
+    // Se encontrou em outra empresa mas nao nessa — logar e retornar fallback
+    if (produtoLocal && produtoLocal.empresa_id !== empresaId) {
+      console.warn(`[vincularProdutoBling] Produto com gtin=${gtin} existe na empresa ${produtoLocal.empresa_id} mas nao na empresa ${empresaId}. Criacao cross-empresa nao suportada.`)
+      return { ...fallback, nome: produtoLocal.nome, valor: produtoLocal.preco || valorSugerido }
+    }
+
+    // Se encontrou na mesma empresa — vincular ao fornecedor
+    if (produtoLocal && produtoLocal.empresa_id === empresaId) {
+      // Verificar se ja existe vinculo
+      const { data: existingLink } = await supabase
+        .from('fornecedores_produtos')
+        .select('produto_id')
+        .eq('produto_id', produtoLocal.id)
+        .eq('fornecedor_id', fornecedorId)
+        .maybeSingle()
+
+      if (existingLink) {
+        // Ja vinculado, retornar direto
+        return { produto_id: produtoLocal.id, nome: produtoLocal.nome, valor: produtoLocal.preco || valorSugerido }
+      }
+
+      // Vincular no Bling (best-effort)
+      if (produtoLocal.id_produto_bling) {
+        try {
+          // Buscar id_bling do fornecedor
+          const { data: fornecedor } = await supabase
+            .from('fornecedores')
+            .select('id_bling')
+            .eq('id', fornecedorId)
+            .eq('empresa_id', empresaId)
+            .single()
+
+          if (fornecedor?.id_bling) {
+            const accessToken = await getBlingAccessToken(empresaId, supabase)
+            if (accessToken) {
+              const blingPayload: Record<string, unknown> = {
+                produto: { id: produtoLocal.id_produto_bling },
+                fornecedor: { id: fornecedor.id_bling },
+              }
+              if (codigoFornecedor) blingPayload.codigo = codigoFornecedor
+              if (valorSugerido > 0) blingPayload.precoCompra = valorSugerido
+
+              const result = await blingFetch(
+                `${BLING_CONFIG.apiUrl}/produtos/fornecedores`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                  },
+                  body: JSON.stringify(blingPayload),
+                },
+                { context: 'vincular produto-fornecedor (sugestao)', maxRetries: 2 }
+              )
+
+              if (!result.response.ok) {
+                const errorText = await result.response.text()
+                console.warn(`[vincularProdutoBling] Bling API retornou erro ao vincular: ${result.response.status} - ${errorText}`)
+              }
+            }
+          }
+        } catch (blingErr) {
+          console.warn('[vincularProdutoBling] Falha ao vincular no Bling (best-effort):', blingErr)
+        }
+      }
+
+      // Criar vinculo no Supabase (independente do Bling)
+      const { error: insertError } = await supabase
+        .from('fornecedores_produtos')
+        .insert({
+          produto_id: produtoLocal.id,
+          fornecedor_id: fornecedorId,
+          empresa_id: empresaId,
+          valor_de_compra: valorSugerido > 0 ? valorSugerido : null,
+        })
+
+      if (insertError) {
+        console.warn('[vincularProdutoBling] Falha ao criar vinculo no Supabase:', insertError)
+      }
+
+      return { produto_id: produtoLocal.id, nome: produtoLocal.nome, valor: produtoLocal.preco || valorSugerido }
+    }
+
+    // Nao encontrou produto em nenhuma empresa
+    console.warn(`[vincularProdutoBling] Produto nao encontrado (gtin=${gtin}, codigo_fornecedor=${codigoFornecedor}). Usando dados da sugestao.`)
+    return fallback
+  } catch (err) {
+    console.warn('[vincularProdutoBling] Erro inesperado (best-effort):', err)
+    return fallback
+  }
+}
+
 // Funcao para obter e validar o token do Bling
 async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeof createServerSupabaseClient>) {
   const { data: tokens, error } = await supabase
@@ -160,7 +332,7 @@ export async function POST(
     // Verificar pedido pertence a empresa
     const { data: pedido } = await supabase
       .from('pedidos_compra')
-      .select('id, status_interno, bling_id, situacao')
+      .select('id, status_interno, bling_id, situacao, fornecedor_id')
       .eq('id', pedidoId)
       .eq('empresa_id', user.empresaId)
       .eq('is_excluded', false)
@@ -185,11 +357,13 @@ export async function POST(
     }
 
     if (action === 'aceitar') {
-      // Buscar itens da sugestao COM desconto e bonificacao
+      // Buscar itens da sugestao COM desconto, bonificacao e campos de troca/novo
       const { data: sugestaoItens } = await supabase
         .from('sugestoes_fornecedor_itens')
         .select('*')
         .eq('sugestao_id', sugestao_id)
+
+      const fornecedorId = pedido.fornecedor_id
 
       // Aplicar sugestao: atualizar itens do pedido COM desconto e bonificacao
       if (sugestaoItens && sugestaoItens.length > 0) {
@@ -201,9 +375,104 @@ export async function POST(
 
         const itensMap = new Map((itensAtuais || []).map(i => [i.id, i]))
 
-        // Atualizar cada item com quantidade, desconto aplicado e bonificacao
         for (const sItem of sugestaoItens) {
-          if (sItem.item_pedido_compra_id) {
+          if (sItem.is_novo) {
+            // ---- NOVO ITEM: resolver produto e criar item no pedido ----
+            let resolved = await resolverProduto(
+              sItem.gtin || null,
+              sItem.codigo_fornecedor || null,
+              empresaId,
+              fornecedorId,
+              supabase
+            )
+
+            if (!resolved) {
+              // Tentar vincular no Bling (best-effort)
+              const vinculado = await vincularProdutoBling(
+                sItem.gtin || null,
+                sItem.codigo_fornecedor || null,
+                sItem.produto_nome || null,
+                sItem.preco_unitario || 0,
+                empresaId,
+                fornecedorId,
+                supabase
+              )
+              if (vinculado.produto_id) {
+                resolved = { produto_id: vinculado.produto_id, nome: vinculado.nome, valor: vinculado.valor }
+              } else {
+                // Nao conseguiu resolver — criar item sem produto_id linkado
+                console.warn(`[aceitar] Item novo sem produto resolvido: gtin=${sItem.gtin}, codigo_fornecedor=${sItem.codigo_fornecedor}`)
+              }
+            }
+
+            const valorBase = resolved?.valor || sItem.preco_unitario || 0
+            const descontoItem = sItem.desconto_percentual || 0
+            const valorComDesconto = valorBase * (1 - descontoItem / 100)
+
+            await supabase.from('itens_pedido_compra').insert({
+              pedido_compra_id: parseInt(pedidoId),
+              produto_id: resolved?.produto_id || null,
+              descricao: sItem.produto_nome || resolved?.nome || 'Produto sugerido',
+              quantidade: sItem.quantidade_sugerida,
+              valor: valorBase,
+              valor_unitario_final: valorComDesconto,
+              quantidade_bonificacao: sItem.bonificacao_quantidade || 0,
+              unidade: 'UN',
+            })
+
+          } else if (sItem.is_substituicao && sItem.item_pedido_compra_id) {
+            // ---- TROCA: resolver novo produto e atualizar item existente ----
+            let resolved = await resolverProduto(
+              sItem.gtin || null,
+              sItem.codigo_fornecedor || null,
+              empresaId,
+              fornecedorId,
+              supabase
+            )
+
+            if (!resolved) {
+              // Tentar vincular no Bling (best-effort)
+              const vinculado = await vincularProdutoBling(
+                sItem.gtin || null,
+                sItem.codigo_fornecedor || null,
+                sItem.produto_nome || null,
+                sItem.preco_unitario || 0,
+                empresaId,
+                fornecedorId,
+                supabase
+              )
+              if (vinculado.produto_id) {
+                resolved = { produto_id: vinculado.produto_id, nome: vinculado.nome, valor: vinculado.valor }
+              }
+            }
+
+            const itemAtual = itensMap.get(sItem.item_pedido_compra_id)
+            const valorBase = resolved?.valor || sItem.preco_unitario || itemAtual?.valor || 0
+            const descontoItem = sItem.desconto_percentual || 0
+            const valorComDesconto = valorBase * (1 - descontoItem / 100)
+            const qtdBonificacao = sItem.bonificacao_quantidade || 0
+
+            const updateData: Record<string, unknown> = {
+              quantidade: sItem.quantidade_sugerida,
+              valor: valorBase,
+              valor_unitario_final: valorComDesconto,
+              quantidade_bonificacao: qtdBonificacao,
+            }
+
+            if (resolved) {
+              updateData.produto_id = resolved.produto_id
+              updateData.descricao = resolved.nome
+            } else if (sItem.produto_nome) {
+              updateData.descricao = sItem.produto_nome
+            }
+
+            await supabase
+              .from('itens_pedido_compra')
+              .update(updateData)
+              .eq('id', sItem.item_pedido_compra_id)
+
+          } else if (sItem.item_pedido_compra_id) {
+            // ---- NORMAL: fluxo atual (atualiza quantidade/desconto no item existente) ----
             const itemAtual = itensMap.get(sItem.item_pedido_compra_id)
             if (itemAtual) {
               // Calcular valor com desconto
@@ -225,7 +494,7 @@ export async function POST(
           }
         }
 
-        // Recalcular total do pedido COM DESCONTO APLICADO
+        // Recalcular total do pedido COM DESCONTO APLICADO (inclui novos itens)
         const { data: itensAtualizados } = await supabase
           .from('itens_pedido_compra')
           .select('id, valor, quantidade, valor_unitario_final')
@@ -239,12 +508,11 @@ export async function POST(
         }, 0)
 
         // Aplicar desconto geral se atingir valor minimo
-        let descontoGeralAplicado = 0
         const valorMinimo = sugestao.valor_minimo_pedido || 0
         const descontoGeral = sugestao.desconto_geral || 0
 
         if (valorMinimo > 0 && novoTotalProdutos >= valorMinimo && descontoGeral > 0) {
-          descontoGeralAplicado = novoTotalProdutos * (descontoGeral / 100)
+          const descontoGeralAplicado = novoTotalProdutos * (descontoGeral / 100)
           novoTotalProdutos = novoTotalProdutos - descontoGeralAplicado
         }
 
