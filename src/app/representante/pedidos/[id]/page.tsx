@@ -1110,12 +1110,11 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                     <th className="px-4 py-3">Codigos</th>
                     <th className="px-4 py-3">Und</th>
                     <th className="px-4 py-3 text-right">Valor unit.</th>
-                    {canSuggest && (
-                      <th className="px-3 py-3 text-right text-xs font-semibold text-[#336FB6] uppercase tracking-wider bg-[#336FB6]/10">Preco sug.</th>
-                    )}
                     <th className="px-4 py-3 text-right">Qtd original</th>
+                    <th className="px-4 py-3 text-right">Subtotal original</th>
                     {canSuggest && (
                       <>
+                        <th className="px-3 py-3 text-right text-xs font-semibold text-[#336FB6] uppercase tracking-wider bg-[#336FB6]/10">Preco sug.</th>
                         <th className="px-4 py-3 text-right bg-[#336FB6]/10">Qtd sugerida</th>
                         <th className="px-4 py-3 text-right bg-[#336FB6]/10">Desconto %</th>
                         <th className="px-4 py-3 text-right bg-[#336FB6]/10">Bonif. un</th>
@@ -1123,7 +1122,6 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                         <th className="px-4 py-3 text-right bg-[#336FB6]/10">Subtotal sugerido</th>
                       </>
                     )}
-                    <th className="px-4 py-3 text-right">Subtotal original</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -1207,9 +1205,15 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                             item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
                           )}
                         </td>
-                        {canSuggest && (
-                          <td className="px-3 py-2 text-right bg-[#336FB6]/5">
-                            {sug ? (
+                        <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                          {item.quantidade}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                          R$ {(item.valor * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </td>
+                        {canSuggest && sug && (
+                          <>
+                            <td className="px-3 py-2 text-right bg-[#336FB6]/5">
                               <div>
                                 <input
                                   type="number"
@@ -1225,16 +1229,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                                   </div>
                                 )}
                               </div>
-                            ) : (
-                              <span className="text-gray-300">-</span>
-                            )}
-                          </td>
-                        )}
-                        <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
-                          {item.quantidade}
-                        </td>
-                        {canSuggest && sug && (
-                          <>
+                            </td>
                             <td className="px-4 py-2 bg-[#336FB6]/5">
                               <input
                                 type="number"
@@ -1306,9 +1301,6 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                             </td>
                           </>
                         )}
-                        <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
-                          R$ {(item.valor * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </td>
                       </tr>
                     )
                   })}
@@ -1358,26 +1350,25 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                         <td className="px-4 py-2 text-sm text-gray-900 text-right">
                           {preco > 0 ? preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '-'}
                         </td>
-                        {canSuggest && (
-                          <td className="px-3 py-2 text-right bg-[#336FB6]/5">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={sug.preco_editado ?? preco}
-                              onChange={(e) => updateSugestao(null, 'preco_editado', parseFloat(e.target.value) || 0, globalIndex)}
-                              className={`w-20 px-2 py-1 text-sm text-right border rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] bg-[#336FB6]/5 ${sug.preco_editado != null && sug.preco_editado !== preco ? 'border-[#336FB6]' : 'border-gray-300'}`}
-                            />
-                            {sug.preco_editado != null && preco > 0 && sug.preco_editado !== preco && (
-                              <div className={`text-xs mt-0.5 ${sug.preco_editado < preco ? 'text-green-600' : 'text-red-500'}`}>
-                                {sug.preco_editado < preco ? '\u2193' : '\u2191'} {Math.abs(((sug.preco_editado - preco) / preco) * 100).toFixed(1)}%
-                              </div>
-                            )}
-                          </td>
-                        )}
+                        <td className="px-4 py-2 text-sm text-gray-400 text-right">-</td>
                         <td className="px-4 py-2 text-sm text-gray-400 text-right">-</td>
                         {canSuggest && (
                           <>
+                            <td className="px-3 py-2 text-right bg-[#336FB6]/5">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={sug.preco_editado ?? preco}
+                                onChange={(e) => updateSugestao(null, 'preco_editado', parseFloat(e.target.value) || 0, globalIndex)}
+                                className={`w-20 px-2 py-1 text-sm text-right border rounded-md focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] bg-[#336FB6]/5 ${sug.preco_editado != null && sug.preco_editado !== preco ? 'border-[#336FB6]' : 'border-gray-300'}`}
+                              />
+                              {sug.preco_editado != null && preco > 0 && sug.preco_editado !== preco && (
+                                <div className={`text-xs mt-0.5 ${sug.preco_editado < preco ? 'text-green-600' : 'text-red-500'}`}>
+                                  {sug.preco_editado < preco ? '\u2193' : '\u2191'} {Math.abs(((sug.preco_editado - preco) / preco) * 100).toFixed(1)}%
+                                </div>
+                              )}
+                            </td>
                             <td className="px-4 py-2 bg-[#336FB6]/5">
                               <input
                                 type="number"
@@ -1431,7 +1422,6 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                             </td>
                           </>
                         )}
-                        <td className="px-4 py-2 text-sm text-gray-400 text-right">-</td>
                       </tr>
                     )
                   })}
