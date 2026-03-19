@@ -210,20 +210,24 @@ export function StatusActionCard({
     const itensCalculados = sugestaoItens.map((sItem) => {
       const itemOriginal = itens.find(i => i.id === sItem.item_pedido_compra_id)
       const valorUnitario = itemOriginal?.valor || 0
+      const precoSugerido = sItem.preco_unitario != null && sItem.preco_unitario !== valorUnitario ? sItem.preco_unitario : null
+      const valorBase = precoSugerido ?? valorUnitario
       const qtdOriginal = itemOriginal?.quantidade || 0
       const qtdSugerida = sItem.quantidade_sugerida
       const descontoItem = sItem.desconto_percentual || 0
       const unidadesBonificadas = sItem.bonificacao_quantidade || 0
       const subtotalOriginal = valorUnitario * qtdOriginal
-      const valorComDesconto = valorUnitario * (1 - descontoItem / 100)
+      const valorComDesconto = valorBase * (1 - descontoItem / 100)
       const subtotalSugerido = valorComDesconto * qtdSugerida
 
       totalOriginal += subtotalOriginal
       totalComDescontoItem += subtotalSugerido
       totalBonificacaoUnidades += unidadesBonificadas
 
-      return { ...sItem, itemOriginal, valorUnitario, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas }
+      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas }
     })
+
+    const temPrecoSugerido = itensCalculados.some(item => item.precoSugerido != null)
 
     const valorMinimo = pendenteSugestao?.valor_minimo_pedido || 0
     const descontoGeral = pendenteSugestao?.desconto_geral || 0
@@ -302,10 +306,13 @@ export function StatusActionCard({
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Produto</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Qtd Orig</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-secondary-600 uppercase tracking-wider">Qtd Sug</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Preco Orig</th>
+                {temPrecoSugerido && (
+                  <th className="px-3 py-2.5 text-right text-xs font-semibold text-secondary-600 uppercase tracking-wider">Preco Sug</th>
+                )}
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-secondary-600 uppercase tracking-wider">Desc%</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-secondary-600 uppercase tracking-wider">Bonif</th>
                 <th className="px-3 py-2.5 text-center text-xs font-semibold text-secondary-600 uppercase tracking-wider">Validade</th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Valor c/Desc</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Sub Orig</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-green-600 uppercase tracking-wider">Sub Sug</th>
               </tr>
@@ -327,6 +334,21 @@ export function StatusActionCard({
                         </span>
                       )}
                     </td>
+                    <td className="px-3 py-2.5 text-right text-gray-500 tabular-nums">{formatCurrency(item.valorUnitario)}</td>
+                    {temPrecoSugerido && (
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {item.precoSugerido != null ? (
+                          <div>
+                            <span className="font-semibold text-secondary-700">{formatCurrency(item.precoSugerido)}</span>
+                            <div className={`text-xs mt-0.5 ${item.precoSugerido < item.valorUnitario ? 'text-green-600' : 'text-red-500'}`}>
+                              {item.precoSugerido < item.valorUnitario ? '\u2193' : '\u2191'} {Math.abs(((item.precoSugerido - item.valorUnitario) / item.valorUnitario) * 100).toFixed(1)}%
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-3 py-2.5 text-right">
                       {item.desconto_percentual > 0 ? <span className="text-green-600 font-semibold">{item.desconto_percentual}%</span> : <span className="text-gray-300">-</span>}
                     </td>
@@ -335,9 +357,6 @@ export function StatusActionCard({
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       {item.validade ? <span className="text-secondary-700 font-medium">{formatDate(item.validade)}</span> : <span className="text-gray-300">-</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-right text-gray-500 tabular-nums">
-                      {item.desconto_percentual > 0 ? formatCurrency(item.valorComDesconto) : <span className="text-gray-300">-</span>}
                     </td>
                     <td className="px-3 py-2.5 text-right text-gray-400 tabular-nums">{formatCurrency(item.subtotalOriginal)}</td>
                     <td className="px-3 py-2.5 text-right font-semibold text-green-700 tabular-nums">{formatCurrency(item.subtotalSugerido)}</td>

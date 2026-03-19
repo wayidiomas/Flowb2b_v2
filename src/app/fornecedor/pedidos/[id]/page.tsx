@@ -1154,6 +1154,9 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   <th className="px-4 py-3">Codigos</th>
                   <th className="px-4 py-3">Und</th>
                   <th className="px-4 py-3 text-right">Valor unit.</th>
+                  {canSuggest && (
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-[#FFAA11] uppercase tracking-wider bg-[#FFAA11]/10">Preco sug.</th>
+                  )}
                   <th className="px-4 py-3 text-right">Qtd original</th>
                   {canSuggest && (
                     <>
@@ -1239,26 +1242,38 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">{item.unidade}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                        {canSuggest && sug ? (
+                        {sug?.is_substituicao ? (
                           <div>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={sug.preco_editado ?? item.valor}
-                              onChange={(e) => updateSugestao(item.id, 'preco_editado', parseFloat(e.target.value) || 0)}
-                              className={`w-20 px-2 py-1 text-sm text-right border rounded-md focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== item.valor ? 'border-[#FFAA11]' : 'border-gray-300'}`}
-                            />
-                            {sug.preco_editado != null && sug.preco_editado !== item.valor && (
-                              <span className="text-xs text-gray-400 line-through block mt-0.5">
-                                {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </span>
-                            )}
+                            <span className="text-xs text-gray-400 line-through block">{item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            <span className="font-medium">{(sug.preco_unitario ?? item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           </div>
                         ) : (
                           item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
                         )}
                       </td>
+                      {canSuggest && (
+                        <td className="px-3 py-2 text-right bg-[#FFAA11]/5">
+                          {sug ? (
+                            <div>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={sug.preco_editado ?? item.valor}
+                                onChange={(e) => updateSugestao(item.id, 'preco_editado', parseFloat(e.target.value) || 0)}
+                                className={`w-20 px-2 py-1 text-sm text-right border rounded-md focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== item.valor ? 'border-[#FFAA11]' : 'border-gray-300'}`}
+                              />
+                              {sug.preco_editado != null && sug.preco_editado !== item.valor && (
+                                <div className={`text-xs mt-0.5 ${sug.preco_editado < item.valor ? 'text-green-600' : 'text-red-500'}`}>
+                                  {sug.preco_editado < item.valor ? '\u2193' : '\u2191'} {Math.abs(((sug.preco_editado - item.valor) / item.valor) * 100).toFixed(1)}%
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
                         {item.quantidade}
                       </td>
@@ -1383,6 +1398,23 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                       <td className="px-4 py-2 text-sm text-gray-900 text-right">
                         {preco > 0 ? preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '-'}
                       </td>
+                      {canSuggest && (
+                        <td className="px-3 py-2 text-right bg-[#FFAA11]/5">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={sug.preco_editado ?? preco}
+                            onChange={(e) => updateSugestao(null, 'preco_editado', parseFloat(e.target.value) || 0, globalIndex)}
+                            className={`w-20 px-2 py-1 text-sm text-right border rounded-md focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== preco ? 'border-[#FFAA11]' : 'border-gray-300'}`}
+                          />
+                          {sug.preco_editado != null && preco > 0 && sug.preco_editado !== preco && (
+                            <div className={`text-xs mt-0.5 ${sug.preco_editado < preco ? 'text-green-600' : 'text-red-500'}`}>
+                              {sug.preco_editado < preco ? '\u2193' : '\u2191'} {Math.abs(((sug.preco_editado - preco) / preco) * 100).toFixed(1)}%
+                            </div>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-2 text-sm text-gray-400 text-right">-</td>
                       {canSuggest && (
                         <>
@@ -1509,25 +1541,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="bg-gray-50 rounded-lg p-2">
                       <p className="text-gray-400">Valor unit.</p>
-                      {canSuggest && sug ? (
-                        <div>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={sug.preco_editado ?? item.valor}
-                            onChange={(e) => updateSugestao(item.id, 'preco_editado', parseFloat(e.target.value) || 0)}
-                            className={`w-full px-2 py-1 text-xs text-right border rounded-md focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== item.valor ? 'border-[#FFAA11]' : 'border-gray-300'}`}
-                          />
-                          {sug.preco_editado != null && sug.preco_editado !== item.valor && (
-                            <span className="text-[10px] text-gray-400 line-through block mt-0.5">
-                              R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-gray-900 font-medium">R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                      )}
+                      <p className="text-gray-900 font-medium">R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-2">
                       <p className="text-gray-400">Qtd original</p>
@@ -1544,6 +1558,22 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                     <div className="bg-[#FFAA11]/5 border border-[#FFAA11]/20 rounded-xl p-3 space-y-3">
                       <p className="text-xs font-semibold text-[#FFAA11] uppercase tracking-wider">Sua sugestao</p>
                       <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2">
+                          <label className="block text-xs text-[#FFAA11] font-medium mb-1">Preco sug.</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={sug.preco_editado ?? item.valor}
+                            onChange={(e) => updateSugestao(item.id, 'preco_editado', parseFloat(e.target.value) || 0)}
+                            className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== item.valor ? 'border-[#FFAA11]' : 'border-gray-300'}`}
+                          />
+                          {sug.preco_editado != null && sug.preco_editado !== item.valor && (
+                            <div className={`text-xs mt-0.5 ${sug.preco_editado < item.valor ? 'text-green-600' : 'text-red-500'}`}>
+                              {sug.preco_editado < item.valor ? '\u2193' : '\u2191'} {Math.abs(((sug.preco_editado - item.valor) / item.valor) * 100).toFixed(1)}% vs original
+                            </div>
+                          )}
+                        </div>
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">Qtd sugerida</label>
                           <input

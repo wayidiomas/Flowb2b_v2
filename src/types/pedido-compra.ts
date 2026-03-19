@@ -249,6 +249,7 @@ export interface SugestaoItem {
   desconto_percentual: number        // % desconto no valor unitario
   bonificacao_quantidade: number     // Quantidade de unidades bonificadas deste item
   validade?: string
+  preco_unitario?: number | null     // Preco sugerido pelo fornecedor (quando diferente do original)
   // Campos calculados (frontend)
   valor_unitario_com_desconto?: number
   subtotal_original?: number
