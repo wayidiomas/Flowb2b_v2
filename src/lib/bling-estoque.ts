@@ -10,6 +10,8 @@ export async function getBlingToken(
   supabase: SupabaseClient,
   empresaId: number
 ): Promise<string | null> {
+  const { refreshBlingTokens } = await import('./bling')
+
   // Verificar se empresa está conectada ao Bling
   const { data: empresa } = await supabase
     .from('empresas')
@@ -18,24 +20,47 @@ export async function getBlingToken(
     .single()
 
   if (!empresa?.conectadabling) {
+    console.log(`[getBlingToken] Empresa ${empresaId} nao conectada ao Bling`)
     return null
   }
 
   // Buscar token ativo
   const { data: tokens } = await supabase
     .from('bling_tokens')
-    .select('access_token, expires_at, is_revoke')
+    .select('access_token, refresh_token, expires_at, is_revoke')
     .eq('empresa_id', empresaId)
     .single()
 
   if (!tokens || tokens.is_revoke) {
+    console.log(`[getBlingToken] Empresa ${empresaId}: token nao encontrado ou revogado`)
     return null
   }
 
-  // Verificar se não está expirado
+  // Verificar se precisa renovar (expira em menos de 5 minutos)
   const expiresAt = new Date(tokens.expires_at)
-  if (expiresAt < new Date()) {
-    return null
+  const now = new Date()
+
+  if (expiresAt < new Date(now.getTime() + 5 * 60 * 1000)) {
+    // Token expirado ou perto de expirar — tentar renovar
+    try {
+      console.log(`[getBlingToken] Empresa ${empresaId}: token expirado/perto, renovando...`)
+      const newTokens = await refreshBlingTokens(tokens.refresh_token)
+      await supabase
+        .from('bling_tokens')
+        .update({
+          access_token: newTokens.access_token,
+          refresh_token: newTokens.refresh_token,
+          expires_at: new Date(Date.now() + newTokens.expires_in * 1000).toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('empresa_id', empresaId)
+
+      console.log(`[getBlingToken] Empresa ${empresaId}: token renovado com sucesso`)
+      return newTokens.access_token
+    } catch (err) {
+      console.error(`[getBlingToken] Empresa ${empresaId}: falha ao renovar token:`, err)
+      return null
+    }
   }
 
   return tokens.access_token
