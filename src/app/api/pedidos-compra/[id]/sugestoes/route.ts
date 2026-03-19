@@ -57,9 +57,14 @@ async function resolverProduto(
 }
 
 /**
- * Tenta vincular produto ao fornecedor no Bling e no Supabase.
- * Best-effort: se falhar, loga warning e retorna o que puder.
- * Retorna produto_id/nome/valor quando possivel.
+ * Cria/resolve produto no Bling e Supabase quando nao existe na empresa do pedido.
+ *
+ * Cenarios cobertos:
+ * A) Produto existe na empresa do pedido mas sem vinculo ao fornecedor → vincula
+ * B) Produto existe em outra empresa mas nao nessa → copia + cria no Bling + vincula
+ * C) Produto nao existe em nenhuma empresa → cria do zero no Bling + vincula
+ *
+ * Best-effort: se Bling falhar, cria localmente. Nunca bloqueia o aceite.
  */
 async function vincularProdutoBling(
   gtin: string | null,
@@ -73,105 +78,234 @@ async function vincularProdutoBling(
   const fallback = { produto_id: null, nome: produtoNome || 'Produto sugerido', valor: valorSugerido }
 
   try {
-    // 1. Buscar produto pelo gtin em QUALQUER empresa
-    let produtoLocal: { id: number; id_produto_bling: number | null; nome: string; preco: number | null; empresa_id: number } | null = null
+    // Buscar dados do fornecedor (id_bling) para vincular depois
+    const { data: fornecedor } = await supabase
+      .from('fornecedores')
+      .select('id_bling')
+      .eq('id', fornecedorId)
+      .eq('empresa_id', empresaId)
+      .single()
+
+    // Helper: vincular produto ao fornecedor no Bling + Supabase
+    async function vincularAoFornecedor(produtoId: number, idProdutoBling: number | null) {
+      // Vincular no Bling (best-effort)
+      if (idProdutoBling && fornecedor?.id_bling) {
+        try {
+          const accessToken = await getBlingAccessToken(empresaId, supabase)
+          if (accessToken) {
+            const blingPayload: Record<string, unknown> = {
+              produto: { id: idProdutoBling },
+              fornecedor: { id: fornecedor.id_bling },
+            }
+            if (codigoFornecedor) blingPayload.codigo = codigoFornecedor
+            if (valorSugerido > 0) blingPayload.precoCompra = valorSugerido
+
+            const result = await blingFetch(
+              `${BLING_CONFIG.apiUrl}/produtos/fornecedores`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify(blingPayload),
+              },
+              { context: 'vincular produto-fornecedor (sugestao)', maxRetries: 2 }
+            )
+            if (!result.response.ok) {
+              const errorText = await result.response.text()
+              console.warn(`[vincular] Bling vinculacao erro: ${result.response.status} - ${errorText}`)
+            }
+          }
+        } catch (blingErr) {
+          console.warn('[vincular] Falha ao vincular no Bling (best-effort):', blingErr)
+        }
+      }
+
+      // Vincular no Supabase
+      await supabase
+        .from('fornecedores_produtos')
+        .upsert({
+          produto_id: produtoId,
+          fornecedor_id: fornecedorId,
+          empresa_id: empresaId,
+          valor_de_compra: valorSugerido > 0 ? valorSugerido : null,
+          codigo_fornecedor: codigoFornecedor || null,
+        }, { onConflict: 'fornecedor_id,produto_id' })
+    }
+
+    // Helper: criar produto no Bling da empresa
+    async function criarProdutoNoBling(dados: {
+      nome: string; codigo?: string | null; preco?: number | null; unidade?: string | null;
+      gtin?: string | null; marca?: string | null; tipo?: string | null;
+      formato?: string | null; peso_liquido?: number | null; peso_bruto?: number | null;
+    }): Promise<number | null> {
+      try {
+        const accessToken = await getBlingAccessToken(empresaId, supabase)
+        if (!accessToken) return null
+
+        const blingPayload: Record<string, unknown> = {
+          nome: dados.nome,
+          tipo: dados.tipo || 'P',
+          situacao: 'A',
+          formato: dados.formato || 'S',
+        }
+        if (dados.codigo) blingPayload.codigo = dados.codigo
+        if (dados.preco) blingPayload.preco = dados.preco
+        if (dados.unidade) blingPayload.unidade = dados.unidade
+        if (dados.gtin) blingPayload.gtin = dados.gtin
+        if (dados.marca) blingPayload.marca = dados.marca
+        if (dados.peso_liquido) blingPayload.pesoLiquido = dados.peso_liquido
+        if (dados.peso_bruto) blingPayload.pesoBruto = dados.peso_bruto
+
+        const result = await blingFetch(
+          `${BLING_CONFIG.apiUrl}/produtos`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(blingPayload),
+          },
+          { context: 'criar produto (sugestao fornecedor)', maxRetries: 2 }
+        )
+
+        if (result.response.ok) {
+          const blingData = await result.response.json()
+          return blingData?.data?.id || null
+        } else {
+          const errorText = await result.response.text()
+          console.warn(`[criarProdutoBling] Bling criacao erro: ${result.response.status} - ${errorText}`)
+          return null
+        }
+      } catch (err) {
+        console.warn('[criarProdutoBling] Falha ao criar no Bling (best-effort):', err)
+        return null
+      }
+    }
+
+    // ──────────────────────────────────────────────
+    // 1. Buscar produto pelo EAN na empresa do pedido
+    // ──────────────────────────────────────────────
+    if (gtin) {
+      const { data: produtoLocal } = await supabase
+        .from('produtos')
+        .select('id, id_produto_bling, nome, preco')
+        .eq('gtin', gtin)
+        .eq('empresa_id', empresaId)
+        .limit(1)
+        .maybeSingle()
+
+      if (produtoLocal) {
+        // CENARIO A: existe na empresa, so precisa vincular ao fornecedor
+        const { data: existingLink } = await supabase
+          .from('fornecedores_produtos')
+          .select('produto_id')
+          .eq('produto_id', produtoLocal.id)
+          .eq('fornecedor_id', fornecedorId)
+          .maybeSingle()
+
+        if (!existingLink) {
+          await vincularAoFornecedor(produtoLocal.id, produtoLocal.id_produto_bling)
+        }
+        return { produto_id: produtoLocal.id, nome: produtoLocal.nome, valor: produtoLocal.preco || valorSugerido }
+      }
+    }
+
+    // ──────────────────────────────────────────────
+    // 2. Buscar em OUTRA empresa pelo EAN (para copiar dados)
+    // ──────────────────────────────────────────────
+    let produtoOrigem: {
+      id: number; nome: string; gtin: string | null; codigo: string | null;
+      preco: number | null; tipo: string | null; formato: string | null;
+      unidade: string | null; marca: string | null; ncm: string | null;
+      peso_liquido: number | null; peso_bruto: number | null;
+      itens_por_caixa: number | null;
+    } | null = null
 
     if (gtin) {
       const { data } = await supabase
         .from('produtos')
-        .select('id, id_produto_bling, nome, preco, empresa_id')
+        .select('id, nome, gtin, codigo, preco, tipo, formato, unidade, marca, ncm, peso_liquido, peso_bruto, itens_por_caixa')
         .eq('gtin', gtin)
+        .neq('empresa_id', empresaId)
         .limit(1)
         .maybeSingle()
-      produtoLocal = data
+      produtoOrigem = data
     }
 
-    // Se encontrou em outra empresa mas nao nessa — logar e retornar fallback
-    if (produtoLocal && produtoLocal.empresa_id !== empresaId) {
-      console.warn(`[vincularProdutoBling] Produto com gtin=${gtin} existe na empresa ${produtoLocal.empresa_id} mas nao na empresa ${empresaId}. Criacao cross-empresa nao suportada.`)
-      return { ...fallback, nome: produtoLocal.nome, valor: produtoLocal.preco || valorSugerido }
-    }
-
-    // Se encontrou na mesma empresa — vincular ao fornecedor
-    if (produtoLocal && produtoLocal.empresa_id === empresaId) {
-      // Verificar se ja existe vinculo
-      const { data: existingLink } = await supabase
+    // Se nao achou por EAN, tentar por codigo_fornecedor em fornecedores_produtos de outra empresa
+    if (!produtoOrigem && codigoFornecedor) {
+      const { data } = await supabase
         .from('fornecedores_produtos')
-        .select('produto_id')
-        .eq('produto_id', produtoLocal.id)
-        .eq('fornecedor_id', fornecedorId)
+        .select('produto_id, produtos!inner(id, nome, gtin, codigo, preco, tipo, formato, unidade, marca, ncm, peso_liquido, peso_bruto, itens_por_caixa)')
+        .eq('codigo_fornecedor', codigoFornecedor)
+        .neq('empresa_id', empresaId)
+        .limit(1)
         .maybeSingle()
-
-      if (existingLink) {
-        // Ja vinculado, retornar direto
-        return { produto_id: produtoLocal.id, nome: produtoLocal.nome, valor: produtoLocal.preco || valorSugerido }
+      if (data?.produtos) {
+        const p = Array.isArray(data.produtos) ? data.produtos[0] : data.produtos
+        produtoOrigem = p as unknown as typeof produtoOrigem
       }
-
-      // Vincular no Bling (best-effort)
-      if (produtoLocal.id_produto_bling) {
-        try {
-          // Buscar id_bling do fornecedor
-          const { data: fornecedor } = await supabase
-            .from('fornecedores')
-            .select('id_bling')
-            .eq('id', fornecedorId)
-            .eq('empresa_id', empresaId)
-            .single()
-
-          if (fornecedor?.id_bling) {
-            const accessToken = await getBlingAccessToken(empresaId, supabase)
-            if (accessToken) {
-              const blingPayload: Record<string, unknown> = {
-                produto: { id: produtoLocal.id_produto_bling },
-                fornecedor: { id: fornecedor.id_bling },
-              }
-              if (codigoFornecedor) blingPayload.codigo = codigoFornecedor
-              if (valorSugerido > 0) blingPayload.precoCompra = valorSugerido
-
-              const result = await blingFetch(
-                `${BLING_CONFIG.apiUrl}/produtos/fornecedores`,
-                {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                  },
-                  body: JSON.stringify(blingPayload),
-                },
-                { context: 'vincular produto-fornecedor (sugestao)', maxRetries: 2 }
-              )
-
-              if (!result.response.ok) {
-                const errorText = await result.response.text()
-                console.warn(`[vincularProdutoBling] Bling API retornou erro ao vincular: ${result.response.status} - ${errorText}`)
-              }
-            }
-          }
-        } catch (blingErr) {
-          console.warn('[vincularProdutoBling] Falha ao vincular no Bling (best-effort):', blingErr)
-        }
-      }
-
-      // Criar vinculo no Supabase (independente do Bling)
-      const { error: insertError } = await supabase
-        .from('fornecedores_produtos')
-        .insert({
-          produto_id: produtoLocal.id,
-          fornecedor_id: fornecedorId,
-          empresa_id: empresaId,
-          valor_de_compra: valorSugerido > 0 ? valorSugerido : null,
-        })
-
-      if (insertError) {
-        console.warn('[vincularProdutoBling] Falha ao criar vinculo no Supabase:', insertError)
-      }
-
-      return { produto_id: produtoLocal.id, nome: produtoLocal.nome, valor: produtoLocal.preco || valorSugerido }
     }
 
-    // Nao encontrou produto em nenhuma empresa
-    console.warn(`[vincularProdutoBling] Produto nao encontrado (gtin=${gtin}, codigo_fornecedor=${codigoFornecedor}). Usando dados da sugestao.`)
-    return fallback
+    // ──────────────────────────────────────────────
+    // 3. Criar produto na empresa (CENARIO B ou C)
+    // ──────────────────────────────────────────────
+    const dadosProduto = {
+      nome: produtoOrigem?.nome || produtoNome || 'Produto sugerido',
+      gtin: produtoOrigem?.gtin || gtin || null,
+      codigo: produtoOrigem?.codigo || null,
+      preco: valorSugerido || produtoOrigem?.preco || 0,
+      tipo: produtoOrigem?.tipo || 'P',
+      formato: produtoOrigem?.formato || 'S',
+      unidade: produtoOrigem?.unidade || 'UN',
+      marca: produtoOrigem?.marca || null,
+      ncm: produtoOrigem?.ncm || null,
+      peso_liquido: produtoOrigem?.peso_liquido || null,
+      peso_bruto: produtoOrigem?.peso_bruto || null,
+      itens_por_caixa: produtoOrigem?.itens_por_caixa || null,
+    }
+
+    // Criar no Bling
+    const idProdutoBling = await criarProdutoNoBling(dadosProduto)
+
+    // Criar no Supabase (tabela produtos)
+    const { data: novoProduto, error: produtoError } = await supabase
+      .from('produtos')
+      .insert({
+        nome: dadosProduto.nome,
+        gtin: dadosProduto.gtin,
+        codigo: dadosProduto.codigo,
+        preco: dadosProduto.preco,
+        tipo: dadosProduto.tipo,
+        formato: dadosProduto.formato,
+        unidade: dadosProduto.unidade,
+        marca: dadosProduto.marca,
+        ncm: dadosProduto.ncm,
+        peso_liquido: dadosProduto.peso_liquido,
+        peso_bruto: dadosProduto.peso_bruto,
+        itens_por_caixa: dadosProduto.itens_por_caixa,
+        empresa_id: empresaId,
+        situacao: 'A',
+        id_produto_bling: idProdutoBling,
+      })
+      .select('id, nome, preco')
+      .single()
+
+    if (produtoError || !novoProduto) {
+      console.warn('[vincularProdutoBling] Falha ao criar produto no Supabase:', produtoError)
+      return fallback
+    }
+
+    console.log(`[vincularProdutoBling] Produto criado: id=${novoProduto.id}, bling_id=${idProdutoBling}, nome=${novoProduto.nome} (empresa_id=${empresaId})`)
+
+    // Vincular ao fornecedor
+    await vincularAoFornecedor(novoProduto.id, idProdutoBling)
+
+    return { produto_id: novoProduto.id, nome: novoProduto.nome, valor: novoProduto.preco || valorSugerido }
+
   } catch (err) {
     console.warn('[vincularProdutoBling] Erro inesperado (best-effort):', err)
     return fallback
