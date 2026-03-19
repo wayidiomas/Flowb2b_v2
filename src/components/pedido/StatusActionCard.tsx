@@ -13,6 +13,8 @@ interface StatusActionCardProps {
   onRejeitarSugestao: () => void
   onManterOriginal?: () => void // Rejeita sugestao mas mantem pedido original
   onCancelar?: () => void
+  onRecolher?: () => void
+  recolhendo?: boolean
   onFinalizar?: () => void
   enviandoFornecedor: boolean
   processandoSugestao: boolean
@@ -35,6 +37,8 @@ export function StatusActionCard({
   onRejeitarSugestao,
   onManterOriginal,
   onCancelar,
+  onRecolher,
+  recolhendo,
   onFinalizar,
   enviandoFornecedor,
   processandoSugestao,
@@ -50,6 +54,9 @@ export function StatusActionCard({
   // Verifica se pode cancelar (nao esta em estado final e Bling nao esta finalizado/cancelado)
   const podeCancelar = !ESTADOS_FINAIS.includes(statusInterno) && situacaoBling !== 1 && situacaoBling !== 2
 
+  // Pode recolher envio se esta em estado de negociacao ativa (nao rascunho, nao final)
+  const podeRecolher = ['enviado_fornecedor', 'sugestao_pendente', 'contra_proposta_pendente'].includes(statusInterno)
+
   // Verifica se pode finalizar (apenas quando aceito e Bling nao esta finalizado/cancelado)
   const podeFinalizar = statusInterno === 'aceito' && situacaoBling !== 1 && situacaoBling !== 2
 
@@ -64,6 +71,21 @@ export function StatusActionCard({
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
         Cancelar Pedido
+      </button>
+    ) : null
+  )
+
+  const RecolherButton = () => (
+    podeRecolher && onRecolher ? (
+      <button
+        onClick={onRecolher}
+        disabled={recolhendo}
+        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors disabled:opacity-50"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+        </svg>
+        {recolhendo ? 'Recolhendo...' : 'Recolher Envio'}
       </button>
     ) : null
   )
@@ -126,7 +148,7 @@ export function StatusActionCard({
                 </div>
                 <span>Aguardando resposta do fornecedor</span>
               </div>
-              <CancelarButton />
+              <div className="flex items-center gap-2"><RecolherButton /><CancelarButton /></div>
             </div>
           </div>
         </div>
@@ -383,7 +405,7 @@ export function StatusActionCard({
                 </button>
               )}
             </div>
-            <CancelarButton />
+            <div className="flex items-center gap-2"><RecolherButton /><CancelarButton /></div>
           </div>
         </div>
       </div>
@@ -453,9 +475,9 @@ export function StatusActionCard({
                 Motivo: &quot;{ultimaSugestao.observacao_lojista}&quot;
               </p>
             )}
-            {podeCancelar && onCancelar && (
+            {(podeCancelar || podeRecolher) && (
               <div className="mt-4">
-                <CancelarButton />
+                <div className="flex items-center gap-2"><RecolherButton /><CancelarButton /></div>
               </div>
             )}
           </div>

@@ -79,6 +79,7 @@ export default function VisualizarPedidoPage() {
   const [showCancelamentoModal, setShowCancelamentoModal] = useState(false)
   const [cancelando, setCancelando] = useState(false)
   const [finalizando, setFinalizando] = useState(false)
+  const [recolhendo, setRecolhendo] = useState(false)
 
   // Envio ao fornecedor nao cadastrado
   const [showEnvioWhatsAppModal, setShowEnvioWhatsAppModal] = useState(false)
@@ -474,6 +475,28 @@ export default function VisualizarPedidoPage() {
     }
   }
 
+  const handleRecolher = async () => {
+    if (!pedido) return
+    setRecolhendo(true)
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedido.id}/recolher`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo: 'Recolhido pelo lojista' }),
+      })
+      if (res.ok) {
+        setStatusInterno('rascunho')
+        // Refresh the page data to show updated state
+        router.refresh()
+      } else {
+        const error = await res.json()
+        alert(error.error || 'Falha ao recolher envio')
+      }
+    } finally {
+      setRecolhendo(false)
+    }
+  }
+
   const handleFinalizar = async () => {
     if (!pedido) return
     if (!confirm('Deseja finalizar este pedido? Esta acao nao pode ser desfeita.')) return
@@ -836,6 +859,8 @@ export default function VisualizarPedidoPage() {
               onRejeitarSugestao={() => handleProcessarSugestao('rejeitar')}
               onManterOriginal={() => handleProcessarSugestao('manter_original')}
               onCancelar={() => setShowCancelamentoModal(true)}
+              onRecolher={handleRecolher}
+              recolhendo={recolhendo}
               onFinalizar={handleFinalizar}
               enviandoFornecedor={enviandoFornecedor}
               processandoSugestao={processandoSugestao}

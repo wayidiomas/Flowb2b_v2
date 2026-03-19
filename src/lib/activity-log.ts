@@ -11,6 +11,7 @@ export type ActivityAction =
   | 'contra_proposta_enviada'
   | 'sugestao_aceita'
   | 'sugestao_rejeitada'
+  | 'pedido_recolhido'
   | 'registro'
 
 interface LogActivityParams {
