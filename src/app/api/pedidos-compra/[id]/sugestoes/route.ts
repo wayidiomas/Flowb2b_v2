@@ -256,7 +256,7 @@ async function vincularProdutoBling(
     const dadosProduto = {
       nome: produtoOrigem?.nome || produtoNome || 'Produto sugerido',
       gtin: produtoOrigem?.gtin || gtin || null,
-      codigo: produtoOrigem?.codigo || null,
+      codigo: produtoOrigem?.codigo || codigoFornecedor || gtin || `NOVO-${Date.now()}`,
       preco: valorSugerido || produtoOrigem?.preco || 0,
       tipo: produtoOrigem?.tipo || 'P',
       formato: produtoOrigem?.formato || 'S',
