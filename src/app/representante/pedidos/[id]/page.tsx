@@ -1295,7 +1295,10 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                                       </p>
                                     )}
                                     {bonifUnidades > 0 && (
-                                      <p className="text-xs text-blue-500">+{bonifUnidades} gratis</p>
+                                      <>
+                                        <p className="text-xs text-purple-600 font-medium">+{bonifUnidades} gratis ({sug.quantidade_sugerida + bonifUnidades} un total)</p>
+                                        <p className="text-xs text-gray-500">R$ {(subtotalComDesconto / (sug.quantidade_sugerida + bonifUnidades)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/un efetivo</p>
+                                      </>
                                     )}
                                   </div>
                                 )

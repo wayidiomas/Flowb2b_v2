@@ -353,7 +353,12 @@ export function StatusActionCard({
                       {item.desconto_percentual > 0 ? <span className="text-green-600 font-semibold">{item.desconto_percentual}%</span> : <span className="text-gray-300">-</span>}
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      {item.unidadesBonificadas > 0 ? <span className="text-purple-600 font-semibold">+{item.unidadesBonificadas}</span> : <span className="text-gray-300">-</span>}
+                      {item.unidadesBonificadas > 0 ? (
+                        <div>
+                          <span className="text-purple-600 font-semibold">+{item.unidadesBonificadas}</span>
+                          <p className="text-[10px] text-gray-400">{item.quantidade_sugerida + item.unidadesBonificadas} un total</p>
+                        </div>
+                      ) : <span className="text-gray-300">-</span>}
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       {item.validade ? <span className="text-secondary-700 font-medium">{formatDate(item.validade)}</span> : <span className="text-gray-300">-</span>}

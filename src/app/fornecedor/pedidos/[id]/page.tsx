@@ -1326,6 +1326,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                               const desconto = subtotalBase * (sug.desconto_percentual / 100)
                               const subtotalComDesconto = subtotalBase - desconto
                               const bonifUnidades = sug.bonificacao_quantidade || 0
+                              const totalUnidades = sug.quantidade_sugerida + bonifUnidades
+                              const custoEfetivo = totalUnidades > 0 ? subtotalComDesconto / totalUnidades : 0
                               const diferenca = subtotalComDesconto - (item.valor * item.quantidade)
                               return (
                                 <div className="text-right">
@@ -1338,7 +1340,10 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                                     </p>
                                   )}
                                   {bonifUnidades > 0 && (
-                                    <p className="text-xs text-blue-500">+{bonifUnidades} gratis</p>
+                                    <>
+                                      <p className="text-xs text-purple-600 font-medium">+{bonifUnidades} gratis ({totalUnidades} un total)</p>
+                                      <p className="text-xs text-gray-500">R$ {custoEfetivo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/un efetivo</p>
+                                    </>
                                   )}
                                 </div>
                               )
@@ -1634,7 +1639,10 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                             </span>
                           )}
                           {bonifUnidades > 0 && (
-                            <span className="text-xs text-blue-500 ml-1.5">+{bonifUnidades} gratis</span>
+                            <>
+                              <span className="text-xs text-purple-600 font-medium ml-1.5">+{bonifUnidades} gratis ({sug.quantidade_sugerida + bonifUnidades} un)</span>
+                              <p className="text-xs text-gray-500">R$ {(subtotalSugerido / (sug.quantidade_sugerida + bonifUnidades)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/un efetivo</p>
+                            </>
                           )}
                         </div>
                       </div>
