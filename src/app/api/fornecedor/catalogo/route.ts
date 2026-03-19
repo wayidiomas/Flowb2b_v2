@@ -65,32 +65,52 @@ export async function POST() {
       .eq('cnpj', cnpjLimpo)
       .single()
 
+    let catalogo: { id: number; cnpj?: string; nome?: string } | null = null
+
     if (existing) {
-      return NextResponse.json({ error: 'Catalogo ja existe para este CNPJ' }, { status: 409 })
+      // Catálogo existe — verificar se está vazio para repopular
+      const { count } = await supabase
+        .from('catalogo_itens')
+        .select('id', { count: 'exact', head: true })
+        .eq('catalogo_id', existing.id)
+
+      if (count && count > 0) {
+        return NextResponse.json({ error: 'Catalogo ja existe e possui itens. Use o botao Sincronizar para atualizar.' }, { status: 409 })
+      }
+
+      // Catálogo vazio — vamos populá-lo
+      catalogo = existing
     }
 
-    // Buscar nome do fornecedor para preencher o catálogo
-    const { data: fornecedorRef } = await supabase
-      .from('fornecedores')
-      .select('nome, nome_fantasia')
-      .or(`cnpj.eq.${cnpjLimpo},cnpj.eq.${formatCnpj(cnpjLimpo)}`)
-      .limit(1)
-      .single()
+    if (!catalogo) {
+      // Buscar nome do fornecedor para preencher o catálogo
+      const { data: fornecedorRef } = await supabase
+        .from('fornecedores')
+        .select('nome, nome_fantasia')
+        .or(`cnpj.eq.${cnpjLimpo},cnpj.eq.${formatCnpj(cnpjLimpo)}`)
+        .limit(1)
+        .single()
 
-    // Criar catálogo
-    const { data: catalogo, error: createError } = await supabase
-      .from('catalogo_fornecedor')
-      .insert({
-        cnpj: cnpjLimpo,
-        nome: fornecedorRef?.nome_fantasia || fornecedorRef?.nome || 'Catalogo',
-        status: 'ativo',
-      })
-      .select()
-      .single()
+      // Criar catálogo
+      const { data: novoCatalogo, error: createError } = await supabase
+        .from('catalogo_fornecedor')
+        .insert({
+          cnpj: cnpjLimpo,
+          nome: fornecedorRef?.nome_fantasia || fornecedorRef?.nome || 'Catalogo',
+          status: 'ativo',
+        })
+        .select()
+        .single()
 
-    if (createError) {
-      console.error('Erro ao criar catalogo:', createError)
-      return NextResponse.json({ error: 'Erro ao criar catalogo' }, { status: 500 })
+      if (createError) {
+        console.error('Erro ao criar catalogo:', createError)
+        return NextResponse.json({ error: 'Erro ao criar catalogo' }, { status: 500 })
+      }
+      catalogo = novoCatalogo
+    }
+
+    if (!catalogo) {
+      return NextResponse.json({ error: 'Erro ao criar/encontrar catalogo' }, { status: 500 })
     }
 
     // Auto-popular: buscar todos fornecedores com este CNPJ
