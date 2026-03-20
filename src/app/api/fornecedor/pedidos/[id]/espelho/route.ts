@@ -74,8 +74,12 @@ export async function POST(
       )
     }
 
-    // Upload para Supabase Storage
-    const fileName = `${pedido.empresa_id}/${pedidoId}/${Date.now()}_${file.name}`
+    // Upload para Supabase Storage (sanitizar nome do arquivo)
+    const sanitizedName = file.name
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remover acentos
+      .replace(/[^a-zA-Z0-9._-]/g, '_') // substituir caracteres especiais por _
+      .replace(/_+/g, '_') // colapsar underscores consecutivos
+    const fileName = `${pedido.empresa_id}/${pedidoId}/${Date.now()}_${sanitizedName}`
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
