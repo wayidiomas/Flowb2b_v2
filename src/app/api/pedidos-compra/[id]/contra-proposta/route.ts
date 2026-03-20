@@ -56,18 +56,18 @@ export async function POST(
       )
     }
 
-    // Buscar sugestao anterior do fornecedor (para pegar fornecedor_user_id)
+    // Buscar sugestao anterior do fornecedor ou representante
     const { data: sugestaoAnterior } = await supabase
       .from('sugestoes_fornecedor')
-      .select('id, fornecedor_user_id')
+      .select('id, fornecedor_user_id, autor_tipo')
       .eq('pedido_compra_id', pedidoId)
       .eq('status', 'pendente')
-      .eq('autor_tipo', 'fornecedor')
+      .in('autor_tipo', ['fornecedor', 'representante'])
       .single()
 
-    if (!sugestaoAnterior || !sugestaoAnterior.fornecedor_user_id) {
+    if (!sugestaoAnterior) {
       return NextResponse.json(
-        { error: 'Nao foi encontrada sugestao do fornecedor para responder' },
+        { error: 'Nao foi encontrada sugestao do fornecedor/representante para responder' },
         { status: 400 }
       )
     }

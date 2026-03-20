@@ -9,19 +9,28 @@ interface RouteContext {
 
 interface SugestaoItem {
   item_id: number | null  // null para itens novos
+  produto_id?: number | null
   quantidade_sugerida: number
-  valor_unitario_sugerido: number
+  valor_unitario_sugerido?: number
   desconto_percentual?: number
   bonificacao_quantidade?: number
   validade?: string
   observacao?: string
-  // Novos campos para troca e adição de produtos
+  // Campos para troca e adição de produtos
   gtin?: string | null
   codigo_fornecedor?: string | null
   is_substituicao?: boolean
   is_novo?: boolean
   produto_nome?: string | null
   preco_unitario?: number | null
+}
+
+interface CondicoesComerciais {
+  valor_minimo_pedido?: number
+  desconto_geral?: number
+  bonificacao_quantidade_geral?: number
+  prazo_entrega_dias?: number
+  validade_proposta?: string
 }
 
 export async function POST(
@@ -49,6 +58,7 @@ export async function POST(
     // Aceitar tanto 'sugestoes' (formato antigo) quanto 'itens' (formato novo)
     const rawItens = body.sugestoes || body.itens || []
     const observacao_geral: string | undefined = body.observacao_geral || body.observacao
+    const condicoesComerciais: CondicoesComerciais | undefined = body.condicoes_comerciais
 
     // Mapear campos: frontend envia 'item_pedido_compra_id', API usa 'item_id'
     const sugestoes: SugestaoItem[] = rawItens.map((item: Record<string, unknown>) => ({
@@ -110,7 +120,7 @@ export async function POST(
     // Verificar se pedido existe e pertence a um fornecedor vinculado
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
-      .select('id, status_interno, fornecedor_id')
+      .select('id, status_interno, fornecedor_id, empresa_id')
       .eq('id', pedidoId)
       .in('fornecedor_id', fornecedorIds)
       .eq('is_excluded', false)
@@ -131,22 +141,67 @@ export async function POST(
       )
     }
 
-    // Deletar sugestoes anteriores
-    await supabase
-      .from('sugestoes_pedido_compra')
-      .delete()
+    // Deletar sugestoes anteriores do representante (pendentes) em sugestoes_fornecedor + sugestoes_fornecedor_itens
+    const { data: sugestoesPendentes } = await supabase
+      .from('sugestoes_fornecedor')
+      .select('id')
       .eq('pedido_compra_id', pedidoId)
+      .eq('autor_tipo', 'representante')
+      .eq('status', 'pendente')
 
-    // Inserir novas sugestoes
-    const sugestoesParaInserir = sugestoes.map(s => ({
-      pedido_compra_id: pedidoId,
-      item_id: s.item_id || null,
+    if (sugestoesPendentes && sugestoesPendentes.length > 0) {
+      const idsParaDeletar = sugestoesPendentes.map(s => s.id)
+
+      // Deletar itens primeiro (FK)
+      await supabase
+        .from('sugestoes_fornecedor_itens')
+        .delete()
+        .in('sugestao_id', idsParaDeletar)
+
+      // Deletar headers
+      await supabase
+        .from('sugestoes_fornecedor')
+        .delete()
+        .in('id', idsParaDeletar)
+    }
+
+    // Criar sugestao header em sugestoes_fornecedor
+    const { data: sugestao, error: sugestaoError } = await supabase
+      .from('sugestoes_fornecedor')
+      .insert({
+        pedido_compra_id: pedidoId,
+        fornecedor_user_id: null, // representante não tem fornecedor_user_id
+        empresa_id: pedido.empresa_id,
+        status: 'pendente',
+        observacao_fornecedor: observacao_geral || null,
+        autor_tipo: 'representante', // CRÍTICO: marca como representante
+        // Condições comerciais
+        valor_minimo_pedido: condicoesComerciais?.valor_minimo_pedido || null,
+        desconto_geral: condicoesComerciais?.desconto_geral || 0,
+        bonificacao_quantidade_geral: condicoesComerciais?.bonificacao_quantidade_geral || 0,
+        prazo_entrega_dias: condicoesComerciais?.prazo_entrega_dias || null,
+        validade_proposta: condicoesComerciais?.validade_proposta || null,
+      })
+      .select('id')
+      .single()
+
+    if (sugestaoError || !sugestao) {
+      console.error('Erro ao criar sugestao:', sugestaoError)
+      return NextResponse.json(
+        { success: false, error: 'Erro ao criar sugestao' },
+        { status: 500 }
+      )
+    }
+
+    // Inserir itens da sugestao em sugestoes_fornecedor_itens
+    const itensParaInserir = sugestoes.map(s => ({
+      sugestao_id: sugestao.id,
+      item_pedido_compra_id: s.item_id || null,
+      produto_id: s.produto_id || null,
       quantidade_sugerida: s.quantidade_sugerida,
-      valor_unitario_sugerido: s.valor_unitario_sugerido,
       desconto_percentual: s.desconto_percentual || 0,
       bonificacao_quantidade: s.bonificacao_quantidade || 0,
       validade: s.validade || null,
-      observacao: s.observacao || null,
       gtin: s.gtin || null,
       codigo_fornecedor: s.codigo_fornecedor || null,
       is_substituicao: s.is_substituicao || false,
@@ -155,21 +210,20 @@ export async function POST(
       preco_unitario: s.preco_unitario || null,
     }))
 
-    const { error: insertError } = await supabase
-      .from('sugestoes_pedido_compra')
-      .insert(sugestoesParaInserir)
+    const { error: itensError } = await supabase
+      .from('sugestoes_fornecedor_itens')
+      .insert(itensParaInserir)
 
-    if (insertError) {
-      console.error('Erro ao inserir sugestoes:', insertError)
-      throw insertError
+    if (itensError) {
+      console.error('Erro ao inserir itens da sugestao:', itensError)
+      throw itensError
     }
 
-    // Atualizar status do pedido
+    // Atualizar status do pedido para sugestao_pendente (mesmo que o fornecedor)
     const { error: updateError } = await supabase
       .from('pedidos_compra')
       .update({
-        status_interno: 'sugestao_enviada',
-        observacao: observacao_geral || null,
+        status_interno: 'sugestao_pendente',
         updated_at: new Date().toISOString(),
       })
       .eq('id', pedidoId)
@@ -180,13 +234,23 @@ export async function POST(
       throw updateError
     }
 
-    // Registrar na timeline
-    await supabase.from('pedido_compra_timeline').insert({
+    // Buscar nome do representante para a timeline
+    const { data: repUser } = await supabase
+      .from('users_representante')
+      .select('nome')
+      .eq('id', user.representanteUserId)
+      .single()
+    const representanteNome = repUser?.nome || user.email
+
+    // Registrar na timeline (pedido_timeline, mesma tabela do fornecedor)
+    await supabase.from('pedido_timeline').insert({
       pedido_compra_id: pedidoId,
-      status: 'sugestao_enviada',
-      descricao: 'Sugestao enviada pelo representante',
-      usuario_tipo: 'representante',
-      usuario_id: user.representanteUserId,
+      evento: 'sugestao_enviada',
+      descricao: observacao_geral
+        ? `Sugestao comercial enviada pelo representante: "${observacao_geral}"`
+        : 'Sugestao comercial enviada pelo representante',
+      autor_tipo: 'representante',
+      autor_nome: representanteNome,
     })
 
     void logActivity({
@@ -201,6 +265,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
+      sugestao_id: sugestao.id,
       message: 'Sugestao enviada com sucesso',
     })
   } catch (error) {

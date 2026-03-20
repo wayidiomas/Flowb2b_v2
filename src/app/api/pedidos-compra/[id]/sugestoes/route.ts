@@ -411,7 +411,7 @@ export async function GET(
         id, status, observacao_fornecedor, observacao_lojista, created_at,
         valor_minimo_pedido, desconto_geral, bonificacao_quantidade_geral,
         prazo_entrega_dias, validade_proposta, autor_tipo,
-        users_fornecedor!inner(nome, email)
+        users_fornecedor(nome, email)
       `)
       .eq('pedido_compra_id', pedidoId)
       .order('created_at', { ascending: false })
