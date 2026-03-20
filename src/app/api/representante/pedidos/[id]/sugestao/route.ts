@@ -46,7 +46,16 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { sugestoes, observacao_geral }: { sugestoes: SugestaoItem[]; observacao_geral?: string } = body
+    // Aceitar tanto 'sugestoes' (formato antigo) quanto 'itens' (formato novo)
+    const rawItens = body.sugestoes || body.itens || []
+    const observacao_geral: string | undefined = body.observacao_geral || body.observacao
+
+    // Mapear campos: frontend envia 'item_pedido_compra_id', API usa 'item_id'
+    const sugestoes: SugestaoItem[] = rawItens.map((item: Record<string, unknown>) => ({
+      ...item,
+      item_id: item.item_id ?? item.item_pedido_compra_id ?? null,
+      valor_unitario_sugerido: item.valor_unitario_sugerido ?? item.preco_unitario ?? 0,
+    })) as SugestaoItem[]
 
     if (!sugestoes || !Array.isArray(sugestoes) || sugestoes.length === 0) {
       return NextResponse.json(
