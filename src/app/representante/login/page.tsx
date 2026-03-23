@@ -130,10 +130,16 @@ function RepresentanteLoginForm() {
             </button>
           </form>
 
-          {/* Info */}
+          {/* Registro link */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
-              Para criar conta, utilize o link de convite enviado pelo lojista.
+              Nao tem conta?{' '}
+              <Link
+                href="/representante/registro"
+                className="text-amber-600 hover:text-amber-700 font-semibold"
+              >
+                Cadastre-se
+              </Link>
             </p>
           </div>
 
