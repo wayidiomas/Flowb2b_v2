@@ -292,7 +292,7 @@ export default function PoliticaCompraPage() {
             fornecedores!inner(id, nome, nome_fantasia)
           `)
           .eq('empresa_id', empresaId)
-          .neq('isdeleted', true)
+          .or('isdeleted.is.null,isdeleted.eq.false')
           .order('created_at', { ascending: false })
 
         if (politicasError) throw politicasError

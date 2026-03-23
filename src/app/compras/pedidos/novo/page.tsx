@@ -296,7 +296,7 @@ function NovoPedidoContent() {
           .select('*')
           .eq('fornecedor_id', fId)
           .eq('empresa_id', empresaId)
-          .eq('status', 'ativa')
+          .or('isdeleted.is.null,isdeleted.eq.false')
           .order('id', { ascending: false })
 
         if (politicasData && politicasData.length > 0) {

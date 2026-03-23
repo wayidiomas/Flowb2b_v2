@@ -399,12 +399,13 @@ function GerarAutomaticoContent() {
 
         setFornecedor(fornecedorData)
 
-        // Buscar TODAS as politicas de compra do fornecedor (ativas e inativas)
+        // Buscar politicas de compra ativas do fornecedor
         const { data: politicasData } = await supabase
           .from('politica_compra')
           .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque, bonificacao, forma_pagamento_dias, observacao, status')
           .eq('fornecedor_id', parseInt(fornecedorIdParam))
           .eq('empresa_id', empresaId)
+          .or('isdeleted.is.null,isdeleted.eq.false')
           .order('valor_minimo', { ascending: true })
 
         if (politicasData && politicasData.length > 0) {
@@ -433,7 +434,7 @@ function GerarAutomaticoContent() {
     setPoliticasAplicaveis([])
     setSugestoes([])
 
-    // Buscar TODAS as politicas do fornecedor selecionado (ativas e inativas)
+    // Buscar politicas de compra ativas do fornecedor selecionado
     const empresaId = empresa?.id || user?.empresa_id
     if (empresaId) {
       const { data: politicasData } = await supabase
@@ -441,6 +442,7 @@ function GerarAutomaticoContent() {
         .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque, bonificacao, forma_pagamento_dias, observacao, status')
         .eq('fornecedor_id', selected.id)
         .eq('empresa_id', empresaId)
+        .or('isdeleted.is.null,isdeleted.eq.false')
         .order('valor_minimo', { ascending: true })
 
       if (politicasData && politicasData.length > 0) {

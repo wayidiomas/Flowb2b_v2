@@ -117,6 +117,7 @@ export async function GET() {
       .from('politica_compra')
       .select('fornecedor_id, prazo_entrega')
       .eq('empresa_id', user.empresaId)
+      .or('isdeleted.is.null,isdeleted.eq.false')
 
     const prazoEntregaMap = new Map<number, number | null>()
     politicas?.forEach(p => {

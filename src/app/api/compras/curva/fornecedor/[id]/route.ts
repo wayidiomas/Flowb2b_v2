@@ -74,7 +74,9 @@ export async function GET(
       .select('prazo_entrega')
       .eq('fornecedor_id', fornecedorId)
       .eq('empresa_id', user.empresaId)
-      .single()
+      .or('isdeleted.is.null,isdeleted.eq.false')
+      .limit(1)
+      .maybeSingle()
 
     const prazoEntrega = politica?.prazo_entrega ?? null
 

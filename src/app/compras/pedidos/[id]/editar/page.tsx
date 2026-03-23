@@ -180,6 +180,7 @@ export default function EditarPedidoCompraPage() {
               .select('*')
               .eq('fornecedor_id', p.fornecedor_id)
               .eq('empresa_id', empresaId)
+              .or('isdeleted.is.null,isdeleted.eq.false')
 
             if (pols) {
               setPoliticas(pols)
