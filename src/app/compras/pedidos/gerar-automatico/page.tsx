@@ -454,7 +454,7 @@ function GerarAutomaticoContent() {
 
   // Filtrar fornecedores no modal
   const filteredFornecedores = fornecedores.filter(f =>
-    f.nome.toLowerCase().includes(fornecedorSearch.toLowerCase()) ||
+    (f.nome || '').toLowerCase().includes(fornecedorSearch.toLowerCase()) ||
     (f.cnpj && f.cnpj.includes(fornecedorSearch))
   )
 
