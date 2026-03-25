@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
       `, { count: 'exact' })
       .in('fornecedor_id', fornecedorIds)
       .eq('is_excluded', false)
-      .in('status_interno', ['enviado_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'cancelado', 'contra_proposta'])
+      .in('status_interno', ['enviado_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'contra_proposta'])
 
     // Filtros opcionais
     // Mostrar pedidos da origem selecionada OU pedidos enviados diretamente a este representante

@@ -68,6 +68,7 @@ export async function GET() {
       .in('fornecedor_id', fornecedorIds)
       .eq('is_excluded', false)
       .neq('status_interno', 'rascunho')
+      .neq('status_interno', 'cancelado')
       .order('data', { ascending: false })
       .limit(10)
 

@@ -66,12 +66,12 @@ export async function GET() {
       .select('id, status_interno, total')
       .in('fornecedor_id', fornecedorIds)
       .eq('is_excluded', false)
-      .in('status_interno', ['enviado_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'cancelado', 'contra_proposta'])
+      .in('status_interno', ['enviado_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'contra_proposta'])
 
     const totalPedidos = pedidos?.length || 0
     const pedidosPendentes = pedidos?.filter(p => p.status_interno === 'enviado_fornecedor').length || 0
     const pedidosAprovados = pedidos?.filter(p => p.status_interno === 'aprovado').length || 0
-    const pedidosRecusados = pedidos?.filter(p => p.status_interno === 'recusado' || p.status_interno === 'cancelado').length || 0
+    const pedidosRecusados = pedidos?.filter(p => p.status_interno === 'recusado').length || 0
     const valorTotal = pedidos?.reduce((sum, p) => sum + (p.total || 0), 0) || 0
 
     return NextResponse.json({

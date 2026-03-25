@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
       .in('fornecedor_id', fornecedorIds)
       .eq('is_excluded', false)
       .neq('status_interno', 'rascunho')
+      .neq('status_interno', 'cancelado')
       .order('data', { ascending: false })
 
     if (origemFilter !== 'todos') {
