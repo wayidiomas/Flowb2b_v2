@@ -103,6 +103,7 @@ export default function UsuariosPage() {
 
   // Edit modal state
   const [editModal, setEditModal] = useState<{ tipo: TabKey; id: string | number; nome: string | null; email: string } | null>(null)
+  const [editNome, setEditNome] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [editPassword, setEditPassword] = useState('')
   const [editPasswordConfirm, setEditPasswordConfirm] = useState('')
@@ -194,6 +195,7 @@ export default function UsuariosPage() {
 
   function openEditModal(tipo: TabKey, id: string | number, nome: string | null, email: string) {
     setEditModal({ tipo, id, nome, email })
+    setEditNome(nome || '')
     setEditEmail(email)
     setEditPassword('')
     setEditPasswordConfirm('')
@@ -213,10 +215,11 @@ export default function UsuariosPage() {
       return
     }
 
+    const nomeChanged = editNome.trim() !== (editModal.nome || '').trim()
     const emailChanged = editEmail.toLowerCase() !== editModal.email.toLowerCase()
     const passwordChanged = editPassword.length > 0
 
-    if (!emailChanged && !passwordChanged) {
+    if (!nomeChanged && !emailChanged && !passwordChanged) {
       setEditError('Nenhuma alteracao detectada.')
       return
     }
@@ -224,6 +227,7 @@ export default function UsuariosPage() {
     setEditLoading(true)
     try {
       const body: Record<string, string> = {}
+      if (nomeChanged) body.nome = editNome.trim()
       if (emailChanged) body.email = editEmail
       if (passwordChanged) body.password = editPassword
 
@@ -827,6 +831,16 @@ export default function UsuariosPage() {
             </div>
 
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                <input
+                  type="text"
+                  value={editNome}
+                  onChange={(e) => { setEditNome(e.target.value); setEditError('') }}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                 <input

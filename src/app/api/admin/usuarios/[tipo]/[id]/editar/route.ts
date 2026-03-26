@@ -28,11 +28,11 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { email, password } = body
+    const { nome, email, password } = body
 
-    if (!email && !password) {
+    if (!nome && !email && !password) {
       return NextResponse.json(
-        { error: 'Informe pelo menos email ou senha para atualizar.' },
+        { error: 'Informe pelo menos nome, email ou senha para atualizar.' },
         { status: 400 }
       )
     }
@@ -56,6 +56,13 @@ export async function PATCH(
     // Montar update
     const updateData: Record<string, string> = {
       updated_at: new Date().toISOString(),
+    }
+
+    if (nome) {
+      if (nome.trim().length < 2) {
+        return NextResponse.json({ error: 'Nome deve ter no minimo 2 caracteres.' }, { status: 400 })
+      }
+      updateData.nome = nome.trim()
     }
 
     if (email) {
@@ -112,6 +119,7 @@ export async function PATCH(
     }
 
     const changes: string[] = []
+    if (nome) changes.push('nome')
     if (email) changes.push('email')
     if (password) changes.push('senha')
 
