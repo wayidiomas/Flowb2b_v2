@@ -4,6 +4,8 @@ import { getCurrentUser } from '@/lib/auth'
 import { requirePermission } from '@/lib/permissions'
 import OpenAI from 'openai'
 
+export const maxDuration = 60
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -67,27 +69,27 @@ function getMimeType(filename: string): string {
 }
 
 function similarity(a: string, b: string): number {
-  const sa = a.toLowerCase().replace(/[^a-z0-9]/g, '')
-  const sb = b.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const sa = a.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()
+  const sb = b.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()
   if (!sa || !sb) return 0
   if (sa === sb) return 1
-  if (sa.includes(sb) || sb.includes(sa)) return 0.8
 
-  // Character overlap ratio as a simple similarity heuristic
-  const charsA = sa.split('')
-  const setB = new Set(sb.split(''))
-  const uniqueA = new Set(charsA)
+  // Token-based Jaccard similarity (words, not characters)
+  const tokensA = new Set(sa.split(/\s+/).filter(t => t.length > 1))
+  const tokensB = new Set(sb.split(/\s+/).filter(t => t.length > 1))
+  if (tokensA.size === 0 || tokensB.size === 0) return 0
+
   let intersection = 0
-  uniqueA.forEach(c => {
-    if (setB.has(c)) intersection++
-  })
-  return intersection / Math.max(uniqueA.size, setB.size)
+  tokensA.forEach(t => { if (tokensB.has(t)) intersection++ })
+  const union = new Set([...tokensA, ...tokensB]).size
+  return union > 0 ? intersection / union : 0
 }
 
 function cleanNumber(val: unknown): number | null {
   if (val === null || val === undefined) return null
   if (typeof val === 'number') return isNaN(val) ? null : val
-  const str = String(val).replace(/[R$\s]/g, '').replace(',', '.')
+  // Remove R$, spaces, then handle BR format: 1.234,56 → 1234.56
+  const str = String(val).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.')
   const num = parseFloat(str)
   return isNaN(num) ? null : num
 }
@@ -393,23 +395,39 @@ Retorne APENAS um JSON array valido, sem markdown, sem explicacao:
 
 Se um campo nao estiver visivel, use null. Extraia TODOS os itens, mesmo que a tabela tenha muitas linhas.`,
               },
-              {
-                type: 'input_image',
-                image_url: `data:${mimeType};base64,${base64}`,
-                detail: 'auto',
-              },
+              ...(mimeType === 'application/pdf'
+                ? [{
+                    type: 'input_file' as const,
+                    file_data: `data:${mimeType};base64,${base64}`,
+                    filename: filename,
+                  }]
+                : [{
+                    type: 'input_image' as const,
+                    image_url: `data:${mimeType};base64,${base64}`,
+                    detail: 'auto' as const,
+                  }]
+              ),
             ],
           },
         ],
       })
 
       // Parse the JSON response
-      const responseText = response.output_text.trim()
-      // Remove possible markdown code blocks
-      const jsonText = responseText
-        .replace(/^```json?\n?/, '')
-        .replace(/\n?```$/, '')
-        .trim()
+      const responseText = (response.output_text || '').trim()
+      if (!responseText) {
+        throw new Error('IA retornou resposta vazia')
+      }
+      // Extract JSON array - try direct parse first, then strip markdown
+      let jsonText = responseText
+      const codeBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/)
+      if (codeBlockMatch) {
+        jsonText = codeBlockMatch[1].trim()
+      } else {
+        const arrayMatch = responseText.match(/\[[\s\S]*\]/)
+        if (arrayMatch) {
+          jsonText = arrayMatch[0]
+        }
+      }
 
       itensExtraidos = JSON.parse(jsonText)
 
@@ -426,13 +444,9 @@ Se um campo nao estiver visivel, use null. Extraia TODOS os itens, mesmo que a t
         total: cleanNumber(item.total),
       }))
     } catch (aiError: unknown) {
-      const errorMessage = aiError instanceof Error ? aiError.message : String(aiError)
       console.error('Erro na chamada OpenAI ou parse da resposta:', aiError)
       return NextResponse.json(
-        {
-          error: 'Erro ao analisar o espelho com IA. Tente novamente.',
-          detalhes: errorMessage,
-        },
+        { error: 'Erro ao analisar o espelho com IA. Tente novamente.' },
         { status: 500 }
       )
     }
