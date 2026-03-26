@@ -396,11 +396,11 @@ function ModalImageSection({
         {/* Actions */}
         <div className="flex-1 space-y-2">
           {/* Upload file */}
-          <label className={`flex items-center gap-2 px-3 py-2 text-xs font-medium border border-gray-300 rounded-lg cursor-pointer hover:bg-white hover:border-[#336FB6] transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className={`relative flex items-center gap-2 px-3 py-2 text-xs font-medium border border-gray-300 rounded-lg cursor-pointer hover:bg-white hover:border-[#336FB6] transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
-              className="absolute w-0 h-0 opacity-0 pointer-events-none"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               onChange={handleFileChange}
             />
             {uploading ? (
@@ -414,7 +414,7 @@ function ModalImageSection({
               </svg>
             )}
             <span className="text-gray-600">{uploading ? 'Enviando...' : 'Enviar do computador'}</span>
-          </label>
+          </div>
 
           {/* URL externa */}
           {showUrlField ? (
@@ -1077,13 +1077,13 @@ function ProductImageUpload({
           </div>
 
           {tab === 'upload' ? (
-            <label
-              className={`w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-[#336FB6] hover:text-[#336FB6] transition-colors flex items-center justify-center gap-2 cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+            <div
+              className={`relative w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-[#336FB6] hover:text-[#336FB6] transition-colors flex items-center justify-center gap-2 cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
             >
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                className="absolute w-0 h-0 opacity-0 pointer-events-none"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 onChange={handleFileChange}
               />
               {uploading ? (
@@ -1102,7 +1102,7 @@ function ProductImageUpload({
                   Clique para selecionar (JPEG, PNG, WebP)
                 </>
               )}
-            </label>
+            </div>
           ) : (
             <div className="space-y-2">
               <input
