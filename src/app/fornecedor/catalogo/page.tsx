@@ -31,6 +31,7 @@ interface CatalogoItem {
   preco_base: number | null
   ativo: boolean
   ordem: number | null
+  imagem_url: string | null
   preco_customizado?: number | null
   desconto_percentual?: number | null
   ativo_lojista?: boolean | null
@@ -739,12 +740,126 @@ function MarcaFilterDropdown({
 // Product Card (mobile)
 // ---------------------------------------------------------------------------
 
+function ProductImageUpload({
+  item,
+  onUploaded,
+}: {
+  item: CatalogoItem
+  onUploaded: (id: number, url: string | null) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch(`/api/fornecedor/catalogo/itens/${item.id}/imagem`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      if (res.ok && data.imagem_url) {
+        onUploaded(item.id, data.imagem_url)
+      } else {
+        alert(data.error || 'Erro ao enviar imagem')
+      }
+    } catch {
+      alert('Erro ao enviar imagem')
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  const handleRemove = async () => {
+    setUploading(true)
+    try {
+      const res = await fetch(`/api/fornecedor/catalogo/itens/${item.id}/imagem`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        onUploaded(item.id, null)
+      }
+    } catch {
+      alert('Erro ao remover imagem')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 group">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      {uploading ? (
+        <div className="flex items-center justify-center w-full h-full">
+          <svg className="w-5 h-5 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+        </div>
+      ) : item.imagem_url ? (
+        <>
+          <img
+            src={item.imagem_url}
+            alt={item.nome}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="p-1 bg-white/90 rounded-full mr-1"
+              title="Trocar imagem"
+            >
+              <svg className="w-3.5 h-3.5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+              </svg>
+            </button>
+            <button
+              onClick={handleRemove}
+              className="p-1 bg-white/90 rounded-full"
+              title="Remover imagem"
+            >
+              <svg className="w-3.5 h-3.5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </>
+      ) : (
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="flex flex-col items-center justify-center w-full h-full text-gray-400 hover:text-[#336FB6] hover:bg-gray-50 transition-colors"
+          title="Adicionar imagem"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+          </svg>
+          <span className="text-[9px] mt-0.5">Foto</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
 function ProductCard({
   item,
   lojistaFilter,
   onToggleAtivo,
   onUpdatePreco,
   onPersonalizar,
+  onImageUploaded,
   saving,
 }: {
   item: CatalogoItem
@@ -752,6 +867,7 @@ function ProductCard({
   onToggleAtivo: (id: number, ativo: boolean) => void
   onUpdatePreco: (id: number, preco: number) => void
   onPersonalizar: (item: CatalogoItem) => void
+  onImageUploaded: (id: number, url: string | null) => void
   saving?: boolean
 }) {
   const hasCustomPrice = lojistaFilter && item.preco_customizado != null
@@ -759,16 +875,19 @@ function ProductCard({
   return (
     <div className={`p-4 ${!item.ativo ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.nome}</p>
-          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-            <span className="font-mono">{item.codigo || '-'}</span>
-            {item.marca && (
-              <>
-                <span className="text-gray-300">|</span>
-                <span>{item.marca}</span>
-              </>
-            )}
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          <ProductImageUpload item={item} onUploaded={onImageUploaded} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.nome}</p>
+            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+              <span className="font-mono">{item.codigo || '-'}</span>
+              {item.marca && (
+                <>
+                  <span className="text-gray-300">|</span>
+                  <span>{item.marca}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
         <ToggleSwitch
@@ -994,6 +1113,11 @@ export default function FornecedorCatalogoPage() {
   }
 
   // ------ Toggle ativo ------
+  const handleImageUploaded = (id: number, url: string | null) => {
+    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, imagem_url: url } : i)))
+    setToast({ message: url ? 'Imagem atualizada!' : 'Imagem removida!', type: 'success' })
+  }
+
   const handleToggleAtivo = async (id: number, ativo: boolean) => {
     // Optimistic update
     setItens((prev) => prev.map((i) => (i.id === id ? { ...i, ativo } : i)))
@@ -1235,6 +1359,7 @@ export default function FornecedorCatalogoPage() {
                   <thead>
                     <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
                       <th className="px-6 py-4 w-12">Ativo</th>
+                      <th className="px-4 py-4 w-16">Foto</th>
                       <th className="px-6 py-4">Codigo</th>
                       <th className="px-6 py-4">Nome</th>
                       <th className="px-6 py-4">Marca</th>
@@ -1257,6 +1382,9 @@ export default function FornecedorCatalogoPage() {
                               checked={item.ativo}
                               onChange={(val) => handleToggleAtivo(item.id, val)}
                             />
+                          </td>
+                          <td className="px-4 py-2">
+                            <ProductImageUpload item={item} onUploaded={handleImageUploaded} />
                           </td>
                           <td className="px-6 py-4 text-sm font-mono text-gray-700">{item.codigo || '-'}</td>
                           <td className="px-6 py-4 text-sm text-gray-900 font-medium max-w-xs truncate">
@@ -1318,6 +1446,7 @@ export default function FornecedorCatalogoPage() {
                     onToggleAtivo={handleToggleAtivo}
                     onUpdatePreco={handleUpdatePreco}
                     onPersonalizar={setModalItem}
+                    onImageUploaded={handleImageUploaded}
                     saving={savingItemId === item.id}
                   />
                 ))}
