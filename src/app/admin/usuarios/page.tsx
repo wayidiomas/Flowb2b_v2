@@ -101,6 +101,15 @@ export default function UsuariosPage() {
   const [actionLoading, setActionLoading] = useState<string | number | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
+  // Edit modal state
+  const [editModal, setEditModal] = useState<{ tipo: TabKey; id: string | number; nome: string | null; email: string } | null>(null)
+  const [editEmail, setEditEmail] = useState('')
+  const [editPassword, setEditPassword] = useState('')
+  const [editPasswordConfirm, setEditPasswordConfirm] = useState('')
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [editSuccess, setEditSuccess] = useState('')
+
   // Debounce search
   const [debouncedSearch, setDebouncedSearch] = useState('')
   useEffect(() => {
@@ -183,6 +192,61 @@ export default function UsuariosPage() {
     }
   }
 
+  function openEditModal(tipo: TabKey, id: string | number, nome: string | null, email: string) {
+    setEditModal({ tipo, id, nome, email })
+    setEditEmail(email)
+    setEditPassword('')
+    setEditPasswordConfirm('')
+    setEditError('')
+    setEditSuccess('')
+    setOpenActionId(null)
+  }
+
+  async function handleEditar() {
+    if (!editModal) return
+    setEditError('')
+    setEditSuccess('')
+
+    // Validar
+    if (editPassword && editPassword !== editPasswordConfirm) {
+      setEditError('As senhas nao coincidem.')
+      return
+    }
+
+    const emailChanged = editEmail.toLowerCase() !== editModal.email.toLowerCase()
+    const passwordChanged = editPassword.length > 0
+
+    if (!emailChanged && !passwordChanged) {
+      setEditError('Nenhuma alteracao detectada.')
+      return
+    }
+
+    setEditLoading(true)
+    try {
+      const body: Record<string, string> = {}
+      if (emailChanged) body.email = editEmail
+      if (passwordChanged) body.password = editPassword
+
+      const res = await fetch(`/api/admin/usuarios/${editModal.tipo}/${editModal.id}/editar`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        setEditSuccess(json.message || 'Atualizado com sucesso!')
+        await fetchData()
+        setTimeout(() => setEditModal(null), 1200)
+      } else {
+        setEditError(json.error || 'Erro ao atualizar')
+      }
+    } catch {
+      setEditError('Erro de conexao')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
   async function handleResetSenha(tipo: TabKey, id: string | number) {
     if (!confirm('Tem certeza que deseja enviar email de reset de senha?')) return
     setActionLoading(id)
@@ -248,7 +312,7 @@ export default function UsuariosPage() {
     )
   }
 
-  function ActionMenu({ tipo, id, ativo, nome }: { tipo: TabKey; id: string | number; ativo: boolean; nome: string | null }) {
+  function ActionMenu({ tipo, id, ativo, nome, email }: { tipo: TabKey; id: string | number; ativo: boolean; nome: string | null; email: string }) {
     const isOpen = openActionId === id
     const isLoading = actionLoading === id
 
@@ -285,6 +349,15 @@ export default function UsuariosPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               Ver detalhes
+            </button>
+            <button
+              onClick={() => openEditModal(tipo, id, nome, email)}
+              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+              </svg>
+              Editar email/senha
             </button>
             <button
               onClick={() => handleResetSenha(tipo, id)}
@@ -422,7 +495,7 @@ export default function UsuariosPage() {
                   <span className="text-sm text-gray-500">{formatDate(u.created_at)}</span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <ActionMenu tipo="lojistas" id={u.id} ativo={u.ativo} nome={u.nome} />
+                  <ActionMenu tipo="lojistas" id={u.id} ativo={u.ativo} nome={u.nome} email={u.email} />
                 </td>
               </tr>
             ))
@@ -473,7 +546,7 @@ export default function UsuariosPage() {
                   <StatusBadge ativo={f.ativo} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <ActionMenu tipo="fornecedores" id={f.id} ativo={f.ativo} nome={f.nome} />
+                  <ActionMenu tipo="fornecedores" id={f.id} ativo={f.ativo} nome={f.nome} email={f.email} />
                 </td>
               </tr>
             ))
@@ -552,7 +625,7 @@ export default function UsuariosPage() {
                   <StatusBadge ativo={r.ativo} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <ActionMenu tipo="representantes" id={r.id} ativo={r.ativo} nome={r.nome} />
+                  <ActionMenu tipo="representantes" id={r.id} ativo={r.ativo} nome={r.nome} email={r.email} />
                 </td>
               </tr>
             ))
@@ -729,6 +802,107 @@ export default function UsuariosPage() {
           )}
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => !editLoading && setEditModal(null)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Editar usuario</h3>
+                <p className="text-sm text-gray-500 mt-0.5">{editModal.nome || `ID #${editModal.id}`}</p>
+              </div>
+              <button
+                onClick={() => !editLoading && setEditModal(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => { setEditEmail(e.target.value); setEditError('') }}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nova senha <span className="text-gray-400 font-normal">(deixe vazio para manter)</span></label>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => { setEditPassword(e.target.value); setEditError('') }}
+                  placeholder="••••••••"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              {editPassword && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar senha</label>
+                  <input
+                    type="password"
+                    value={editPasswordConfirm}
+                    onChange={(e) => { setEditPasswordConfirm(e.target.value); setEditError('') }}
+                    placeholder="••••••••"
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+              )}
+
+              {editError && (
+                <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm border border-red-100">
+                  {editError}
+                </div>
+              )}
+
+              {editSuccess && (
+                <div className="bg-green-50 text-green-600 px-3 py-2 rounded-lg text-sm border border-green-100">
+                  {editSuccess}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setEditModal(null)}
+                disabled={editLoading}
+                className="flex-1 py-2.5 px-4 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEditar}
+                disabled={editLoading}
+                className="flex-1 py-2.5 px-4 bg-primary-700 hover:bg-primary-800 text-white font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {editLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Salvando...
+                  </>
+                ) : (
+                  'Salvar'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   )
 }

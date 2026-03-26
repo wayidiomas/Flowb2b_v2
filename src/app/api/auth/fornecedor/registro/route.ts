@@ -62,39 +62,66 @@ export async function POST(request: NextRequest) {
     // Verificar se email ja existe
     const { data: existingUser } = await supabase
       .from('users_fornecedor')
-      .select('id')
+      .select('id, ativo')
       .eq('email', email.toLowerCase())
       .single()
-
-    if (existingUser) {
-      return NextResponse.json(
-        { success: false, error: 'Este email ja esta cadastrado' },
-        { status: 409 }
-      )
-    }
 
     // Criar hash da senha
     const passwordHash = await hashPassword(password)
 
-    // Inserir novo usuario fornecedor
-    const { data: newUser, error: insertError } = await supabase
-      .from('users_fornecedor')
-      .insert({
-        nome,
-        email: email.toLowerCase(),
-        password_hash: passwordHash,
-        cnpj: cnpjClean,
-        telefone: telefone || null,
-      })
-      .select()
-      .single()
+    let newUser: { id: number; email: string } | null = null
 
-    if (insertError || !newUser) {
-      console.error('Fornecedor register error:', insertError)
+    if (existingUser && existingUser.ativo) {
       return NextResponse.json(
-        { success: false, error: 'Erro ao criar conta' },
-        { status: 500 }
+        { success: false, error: 'Este email ja esta cadastrado' },
+        { status: 409 }
       )
+    } else if (existingUser && !existingUser.ativo) {
+      // Reativar conta desativada com novos dados
+      const { data: reactivated, error: updateError } = await supabase
+        .from('users_fornecedor')
+        .update({
+          nome,
+          password_hash: passwordHash,
+          cnpj: cnpjClean,
+          telefone: telefone || null,
+          ativo: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingUser.id)
+        .select('id, email')
+        .single()
+
+      if (updateError || !reactivated) {
+        console.error('Fornecedor reactivate error:', updateError)
+        return NextResponse.json(
+          { success: false, error: 'Erro ao criar conta' },
+          { status: 500 }
+        )
+      }
+      newUser = reactivated
+    } else {
+      // Inserir novo usuario fornecedor
+      const { data: created, error: insertError } = await supabase
+        .from('users_fornecedor')
+        .insert({
+          nome,
+          email: email.toLowerCase(),
+          password_hash: passwordHash,
+          cnpj: cnpjClean,
+          telefone: telefone || null,
+        })
+        .select('id, email')
+        .single()
+
+      if (insertError || !created) {
+        console.error('Fornecedor register error:', insertError)
+        return NextResponse.json(
+          { success: false, error: 'Erro ao criar conta' },
+          { status: 500 }
+        )
+      }
+      newUser = created
     }
 
     // Log registration activity
