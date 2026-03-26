@@ -357,7 +357,7 @@ export default function VisualizarPedidoPage() {
         }),
       })
       if (res.ok) {
-        alert('Validacao salva com sucesso!')
+        setShowValidacaoModal(false)
       } else {
         const data = await res.json()
         alert(data.error || 'Erro ao salvar')
