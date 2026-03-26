@@ -20,6 +20,7 @@ import type { PedidoCompraDetalhes, FornecedorOption, SugestaoFornecedor, Sugest
 
 interface ValidacaoItemResult {
   status: 'ok' | 'divergencia' | 'faltando' | 'extra'
+  status_manual?: 'ok' | 'divergencia' | 'faltando' | 'extra' | 'ignorado' | null
   item_pedido?: {
     codigo: string | null
     descricao: string | null
@@ -35,6 +36,7 @@ interface ValidacaoItemResult {
     total: number | null
   }
   diferencas?: string[]
+  observacao_item?: string
 }
 
 interface ValidacaoResult {
@@ -139,6 +141,9 @@ export default function VisualizarPedidoPage() {
   const [validandoEspelho, setValidandoEspelho] = useState(false)
   const [validacaoResult, setValidacaoResult] = useState<ValidacaoResult | null>(null)
   const [showValidacaoModal, setShowValidacaoModal] = useState(false)
+  const [validacaoItens, setValidacaoItens] = useState<ValidacaoItemResult[]>([])
+  const [salvandoValidacao, setSalvandoValidacao] = useState(false)
+  const [validacaoObservacao, setValidacaoObservacao] = useState('')
 
   // Modais de escolha destinatario (fornecedor vs representante)
   const [showTipoDestinatarioModal, setShowTipoDestinatarioModal] = useState(false)
@@ -226,6 +231,52 @@ export default function VisualizarPedidoPage() {
     fetchStatusEsugestoes()
   }, [pedidoId, user?.empresa_id])
 
+  // Carregar validacao salva do espelho (se existir)
+  useEffect(() => {
+    if (!espelhoInfo?.espelho_url) return
+    fetch(`/api/pedidos-compra/${pedidoId}/espelho/validacao`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.exists) {
+          // Reconstruir itens no formato ValidacaoItemResult
+          const itensFormatados: ValidacaoItemResult[] = (data.itens || []).map((item: Record<string, unknown>) => ({
+            status: (item.status_ia as string) || 'ok',
+            status_manual: (item.status_manual as string) || (item.status_ia as string) || null,
+            item_pedido: item.item_pedido_descricao ? {
+              codigo: item.item_pedido_codigo as string | null,
+              descricao: item.item_pedido_descricao as string | null,
+              quantidade: (item.item_pedido_quantidade as number) || 0,
+              valor: item.item_pedido_valor as number | null,
+              gtin: item.item_pedido_gtin as string | null,
+            } : undefined,
+            item_espelho: item.item_espelho_nome ? {
+              codigo: item.item_espelho_codigo as string | null,
+              nome: item.item_espelho_nome as string | null,
+              quantidade: item.item_espelho_quantidade as number | null,
+              preco_unitario: item.item_espelho_preco as number | null,
+              total: null,
+            } : undefined,
+            diferencas: item.diferencas as string[] | undefined,
+            observacao_item: item.observacao_item as string | undefined,
+          }))
+          setValidacaoResult({
+            resumo: {
+              total_pedido: data.validacao.total_ok + data.validacao.total_divergencias + data.validacao.total_faltando,
+              total_espelho: data.validacao.total_ok + data.validacao.total_divergencias + data.validacao.total_extras,
+              ok: data.validacao.total_ok,
+              divergencias: data.validacao.total_divergencias,
+              faltando: data.validacao.total_faltando,
+              extras: data.validacao.total_extras,
+            },
+            itens: itensFormatados,
+          })
+          setValidacaoItens(itensFormatados)
+          setValidacaoObservacao(data.validacao.observacao || '')
+        }
+      })
+      .catch(() => {})
+  }, [espelhoInfo, pedidoId])
+
   // Handler para aprovar/rejeitar espelho
   const handleEspelhoAction = async (action: 'aprovar' | 'rejeitar') => {
     if (!pedido) return
@@ -260,6 +311,11 @@ export default function VisualizarPedidoPage() {
       const data = await res.json()
       if (res.ok && data.success) {
         setValidacaoResult(data)
+        setValidacaoItens(data.itens.map((item: ValidacaoItemResult) => ({
+          ...item,
+          status_manual: item.status,
+        })))
+        setValidacaoObservacao('')
         setShowValidacaoModal(true)
       } else {
         alert(data.error || 'Erro ao validar espelho')
@@ -268,6 +324,45 @@ export default function VisualizarPedidoPage() {
       alert('Erro ao validar espelho')
     } finally {
       setValidandoEspelho(false)
+    }
+  }
+
+  const handleSalvarValidacao = async () => {
+    setSalvandoValidacao(true)
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedidoId}/espelho/validacao`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'validado',
+          observacao: validacaoObservacao,
+          itens: validacaoItens.map(item => ({
+            status_ia: item.status,
+            status_manual: item.status_manual || item.status,
+            item_pedido_codigo: item.item_pedido?.codigo,
+            item_pedido_descricao: item.item_pedido?.descricao,
+            item_pedido_quantidade: item.item_pedido?.quantidade,
+            item_pedido_valor: item.item_pedido?.valor,
+            item_pedido_gtin: item.item_pedido?.gtin,
+            item_espelho_codigo: item.item_espelho?.codigo,
+            item_espelho_nome: item.item_espelho?.nome,
+            item_espelho_quantidade: item.item_espelho?.quantidade,
+            item_espelho_preco: item.item_espelho?.preco_unitario,
+            diferencas: item.diferencas,
+            observacao_item: item.observacao_item,
+          })),
+        }),
+      })
+      if (res.ok) {
+        alert('Validacao salva com sucesso!')
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Erro ao salvar')
+      }
+    } catch {
+      alert('Erro ao salvar validacao')
+    } finally {
+      setSalvandoValidacao(false)
     }
   }
 
@@ -1554,17 +1649,33 @@ export default function VisualizarPedidoPage() {
         </div>
       )}
 
-      {/* Validacao Espelho Modal */}
-      {showValidacaoModal && validacaoResult && (
+      {/* Validacao Espelho Modal - Editavel */}
+      {showValidacaoModal && validacaoResult && (() => {
+        const manualResumo = {
+          ok: validacaoItens.filter(i => (i.status_manual || i.status) === 'ok').length,
+          divergencias: validacaoItens.filter(i => (i.status_manual || i.status) === 'divergencia').length,
+          faltando: validacaoItens.filter(i => (i.status_manual || i.status) === 'faltando').length,
+          extras: validacaoItens.filter(i => (i.status_manual || i.status) === 'extra').length,
+          ignorados: validacaoItens.filter(i => i.status_manual === 'ignorado').length,
+        }
+        const sortedItens = [...validacaoItens]
+          .map((item, originalIdx) => ({ ...item, _idx: originalIdx }))
+          .sort((a, b) => {
+            const order: Record<string, number> = { divergencia: 0, faltando: 1, extra: 2, ok: 3, ignorado: 4 }
+            const statusA = (a.status_manual || a.status) as string
+            const statusB = (b.status_manual || b.status) as string
+            return (order[statusA] ?? 5) - (order[statusB] ?? 5)
+          })
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowValidacaoModal(false)} />
-          <div className="relative w-full max-w-4xl max-h-[90vh] mx-4 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="relative w-full max-w-5xl max-h-[90vh] mx-4 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 shrink-0">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Validacao do Espelho</h3>
-                  <p className="text-sm text-gray-500">Comparacao automatica via IA</p>
+                  <p className="text-sm text-gray-500">Comparacao via IA -- revise e ajuste o status de cada item</p>
                 </div>
                 <button onClick={() => setShowValidacaoModal(false)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -1572,24 +1683,29 @@ export default function VisualizarPedidoPage() {
                   </svg>
                 </button>
               </div>
-              {/* Summary badges */}
-              <div className="flex flex-wrap gap-3 mt-3">
+              {/* Dynamic summary badges */}
+              <div className="flex flex-wrap gap-2 mt-3">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                  {validacaoResult.resumo.ok} OK
+                  {manualResumo.ok} OK
                 </span>
-                {validacaoResult.resumo.divergencias > 0 && (
+                {manualResumo.divergencias > 0 && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
-                    {validacaoResult.resumo.divergencias} Divergencias
+                    {manualResumo.divergencias} Divergencias
                   </span>
                 )}
-                {validacaoResult.resumo.faltando > 0 && (
+                {manualResumo.faltando > 0 && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                    {validacaoResult.resumo.faltando} Faltando no espelho
+                    {manualResumo.faltando} Faltando
                   </span>
                 )}
-                {validacaoResult.resumo.extras > 0 && (
+                {manualResumo.extras > 0 && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                    + {validacaoResult.resumo.extras} Extras no espelho
+                    + {manualResumo.extras} Extras
+                  </span>
+                )}
+                {manualResumo.ignorados > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-600">
+                    {manualResumo.ignorados} Ignorados
                   </span>
                 )}
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
@@ -1598,76 +1714,151 @@ export default function VisualizarPedidoPage() {
               </div>
             </div>
 
-            {/* Results table */}
-            <div className="flex-1 overflow-auto">
+            {/* Editable results table */}
+            <div className="flex-1 overflow-auto max-h-[60vh]">
               <table className="w-full">
-                <thead className="bg-gray-50 sticky top-0">
+                <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr className="text-xs font-semibold text-gray-500 uppercase">
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-left">Produto (Pedido)</th>
-                    <th className="px-4 py-3 text-left">Produto (Espelho)</th>
-                    <th className="px-4 py-3 text-center">Qtd Pedido</th>
-                    <th className="px-4 py-3 text-center">Qtd Espelho</th>
-                    <th className="px-4 py-3 text-right">Preco Pedido</th>
-                    <th className="px-4 py-3 text-right">Preco Espelho</th>
-                    <th className="px-4 py-3 text-left">Observacao</th>
+                    <th className="px-3 py-3 text-left">Status</th>
+                    <th className="px-3 py-3 text-left">Produto (Pedido)</th>
+                    <th className="px-3 py-3 text-left">Produto (Espelho)</th>
+                    <th className="px-3 py-3 text-center">Qtd Ped.</th>
+                    <th className="px-3 py-3 text-center">Qtd Esp.</th>
+                    <th className="px-3 py-3 text-right">Preco Ped.</th>
+                    <th className="px-3 py-3 text-right">Preco Esp.</th>
+                    <th className="px-3 py-3 text-left">Diferencas</th>
+                    <th className="px-3 py-3 text-left">Obs. Item</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {[...validacaoResult.itens]
-                    .sort((a, b) => {
-                      const order = { divergencia: 0, faltando: 1, extra: 2, ok: 3 }
-                      return (order[a.status] ?? 4) - (order[b.status] ?? 4)
-                    })
-                    .map((item, idx) => (
-                      <tr key={idx} className={
-                        item.status === 'ok' ? 'bg-white' :
-                        item.status === 'divergencia' ? 'bg-amber-50' :
-                        item.status === 'faltando' ? 'bg-red-50' :
-                        'bg-blue-50'
+                  {sortedItens.map((item) => {
+                    const effectiveStatus = (item.status_manual || item.status) as string
+                    const isChangedFromAI = item.status_manual != null && item.status_manual !== item.status
+                    return (
+                      <tr key={item._idx} className={
+                        effectiveStatus === 'ok' ? 'bg-white' :
+                        effectiveStatus === 'divergencia' ? 'bg-amber-50/60' :
+                        effectiveStatus === 'faltando' ? 'bg-red-50/60' :
+                        effectiveStatus === 'extra' ? 'bg-blue-50/60' :
+                        'bg-gray-50/60'
                       }>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            item.status === 'ok' ? 'bg-emerald-100 text-emerald-700' :
-                            item.status === 'divergencia' ? 'bg-amber-100 text-amber-700' :
-                            item.status === 'faltando' ? 'bg-red-100 text-red-700' :
-                            'bg-blue-100 text-blue-700'
-                          }`}>
-                            {item.status === 'ok' ? 'OK' :
-                             item.status === 'divergencia' ? 'Diverge' :
-                             item.status === 'faltando' ? 'Faltando' :
-                             '+ Extra'}
-                          </span>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-1">
+                            <select
+                              value={effectiveStatus}
+                              onChange={(e) => {
+                                const newItens = [...validacaoItens]
+                                newItens[item._idx] = {
+                                  ...newItens[item._idx],
+                                  status_manual: e.target.value as ValidacaoItemResult['status_manual'],
+                                }
+                                setValidacaoItens(newItens)
+                              }}
+                              className={`text-xs border rounded-lg px-2 py-1.5 font-medium focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none cursor-pointer ${
+                                effectiveStatus === 'ok' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' :
+                                effectiveStatus === 'divergencia' ? 'border-amber-300 bg-amber-50 text-amber-700' :
+                                effectiveStatus === 'faltando' ? 'border-red-300 bg-red-50 text-red-700' :
+                                effectiveStatus === 'extra' ? 'border-blue-300 bg-blue-50 text-blue-700' :
+                                'border-gray-300 bg-gray-50 text-gray-600'
+                              }`}
+                            >
+                              <option value="ok">OK</option>
+                              <option value="divergencia">Diverge</option>
+                              <option value="faltando">Faltando</option>
+                              <option value="extra">+ Extra</option>
+                              <option value="ignorado">Ignorar</option>
+                            </select>
+                            {!isChangedFromAI && (
+                              <span className="text-[10px] font-medium text-purple-500 bg-purple-50 px-1 py-0.5 rounded" title="Status sugerido pela IA">IA</span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-4 py-3 text-sm">
+                        <td className="px-3 py-2.5 text-sm">
                           {item.item_pedido ? (
                             <div>
-                              <p className="font-medium text-gray-900 truncate max-w-[200px]">{item.item_pedido.descricao}</p>
+                              <p className="font-medium text-gray-900 truncate max-w-[180px]">{item.item_pedido.descricao}</p>
                               <p className="text-xs text-gray-400">{item.item_pedido.gtin || item.item_pedido.codigo || '-'}</p>
                             </div>
                           ) : '-'}
                         </td>
-                        <td className="px-4 py-3 text-sm">
+                        <td className="px-3 py-2.5 text-sm">
                           {item.item_espelho ? (
                             <div>
-                              <p className="font-medium text-gray-900 truncate max-w-[200px]">{item.item_espelho.nome}</p>
+                              <p className="font-medium text-gray-900 truncate max-w-[180px]">{item.item_espelho.nome}</p>
                               <p className="text-xs text-gray-400">{item.item_espelho.codigo || '-'}</p>
                             </div>
                           ) : '-'}
                         </td>
-                        <td className="px-4 py-3 text-sm text-center">{item.item_pedido?.quantidade ?? '-'}</td>
-                        <td className="px-4 py-3 text-sm text-center">{item.item_espelho?.quantidade ?? '-'}</td>
-                        <td className="px-4 py-3 text-sm text-right">{item.item_pedido?.valor != null ? `R$ ${item.item_pedido.valor.toFixed(2)}` : '-'}</td>
-                        <td className="px-4 py-3 text-sm text-right">{item.item_espelho?.preco_unitario != null ? `R$ ${item.item_espelho.preco_unitario.toFixed(2)}` : '-'}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{item.diferencas?.join('; ') || '-'}</td>
+                        <td className="px-3 py-2.5 text-sm text-center">{item.item_pedido?.quantidade ?? '-'}</td>
+                        <td className="px-3 py-2.5 text-sm text-center">{item.item_espelho?.quantidade ?? '-'}</td>
+                        <td className="px-3 py-2.5 text-sm text-right">{item.item_pedido?.valor != null ? `R$ ${item.item_pedido.valor.toFixed(2)}` : '-'}</td>
+                        <td className="px-3 py-2.5 text-sm text-right">{item.item_espelho?.preco_unitario != null ? `R$ ${item.item_espelho.preco_unitario.toFixed(2)}` : '-'}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[140px]">{item.diferencas?.join('; ') || '-'}</td>
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="text"
+                            placeholder="Obs..."
+                            value={item.observacao_item || ''}
+                            onChange={(e) => {
+                              const newItens = [...validacaoItens]
+                              newItens[item._idx] = {
+                                ...newItens[item._idx],
+                                observacao_item: e.target.value,
+                              }
+                              setValidacaoItens(newItens)
+                            }}
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 w-full min-w-[100px] focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                          />
+                        </td>
                       </tr>
-                    ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
+
+            {/* Global observation + footer */}
+            <div className="px-6 py-3 border-t border-gray-200 bg-white shrink-0">
+              <textarea
+                placeholder="Observacoes gerais sobre a validacao..."
+                value={validacaoObservacao}
+                onChange={(e) => setValidacaoObservacao(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none resize-none"
+                rows={2}
+              />
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
+              <p className="text-xs text-gray-500">
+                Ajuste o status de cada item se a IA errou. Clique em Salvar para registrar.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowValidacaoModal(false)}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={handleSalvarValidacao}
+                  disabled={salvandoValidacao}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {salvandoValidacao ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Salvando...
+                    </>
+                  ) : 'Salvar validacao'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
     </DashboardLayout>
     </RequirePermission>
