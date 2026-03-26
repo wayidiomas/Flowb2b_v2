@@ -87,7 +87,7 @@ export async function POST() {
       const { data: fornecedorRef } = await supabase
         .from('fornecedores')
         .select('nome, nome_fantasia')
-        .or(`cnpj.eq.${cnpjLimpo},cnpj.eq.${formatCnpj(cnpjLimpo)}`)
+        .eq('cnpj', cnpjLimpo)
         .limit(1)
         .single()
 
@@ -117,7 +117,7 @@ export async function POST() {
     const { data: fornecedores } = await supabase
       .from('fornecedores')
       .select('id, empresa_id')
-      .or(`cnpj.eq.${cnpjLimpo},cnpj.eq.${formatCnpj(cnpjLimpo)}`)
+      .eq('cnpj', cnpjLimpo)
 
     if (!fornecedores || fornecedores.length === 0) {
       return NextResponse.json({ catalogo, total_itens: 0 }, { status: 201 })
@@ -165,7 +165,7 @@ export async function POST() {
           marca: prod.marca || null,
           unidade: prod.unidade || null,
           itens_por_caixa: prod.itens_por_caixa || null,
-          preco_base: item.valor_de_compra || null,
+          preco_base: item.valor_de_compra ?? 0,
           ativo: true,
         })
       }
