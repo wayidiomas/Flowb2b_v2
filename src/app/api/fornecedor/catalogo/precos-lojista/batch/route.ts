@@ -25,6 +25,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // WARNING-1: Limite de batch
+    if (itens.length > 500) {
+      return NextResponse.json(
+        { error: 'Maximo de 500 itens por batch' },
+        { status: 400 }
+      )
+    }
+
     // Validar que todos os itens possuem catalogo_item_id e preco_customizado
     for (const item of itens) {
       if (!item.catalogo_item_id || item.preco_customizado === undefined) {
@@ -32,6 +40,22 @@ export async function POST(request: NextRequest) {
           { error: 'Cada item deve ter catalogo_item_id e preco_customizado' },
           { status: 400 }
         )
+      }
+
+      // CRITICAL-2: Validacao numerica
+      if (typeof item.preco_customizado !== 'number' || !isFinite(item.preco_customizado) || item.preco_customizado < 0) {
+        return NextResponse.json(
+          { error: `preco_customizado invalido para item ${item.catalogo_item_id}: deve ser numero >= 0` },
+          { status: 400 }
+        )
+      }
+      if (item.desconto_percentual !== undefined) {
+        if (typeof item.desconto_percentual !== 'number' || !isFinite(item.desconto_percentual) || item.desconto_percentual < -100 || item.desconto_percentual > 100) {
+          return NextResponse.json(
+            { error: `desconto_percentual invalido para item ${item.catalogo_item_id}: deve ser numero entre -100 e 100` },
+            { status: 400 }
+          )
+        }
       }
     }
 
@@ -44,6 +68,19 @@ export async function POST(request: NextRequest) {
 
     if (!catalogo) {
       return NextResponse.json({ error: 'Catalogo nao encontrado' }, { status: 404 })
+    }
+
+    // CRITICAL-1: Validar vinculo fornecedor-empresa
+    const { data: fornecedorEmpresa } = await supabase
+      .from('fornecedores')
+      .select('id')
+      .eq('cnpj', cnpjLimpo)
+      .eq('empresa_id', empresa_id)
+      .limit(1)
+      .single()
+
+    if (!fornecedorEmpresa) {
+      return NextResponse.json({ error: 'Fornecedor nao vinculado a esta empresa' }, { status: 403 })
     }
 
     // Validar que todos os itens pertencem ao catálogo deste fornecedor

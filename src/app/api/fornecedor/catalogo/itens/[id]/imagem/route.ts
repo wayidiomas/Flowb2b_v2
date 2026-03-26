@@ -106,6 +106,7 @@ export async function POST(
       .from('catalogo_itens')
       .update({ imagem_url: publicUrl })
       .eq('id', itemId)
+      .eq('catalogo_id', catalogo.id)
 
     if (updateError) {
       console.error('Update error:', updateError)
@@ -145,6 +146,15 @@ export async function PUT(
       return NextResponse.json({ error: 'URL da imagem e obrigatoria' }, { status: 400 })
     }
 
+    try {
+      const parsed = new URL(imagem_url)
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return NextResponse.json({ error: 'URL deve usar http ou https' }, { status: 400 })
+      }
+    } catch {
+      return NextResponse.json({ error: 'URL invalida' }, { status: 400 })
+    }
+
     const supabase = createServerSupabaseClient()
     const cnpjLimpo = user.cnpj.replace(/\D/g, '')
 
@@ -173,6 +183,7 @@ export async function PUT(
       .from('catalogo_itens')
       .update({ imagem_url })
       .eq('id', itemId)
+      .eq('catalogo_id', catalogo.id)
 
     if (updateError) {
       console.error('Update error:', updateError)
@@ -233,10 +244,16 @@ export async function DELETE(
       }
     }
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('catalogo_itens')
       .update({ imagem_url: null })
       .eq('id', itemId)
+      .eq('catalogo_id', catalogo.id)
+
+    if (updateError) {
+      console.error('Update error:', updateError)
+      return NextResponse.json({ error: 'Erro ao remover URL da imagem' }, { status: 500 })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

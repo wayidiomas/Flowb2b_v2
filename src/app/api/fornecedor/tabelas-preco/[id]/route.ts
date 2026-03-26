@@ -132,10 +132,15 @@ export async function PUT(
     // Se itens foram enviados, substituir todos
     if (itens && Array.isArray(itens)) {
       // Remover itens antigos
-      await supabase
+      const { error: deleteItensError } = await supabase
         .from('itens_tabela_preco')
         .delete()
         .eq('tabela_preco_id', tabelaId)
+
+      if (deleteItensError) {
+        console.error('Erro ao remover itens antigos:', deleteItensError)
+        return NextResponse.json({ error: 'Erro ao remover itens antigos da tabela' }, { status: 500 })
+      }
 
       // Inserir novos itens
       if (itens.length > 0) {
@@ -151,9 +156,17 @@ export async function PUT(
           desconto_percentual: item.desconto_percentual || null,
         }))
 
-        await supabase
+        const { error: insertItensError } = await supabase
           .from('itens_tabela_preco')
           .insert(itensToInsert)
+
+        if (insertItensError) {
+          console.error('Erro ao inserir novos itens:', insertItensError)
+          return NextResponse.json(
+            { error: 'Itens antigos foram removidos mas houve erro ao inserir novos itens. Reenvie os itens.' },
+            { status: 500 }
+          )
+        }
       }
     }
 

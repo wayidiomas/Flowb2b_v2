@@ -26,6 +26,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Informe ao menos preco_customizado, desconto_percentual ou ativo' }, { status: 400 })
     }
 
+    // CRITICAL-4: Validacao numerica
+    if (preco_customizado !== undefined) {
+      if (typeof preco_customizado !== 'number' || !isFinite(preco_customizado) || preco_customizado < 0) {
+        return NextResponse.json({ error: 'preco_customizado deve ser numero >= 0' }, { status: 400 })
+      }
+    }
+    if (desconto_percentual !== undefined) {
+      if (typeof desconto_percentual !== 'number' || !isFinite(desconto_percentual) || desconto_percentual < -100 || desconto_percentual > 100) {
+        return NextResponse.json({ error: 'desconto_percentual deve ser numero entre -100 e 100' }, { status: 400 })
+      }
+    }
+
     // Validar ownership: item pertence ao catálogo deste fornecedor
     const { data: catalogo } = await supabase
       .from('catalogo_fornecedor')
@@ -35,6 +47,19 @@ export async function POST(request: NextRequest) {
 
     if (!catalogo) {
       return NextResponse.json({ error: 'Catalogo nao encontrado' }, { status: 404 })
+    }
+
+    // CRITICAL-3: Validar vinculo fornecedor-empresa
+    const { data: fornecedorEmpresa } = await supabase
+      .from('fornecedores')
+      .select('id')
+      .eq('cnpj', cnpjLimpo)
+      .eq('empresa_id', empresa_id)
+      .limit(1)
+      .single()
+
+    if (!fornecedorEmpresa) {
+      return NextResponse.json({ error: 'Fornecedor nao vinculado a esta empresa' }, { status: 403 })
     }
 
     const { data: item } = await supabase
@@ -52,6 +77,7 @@ export async function POST(request: NextRequest) {
     const upsertData: Record<string, unknown> = {
       catalogo_item_id: Number(catalogo_item_id),
       empresa_id: Number(empresa_id),
+      updated_at: new Date().toISOString(),
     }
     if (preco_customizado !== undefined) upsertData.preco_customizado = preco_customizado
     if (desconto_percentual !== undefined) upsertData.desconto_percentual = desconto_percentual
