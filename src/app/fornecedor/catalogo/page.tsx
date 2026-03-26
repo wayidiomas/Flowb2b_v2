@@ -837,9 +837,12 @@ function ProductImageUpload({
     }
   }
 
+  const inputId = `img-upload-${item.id}`
+
   return (
     <div className="relative w-16 h-16 shrink-0">
       <input
+        id={inputId}
         ref={fileRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
@@ -904,10 +907,9 @@ function ProductImageUpload({
           </div>
 
           {tab === 'upload' ? (
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-[#336FB6] hover:text-[#336FB6] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            <label
+              htmlFor={uploading ? undefined : inputId}
+              className={`w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-[#336FB6] hover:text-[#336FB6] transition-colors flex items-center justify-center gap-2 cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {uploading ? (
                 <>
@@ -925,7 +927,7 @@ function ProductImageUpload({
                   Clique para selecionar (JPEG, PNG, WebP)
                 </>
               )}
-            </button>
+            </label>
           ) : (
             <div className="space-y-2">
               <input
