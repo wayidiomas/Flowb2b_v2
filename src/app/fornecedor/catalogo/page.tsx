@@ -1397,6 +1397,7 @@ export default function FornecedorCatalogoPage() {
   // ------ Toggle ativo ------
   const handleImageUploaded = (id: number, url: string | null) => {
     setItens((prev) => prev.map((i) => (i.id === id ? { ...i, imagem_url: url } : i)))
+    setModalItem((prev) => prev && prev.id === id ? { ...prev, imagem_url: url } : prev)
     setToast({ message: url ? 'Imagem atualizada!' : 'Imagem removida!', type: 'success' })
   }
 
