@@ -1143,6 +1143,8 @@ function ProductCard({
   onPersonalizar,
   onImageUploaded,
   saving,
+  isSelected,
+  onToggleSelect,
 }: {
   item: CatalogoItem
   lojistaFilter: number | null
@@ -1151,6 +1153,8 @@ function ProductCard({
   onPersonalizar: (item: CatalogoItem) => void
   onImageUploaded: (id: number, url: string | null) => void
   saving?: boolean
+  isSelected?: boolean
+  onToggleSelect?: (id: number) => void
 }) {
   const hasCustomPrice = lojistaFilter && item.preco_customizado != null
 
@@ -1158,6 +1162,14 @@ function ProductCard({
     <div className={`p-4 ${!item.ativo ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0 flex-1">
+          {onToggleSelect && (
+            <input
+              type="checkbox"
+              checked={!!isSelected}
+              onChange={() => onToggleSelect(item.id)}
+              className="mt-1 w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20 shrink-0"
+            />
+          )}
           <ProductImageUpload item={item} onUploaded={onImageUploaded} />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.nome}</p>
@@ -1229,6 +1241,345 @@ function ProductCard({
 }
 
 // ---------------------------------------------------------------------------
+// Personalizar Multi Modal (bulk price customization for selected items)
+// ---------------------------------------------------------------------------
+
+interface MultiModalItem {
+  catalogo_item_id: number
+  nome: string
+  codigo: string | null
+  preco_base: number | null
+  preco_lojista: string
+  desconto_percentual: string
+}
+
+type MultiAjusteTipo = 'acrescimo' | 'desconto'
+
+function PersonalizarMultiModal({
+  isOpen,
+  onClose,
+  items,
+  empresaId,
+  empresaNome,
+  onSaved,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  items: CatalogoItem[]
+  empresaId: number
+  empresaNome: string
+  onSaved: () => void
+}) {
+  const [modalItens, setModalItens] = useState<MultiModalItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [ajustePercentual, setAjustePercentual] = useState('')
+  const [ajusteTipo, setAjusteTipo] = useState<MultiAjusteTipo>('desconto')
+
+  // Load existing overrides when modal opens
+  useEffect(() => {
+    if (!isOpen || items.length === 0 || !empresaId) return
+
+    const loadOverrides = async () => {
+      setLoading(true)
+      try {
+        // Fetch all items with empresa_id to get existing overrides
+        const res = await fetch(`/api/fornecedor/catalogo/itens?empresa_id=${empresaId}&limit=9999`)
+        let overrideMap: Record<number, { preco_customizado?: number | null; desconto_percentual?: number | null }> = {}
+        if (res.ok) {
+          const data = await res.json()
+          const allItens: CatalogoItem[] = data.itens || []
+          for (const i of allItens) {
+            overrideMap[i.id] = {
+              preco_customizado: i.preco_customizado,
+              desconto_percentual: i.desconto_percentual,
+            }
+          }
+        }
+
+        setModalItens(
+          items.map((item) => {
+            const override = overrideMap[item.id]
+            const hasOverride = override?.preco_customizado != null
+            const precoBase = item.preco_base ?? 0
+            return {
+              catalogo_item_id: item.id,
+              nome: item.nome,
+              codigo: item.codigo,
+              preco_base: item.preco_base,
+              preco_lojista: hasOverride
+                ? override!.preco_customizado!.toFixed(2)
+                : precoBase.toFixed(2),
+              desconto_percentual: hasOverride && override!.desconto_percentual != null
+                ? override!.desconto_percentual.toFixed(2)
+                : '0.00',
+            }
+          })
+        )
+      } catch (err) {
+        console.error('Erro ao carregar overrides em lote:', err)
+        // Fallback: initialize from item base prices
+        setModalItens(
+          items.map((item) => ({
+            catalogo_item_id: item.id,
+            nome: item.nome,
+            codigo: item.codigo,
+            preco_base: item.preco_base,
+            preco_lojista: (item.preco_base ?? 0).toFixed(2),
+            desconto_percentual: '0.00',
+          }))
+        )
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadOverrides()
+  }, [isOpen, items, empresaId])
+
+  // Reset bulk adjustment fields when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setAjustePercentual('')
+      setAjusteTipo('desconto')
+    }
+  }, [isOpen])
+
+  const updateItem = (index: number, field: 'preco_lojista' | 'desconto_percentual', value: string) => {
+    setModalItens((prev) => {
+      const updated = [...prev]
+      const item = { ...updated[index] }
+      const precoBase = item.preco_base ?? 0
+
+      if (field === 'preco_lojista') {
+        item.preco_lojista = value
+        const parsed = parseFloat(value)
+        if (!isNaN(parsed) && precoBase > 0) {
+          const desc = ((precoBase - parsed) / precoBase) * 100
+          item.desconto_percentual = desc.toFixed(2)
+        }
+      } else {
+        item.desconto_percentual = value
+        const parsed = parseFloat(value)
+        if (!isNaN(parsed)) {
+          const novoPreco = Math.max(0, precoBase * (1 - parsed / 100))
+          item.preco_lojista = novoPreco.toFixed(2)
+        }
+      }
+
+      updated[index] = item
+      return updated
+    })
+  }
+
+  const aplicarAjusteTodos = () => {
+    const pct = parseFloat(ajustePercentual)
+    if (isNaN(pct) || pct <= 0) return
+
+    setModalItens((prev) =>
+      prev.map((item) => {
+        const precoBase = item.preco_base ?? 0
+        if (precoBase <= 0) return item
+
+        let novoPreco: number
+        let novoDesconto: number
+        if (ajusteTipo === 'acrescimo') {
+          novoPreco = precoBase * (1 + pct / 100)
+          novoDesconto = -pct
+        } else {
+          novoPreco = precoBase * (1 - pct / 100)
+          novoDesconto = pct
+        }
+
+        return {
+          ...item,
+          preco_lojista: Math.max(0, novoPreco).toFixed(2),
+          desconto_percentual: novoDesconto.toFixed(2),
+        }
+      })
+    )
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      // Only send items where price differs from preco_base
+      const changedItens = modalItens.filter((item) => {
+        const precoBase = item.preco_base ?? 0
+        const precoLojista = parseFloat(item.preco_lojista) || 0
+        return Math.abs(precoLojista - precoBase) > 0.001
+      })
+
+      if (changedItens.length === 0) {
+        onSaved()
+        onClose()
+        return
+      }
+
+      const res = await fetch('/api/fornecedor/catalogo/precos-lojista/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          itens: changedItens.map((item) => ({
+            catalogo_item_id: item.catalogo_item_id,
+            preco_customizado: parseFloat(item.preco_lojista) || 0,
+            desconto_percentual: parseFloat(item.desconto_percentual) || 0,
+            ativo: true,
+          })),
+        }),
+      })
+
+      if (res.ok) {
+        onSaved()
+        onClose()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        console.error('Erro ao salvar precos em lote:', data.error)
+      }
+    } catch (err) {
+      console.error('Erro ao salvar precos em lote:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="xl">
+      <ModalHeader onClose={onClose}>
+        <ModalTitle>Personalizar Precos em Lote</ModalTitle>
+        <ModalDescription>
+          {items.length} produto(s) selecionado(s) para {empresaNome}
+        </ModalDescription>
+      </ModalHeader>
+      <ModalBody>
+        {/* Bulk adjustment bar */}
+        <div className="mb-4 p-4 bg-[#336FB6]/5 border border-[#336FB6]/20 rounded-xl">
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-3">Reajuste em massa</p>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex-shrink-0">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Percentual</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={ajustePercentual}
+                  onChange={(e) => setAjustePercentual(e.target.value)}
+                  placeholder="0.0"
+                  className="w-28 px-3 py-2 pr-7 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="multi-ajuste-tipo"
+                  checked={ajusteTipo === 'acrescimo'}
+                  onChange={() => setAjusteTipo('acrescimo')}
+                  className="w-4 h-4 text-[#336FB6] focus:ring-[#336FB6]/20"
+                />
+                <span className="text-gray-700">Acrescimo</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="multi-ajuste-tipo"
+                  checked={ajusteTipo === 'desconto'}
+                  onChange={() => setAjusteTipo('desconto')}
+                  className="w-4 h-4 text-[#336FB6] focus:ring-[#336FB6]/20"
+                />
+                <span className="text-gray-700">Desconto</span>
+              </label>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={aplicarAjusteTodos}
+              disabled={!ajustePercentual || parseFloat(ajustePercentual) <= 0}
+            >
+              Aplicar em todos
+            </Button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+          </div>
+        ) : (
+          <div className="max-h-[60vh] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                  <th className="px-3 py-3">Produto</th>
+                  <th className="px-3 py-3 text-right">Preco Base</th>
+                  <th className="px-3 py-3 text-right">Preco Lojista</th>
+                  <th className="px-3 py-3 text-right">Desconto %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {modalItens.map((item, index) => (
+                  <tr key={item.catalogo_item_id} className="hover:bg-gray-50">
+                    <td className="px-3 py-3">
+                      <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">{item.nome}</p>
+                      {item.codigo && (
+                        <p className="text-xs text-gray-400 font-mono">{item.codigo}</p>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right text-sm text-gray-500 whitespace-nowrap">
+                      {formatCurrency(item.preco_base)}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <span className="text-xs text-gray-400">R$</span>
+                        <input
+                          type="text"
+                          value={item.preco_lojista}
+                          onChange={(e) => updateItem(index, 'preco_lojista', e.target.value)}
+                          className="w-24 px-2 py-1.5 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                        />
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={item.desconto_percentual}
+                          onChange={(e) => updateItem(index, 'desconto_percentual', e.target.value)}
+                          className="w-20 px-2 py-1.5 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                        />
+                        <span className="text-xs text-gray-400">%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="outline" size="md" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button
+          variant="primary"
+          size="md"
+          loading={saving}
+          onClick={handleSave}
+        >
+          Salvar precos
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main Page
 // ---------------------------------------------------------------------------
 
@@ -1268,6 +1619,11 @@ export default function FornecedorCatalogoPage() {
 
   // Modal
   const [modalItem, setModalItem] = useState<CatalogoItem | null>(null)
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [multiModalEmpresaId, setMultiModalEmpresaId] = useState<number | null>(null)
+  const [showMultiModal, setShowMultiModal] = useState(false)
 
   // ------ Check if catalog exists ------
   const checkCatalogo = useCallback(async () => {
@@ -1342,9 +1698,10 @@ export default function FornecedorCatalogoPage() {
     }
   }, [itens])
 
-  // Reset page when filters change
+  // Reset page and selection when filters change
   useEffect(() => {
     setPage(1)
+    setSelectedIds(new Set())
   }, [debouncedSearch, lojistaFilter, marcaFilter, showInativos])
 
   // ------ Create catalog ------
@@ -1546,6 +1903,21 @@ export default function FornecedorCatalogoPage() {
         }}
         onImageUploaded={handleImageUploaded}
       />
+      {showMultiModal && multiModalEmpresaId && (
+        <PersonalizarMultiModal
+          isOpen={showMultiModal}
+          onClose={() => setShowMultiModal(false)}
+          items={itens.filter((i) => selectedIds.has(i.id))}
+          empresaId={multiModalEmpresaId}
+          empresaNome={empresasVinculadas.find((e) => e.empresaId === multiModalEmpresaId)?.nomeFantasia || ''}
+          onSaved={() => {
+            setToast({ message: 'Precos personalizados em lote salvos!', type: 'success' })
+            fetchItens()
+            setSelectedIds(new Set())
+            setShowMultiModal(false)
+          }}
+        />
+      )}
 
       <div className="space-y-6">
         {/* Header */}
@@ -1642,6 +2014,21 @@ export default function FornecedorCatalogoPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
+                      <th className="px-4 py-4 w-10">
+                        <input
+                          type="checkbox"
+                          checked={itens.length > 0 && itens.every((i) => selectedIds.has(i.id))}
+                          onChange={() => {
+                            const allSelected = itens.length > 0 && itens.every((i) => selectedIds.has(i.id))
+                            if (allSelected) {
+                              setSelectedIds(new Set())
+                            } else {
+                              setSelectedIds(new Set(itens.map((i) => i.id)))
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20"
+                        />
+                      </th>
                       <th className="px-6 py-4 w-12">Ativo</th>
                       <th className="px-4 py-4 w-16">Foto</th>
                       <th className="px-6 py-4">Codigo</th>
@@ -1661,6 +2048,24 @@ export default function FornecedorCatalogoPage() {
                           key={item.id}
                           className={`hover:bg-[#336FB6]/5 transition-colors ${!item.ativo ? 'opacity-50' : ''}`}
                         >
+                          <td className="px-4 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(item.id)}
+                              onChange={() => {
+                                setSelectedIds((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(item.id)) {
+                                    next.delete(item.id)
+                                  } else {
+                                    next.add(item.id)
+                                  }
+                                  return next
+                                })
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20"
+                            />
+                          </td>
                           <td className="px-6 py-4">
                             <ToggleSwitch
                               checked={item.ativo}
@@ -1732,6 +2137,18 @@ export default function FornecedorCatalogoPage() {
                     onPersonalizar={setModalItem}
                     onImageUploaded={handleImageUploaded}
                     saving={savingItemId === item.id}
+                    isSelected={selectedIds.has(item.id)}
+                    onToggleSelect={(id) => {
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(id)) {
+                          next.delete(id)
+                        } else {
+                          next.add(id)
+                        }
+                        return next
+                      })
+                    }}
                   />
                 ))}
               </div>
@@ -1797,6 +2214,46 @@ export default function FornecedorCatalogoPage() {
           )}
         </div>
       </div>
+
+      {/* Floating action bar for multi-selection */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 z-40">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <span className="text-sm font-medium text-gray-700">
+              {selectedIds.size} produto(s) selecionado(s)
+            </span>
+            <div className="flex items-center gap-3 flex-wrap justify-center">
+              <select
+                value={multiModalEmpresaId ?? ''}
+                onChange={(e) => setMultiModalEmpresaId(e.target.value ? Number(e.target.value) : null)}
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-colors"
+              >
+                <option value="">Selecione o lojista</option>
+                {empresasVinculadas.map((emp) => (
+                  <option key={emp.empresaId} value={emp.empresaId}>
+                    {emp.nomeFantasia || emp.razaoSocial}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowMultiModal(true)}
+                disabled={!multiModalEmpresaId}
+              >
+                Personalizar precos
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Limpar selecao
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </FornecedorLayout>
   )
 }
