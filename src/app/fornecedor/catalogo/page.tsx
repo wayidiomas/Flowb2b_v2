@@ -751,7 +751,6 @@ function ProductImageUpload({
   const [uploading, setUploading] = useState(false)
   const [urlInput, setUrlInput] = useState('')
   const [tab, setTab] = useState<'upload' | 'url'>('upload')
-  const fileRef = useRef<HTMLInputElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
 
   // Fechar ao clicar fora
@@ -790,8 +789,9 @@ function ProductImageUpload({
       alert('Erro ao enviar imagem')
     } finally {
       setUploading(false)
-      if (fileRef.current) fileRef.current.value = ''
     }
+    // Reset input para permitir reupload do mesmo arquivo
+    e.target.value = ''
   }
 
   const handleSaveUrl = async () => {
@@ -837,18 +837,8 @@ function ProductImageUpload({
     }
   }
 
-  const inputId = `img-upload-${item.id}`
-
   return (
     <div className="relative w-16 h-16 shrink-0">
-      <input
-        id={inputId}
-        ref={fileRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        className="hidden"
-        onChange={handleFileChange}
-      />
 
       {/* Thumbnail / Placeholder */}
       <button
@@ -908,9 +898,14 @@ function ProductImageUpload({
 
           {tab === 'upload' ? (
             <label
-              htmlFor={uploading ? undefined : inputId}
-              className={`w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-[#336FB6] hover:text-[#336FB6] transition-colors flex items-center justify-center gap-2 cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-[#336FB6] hover:text-[#336FB6] transition-colors flex items-center justify-center gap-2 cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
             >
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="absolute w-0 h-0 opacity-0 pointer-events-none"
+                onChange={handleFileChange}
+              />
               {uploading ? (
                 <>
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
