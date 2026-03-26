@@ -303,6 +303,9 @@ export default function VisualizarPedidoPage() {
   }
 
   const handleValidarEspelho = async () => {
+    if (validacaoItens.length > 0) {
+      if (!confirm('Ja existe uma validacao. Rodar a IA novamente vai substituir os resultados atuais. Continuar?')) return
+    }
     setValidandoEspelho(true)
     try {
       const res = await fetch(`/api/pedidos-compra/${pedidoId}/espelho/validar`, {
@@ -1171,6 +1174,18 @@ export default function VisualizarPedidoPage() {
                         </>
                       )}
                     </button>
+                    {validacaoItens.length > 0 && !showValidacaoModal && (
+                      <button
+                        onClick={() => setShowValidacaoModal(true)}
+                        className="px-3 py-1.5 bg-white border border-purple-300 rounded-lg text-sm font-medium text-purple-700 hover:bg-purple-50 transition-colors flex items-center gap-1.5"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Ver validacao
+                      </button>
+                    )}
                   </div>
                 </div>
 

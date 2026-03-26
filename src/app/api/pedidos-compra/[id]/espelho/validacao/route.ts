@@ -219,18 +219,8 @@ export async function POST(
 
     const validacaoId = validacao.id
 
-    // Deletar itens antigos
-    const { error: deleteError } = await supabase
-      .from('espelho_validacao_itens')
-      .delete()
-      .eq('validacao_id', validacaoId)
-
-    if (deleteError) {
-      console.error('Erro ao limpar itens antigos:', deleteError)
-      return NextResponse.json({ error: 'Erro ao atualizar itens da validacao' }, { status: 500 })
-    }
-
-    // Inserir novos itens
+    // Inserir novos itens PRIMEIRO (antes de deletar os antigos)
+    // Se o insert falhar, os antigos permanecem intactos
     if (itens.length > 0) {
       const itensParaInserir = itens.map((item) => ({
         validacao_id: validacaoId,
@@ -249,14 +239,31 @@ export async function POST(
         observacao_item: item.observacao_item || null,
       }))
 
-      const { error: insertError } = await supabase
+      const { data: newItens, error: insertError } = await supabase
         .from('espelho_validacao_itens')
         .insert(itensParaInserir)
+        .select('id')
 
       if (insertError) {
         console.error('Erro ao inserir itens da validacao:', insertError)
         return NextResponse.json({ error: 'Erro ao salvar itens da validacao' }, { status: 500 })
       }
+
+      // Insert OK → agora deletar os itens antigos (que não são os recém-inseridos)
+      const newIds = (newItens || []).map(i => i.id)
+      if (newIds.length > 0) {
+        await supabase
+          .from('espelho_validacao_itens')
+          .delete()
+          .eq('validacao_id', validacaoId)
+          .not('id', 'in', `(${newIds.join(',')})`)
+      }
+    } else {
+      // Sem itens novos → limpar todos os antigos
+      await supabase
+        .from('espelho_validacao_itens')
+        .delete()
+        .eq('validacao_id', validacaoId)
     }
 
     return NextResponse.json({
