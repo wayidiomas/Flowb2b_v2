@@ -444,9 +444,13 @@ Se um campo nao estiver visivel, use null. Extraia TODOS os itens, mesmo que a t
         total: cleanNumber(item.total),
       }))
     } catch (aiError: unknown) {
+      const errorMessage = aiError instanceof Error ? aiError.message : String(aiError)
       console.error('Erro na chamada OpenAI ou parse da resposta:', aiError)
       return NextResponse.json(
-        { error: 'Erro ao analisar o espelho com IA. Tente novamente.' },
+        {
+          error: 'Erro ao analisar o espelho com IA. Tente novamente.',
+          detalhes: errorMessage,
+        },
         { status: 500 }
       )
     }
