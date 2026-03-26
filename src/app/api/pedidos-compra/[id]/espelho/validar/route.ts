@@ -65,7 +65,7 @@ export async function POST(
     // Fetch order items + GTIN
     const { data: itensPedidoRaw, error: itensError } = await supabase
       .from('itens_pedido_compra')
-      .select('id, produto_id, codigo, codigo_fornecedor, descricao, unidade, quantidade, valor, desconto')
+      .select('id, produto_id, codigo_produto, codigo_fornecedor, descricao, unidade, quantidade, valor')
       .eq('pedido_compra_id', pedidoId)
 
     if (itensError || !itensPedidoRaw || itensPedidoRaw.length === 0) {
@@ -122,20 +122,23 @@ export async function POST(
 Extraia TODOS os itens/produtos listados neste documento.
 
 Para cada item, extraia:
-- codigo: o codigo do produto (EAN, GTIN, codigo interno, SKU - qualquer um que aparecer)
+- codigo_fornecedor: o codigo principal do produto (geralmente aparece entre parenteses no inicio, ex: "(4006089)" → "4006089")
+- codigo_barras: o codigo de barras/EAN/GTIN (13 digitos, ex: "7897348205258")
 - nome: nome/descricao do produto
 - quantidade: quantidade (numero)
 - preco_unitario: preco unitario (numero decimal, ex: 121.15)
 - total: valor total da linha (numero decimal)
 
 IMPORTANTE:
+- O codigo_fornecedor geralmente aparece entre parenteses antes do nome do produto
+- O codigo_barras/EAN geralmente aparece no campo "Cod. Barras" com 13 digitos
 - Valores monetarios como numeros decimais com ponto (ex: 1234.56, NAO "R$ 1.234,56")
 - Se o documento tem formato brasileiro (1.234,56), converta para 1234.56
 - Extraia TODOS os itens, mesmo que sejam muitos
 - Se um campo nao esta visivel, use null
 
 Retorne APENAS um JSON array, sem markdown:
-[{"codigo":"...","nome":"...","quantidade":0,"preco_unitario":0.00,"total":0.00}]`
+[{"codigo_fornecedor":"4006089","codigo_barras":"7897348205258","nome":"GOLDEN FORM CAES AD CARNE MB 1KG","quantidade":8,"preco_unitario":15.44,"total":123.52}]`
 
     let itensEspelho: Array<{
       codigo: string | null
@@ -187,12 +190,14 @@ Retorne APENAS um JSON array, sem markdown:
     // Montar texto dos itens do pedido
     const pedidoTexto = itensPedidoRaw.map((item, i) => {
       const gtin = item.produto_id ? gtinMap.get(item.produto_id) || '' : ''
-      return `${i + 1}. GTIN:${gtin || 'N/A'} | CodForn:${item.codigo_fornecedor || 'N/A'} | SKU:${item.codigo || 'N/A'} | "${item.descricao || ''}" | Qtd:${item.quantidade} | R$${(item.valor || 0).toFixed(2)}`
+      return `${i + 1}. GTIN:${gtin || 'N/A'} | CodForn:${item.codigo_fornecedor || 'N/A'} | CodProd:${item.codigo_produto || 'N/A'} | "${item.descricao || ''}" | Qtd:${item.quantidade} | R$${(item.valor || 0).toFixed(2)}`
     }).join('\n')
 
     // Montar texto dos itens extraidos do espelho
     const espelhoTexto = itensEspelho.map((item, i) => {
-      return `${i + 1}. Cod:${item.codigo || 'N/A'} | "${item.nome || ''}" | Qtd:${item.quantidade ?? 'N/A'} | R$${item.preco_unitario?.toFixed(2) ?? 'N/A'} | Total:R$${item.total?.toFixed(2) ?? 'N/A'}`
+      const cf = (item as Record<string, unknown>).codigo_fornecedor || (item as Record<string, unknown>).codigo || 'N/A'
+      const cb = (item as Record<string, unknown>).codigo_barras || 'N/A'
+      return `${i + 1}. CodForn:${cf} | EAN:${cb} | "${item.nome || ''}" | Qtd:${item.quantidade ?? 'N/A'} | R$${item.preco_unitario?.toFixed(2) ?? 'N/A'} | Total:R$${item.total?.toFixed(2) ?? 'N/A'}`
     }).join('\n')
 
     const promptComparacao = `Voce e um validador de pedidos de compra B2B. Compare os itens do PEDIDO ORIGINAL com os itens EXTRAIDOS DO ESPELHO do fornecedor.
@@ -203,11 +208,14 @@ ${pedidoTexto}
 ITENS DO ESPELHO DO FORNECEDOR (${itensEspelho.length} itens):
 ${espelhoTexto}
 
-INSTRUCOES DE CRUZAMENTO:
-1. Cruze por GTIN/EAN (melhor match) → depois por codigo do fornecedor → depois por nome do produto (entenda abreviacoes: "AD" = adulto, "FIL" = filhote, "MB" = mini bits, "PEQ" = pequeno, etc.)
-2. Para cada item do pedido encontrado no espelho: compare quantidade e preco (tolerancia de 2% no preco)
-3. Classifique: "ok" (tudo bate), "divergencia" (encontrou mas qtd ou preco diferem), "faltando" (nao achou no espelho)
-4. Itens do espelho sem correspondencia no pedido: "extra"
+INSTRUCOES DE CRUZAMENTO (PRIORIDADE RIGOROSA):
+1. PRIMEIRO: Cruze por CodForn do pedido com CodForn do espelho (match EXATO de codigo do fornecedor). Ex: CodForn:4008009 no pedido = CodForn:4008009 no espelho = MATCH
+2. SEGUNDO: Se nao encontrou por CodForn, cruze por GTIN/EAN (match exato de codigo de barras)
+3. TERCEIRO: Somente se nao encontrou por codigo, tente por nome do produto (entenda abreviacoes: "AD"=adulto, "FIL"=filhote, "MB"=mini bits, "PEQ"=pequeno, "RÇ ESP"=racas especificas)
+4. NAO faca match por nome se os codigos sao diferentes! Codigos diferentes = produtos diferentes.
+5. Para cada match encontrado: compare quantidade e preco (tolerancia de 2% no preco)
+6. Classifique: "ok" (tudo bate), "divergencia" (encontrou mas qtd ou preco diferem), "faltando" (nao achou no espelho)
+7. Itens do espelho sem correspondencia no pedido: "extra"
 
 Retorne APENAS JSON valido, sem markdown:
 {
