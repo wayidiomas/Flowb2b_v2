@@ -12,6 +12,7 @@ export type ActivityAction =
   | 'sugestao_aceita'
   | 'sugestao_rejeitada'
   | 'pedido_recolhido'
+  | 'sugestao_excluida'
   | 'registro'
 
 interface LogActivityParams {

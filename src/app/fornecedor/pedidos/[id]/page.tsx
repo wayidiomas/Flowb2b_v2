@@ -571,6 +571,24 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     }
   }
 
+  const handleExcluirSugestao = async (sugestaoId: number) => {
+    if (!confirm('Tem certeza que deseja excluir esta cotacao?')) return
+    try {
+      const res = await fetch(`/api/fornecedor/pedidos/${id}/sugestao?sugestao_id=${sugestaoId}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      if (res.ok) {
+        alert(data.message || 'Cotacao excluida com sucesso')
+        window.location.reload()
+      } else {
+        alert(data.error || 'Erro ao excluir cotacao')
+      }
+    } catch {
+      alert('Erro ao excluir cotacao')
+    }
+  }
+
   const handleResponderContraProposta = async (action: 'aceitar' | 'rejeitar', sugestaoId: number) => {
     if (!data) return
     setProcessandoContraProposta(true)
@@ -714,6 +732,22 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         {lastSugestao?.status === 'aceita' && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
             <p className="text-sm font-medium text-emerald-800">Sua sugestao foi aceita!</p>
+          </div>
+        )}
+
+        {/* Sugestao pendente - opcao de excluir */}
+        {lastSugestao?.status === 'pendente' && lastSugestao?.autor_tipo !== 'lojista' && pedido.status_interno === 'sugestao_pendente' && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-center justify-between">
+            <p className="text-sm font-medium text-orange-800">Sua cotacao foi enviada e esta aguardando analise do lojista.</p>
+            <button
+              onClick={() => handleExcluirSugestao(lastSugestao.id)}
+              className="text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+              Excluir cotacao
+            </button>
           </div>
         )}
 

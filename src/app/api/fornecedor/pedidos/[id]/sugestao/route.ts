@@ -209,3 +209,134 @@ export async function POST(
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getCurrentUser()
+    if (!user || user.tipo !== 'fornecedor' || !user.cnpj || !user.fornecedorUserId) {
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    }
+
+    const { id: pedidoId } = await params
+    const { searchParams } = new URL(request.url)
+    const sugestaoId = searchParams.get('sugestao_id')
+
+    if (!sugestaoId) {
+      return NextResponse.json({ error: 'sugestao_id e obrigatorio' }, { status: 400 })
+    }
+
+    const supabase = createServerSupabaseClient()
+
+    // Validar acesso: verificar que o fornecedor tem CNPJ vinculado
+    const { data: fornecedores } = await supabase
+      .from('fornecedores')
+      .select('id, empresa_id')
+      .eq('cnpj', user.cnpj)
+
+    if (!fornecedores || fornecedores.length === 0) {
+      return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
+    }
+
+    const fornecedorIds = fornecedores.map(f => f.id)
+
+    // Verificar que o pedido existe e pertence ao fornecedor
+    const { data: pedido, error: pedidoError } = await supabase
+      .from('pedidos_compra')
+      .select('id, empresa_id, status_interno, fornecedor_id')
+      .eq('id', pedidoId)
+      .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
+      .single()
+
+    if (pedidoError || !pedido) {
+      return NextResponse.json({ error: 'Pedido nao encontrado' }, { status: 404 })
+    }
+
+    // Verificar que a sugestao existe e pertence a este fornecedor
+    const { data: sugestao, error: sugestaoError } = await supabase
+      .from('sugestoes_fornecedor')
+      .select('id, status, fornecedor_user_id')
+      .eq('id', sugestaoId)
+      .eq('pedido_compra_id', pedidoId)
+      .eq('fornecedor_user_id', user.fornecedorUserId)
+      .single()
+
+    if (sugestaoError || !sugestao) {
+      return NextResponse.json({ error: 'Sugestao nao encontrada' }, { status: 404 })
+    }
+
+    // Apenas sugestoes pendentes podem ser excluidas
+    if (sugestao.status !== 'pendente') {
+      return NextResponse.json(
+        { error: 'Apenas sugestoes pendentes podem ser excluidas' },
+        { status: 400 }
+      )
+    }
+
+    // Deletar itens primeiro (FK)
+    await supabase
+      .from('sugestoes_fornecedor_itens')
+      .delete()
+      .eq('sugestao_id', sugestao.id)
+
+    // Deletar a sugestao
+    await supabase
+      .from('sugestoes_fornecedor')
+      .delete()
+      .eq('id', sugestao.id)
+
+    // Verificar se existem outras sugestoes para este pedido
+    const { data: outrasSugestoes } = await supabase
+      .from('sugestoes_fornecedor')
+      .select('id')
+      .eq('pedido_compra_id', pedidoId)
+
+    // Se nao ha mais sugestoes, reverter status_interno para enviado_fornecedor
+    if (!outrasSugestoes || outrasSugestoes.length === 0) {
+      await supabase
+        .from('pedidos_compra')
+        .update({ status_interno: 'enviado_fornecedor' })
+        .eq('id', pedidoId)
+        .eq('is_excluded', false)
+    }
+
+    // Buscar nome do usuario fornecedor para a timeline
+    const { data: fornecedorUser } = await supabase
+      .from('users_fornecedor')
+      .select('nome')
+      .eq('id', user.fornecedorUserId)
+      .single()
+
+    // Registrar na timeline
+    await supabase
+      .from('pedido_timeline')
+      .insert({
+        pedido_compra_id: parseInt(pedidoId),
+        evento: 'sugestao_excluida',
+        descricao: 'Sugestao comercial excluida pelo fornecedor',
+        autor_tipo: 'fornecedor',
+        autor_nome: fornecedorUser?.nome || user.email,
+      })
+
+    void logActivity({
+      userId: String(user.fornecedorUserId),
+      userType: 'fornecedor',
+      userEmail: user.email || undefined,
+      userNome: user.nome || undefined,
+      action: 'sugestao_excluida',
+      empresaId: null,
+      metadata: { pedido_id: pedidoId, sugestao_id: sugestaoId, cnpj: user.cnpj },
+    }).catch(() => {})
+
+    return NextResponse.json({
+      success: true,
+      message: 'Sugestao excluida com sucesso',
+    })
+  } catch (error) {
+    console.error('Erro ao excluir sugestao:', error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}

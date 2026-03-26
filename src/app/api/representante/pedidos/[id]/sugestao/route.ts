@@ -276,3 +276,170 @@ export async function POST(
     )
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  context: RouteContext
+) {
+  try {
+    const user = await getCurrentUser()
+
+    if (!user || user.tipo !== 'representante' || !user.representanteUserId) {
+      return NextResponse.json(
+        { success: false, error: 'Nao autenticado como representante' },
+        { status: 401 }
+      )
+    }
+
+    const params = await context.params
+    const pedidoId = parseInt(params.id)
+
+    if (isNaN(pedidoId)) {
+      return NextResponse.json({ success: false, error: 'ID invalido' }, { status: 400 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const sugestaoId = searchParams.get('sugestao_id')
+
+    if (!sugestaoId) {
+      return NextResponse.json(
+        { success: false, error: 'sugestao_id e obrigatorio' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = createServerSupabaseClient()
+
+    // Buscar representantes vinculados a este usuario
+    const { data: representantes } = await supabase
+      .from('representantes')
+      .select('id')
+      .eq('user_representante_id', user.representanteUserId)
+      .eq('ativo', true)
+
+    const representanteIds = representantes?.map(r => r.id) || []
+
+    if (representanteIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Sem acesso' },
+        { status: 403 }
+      )
+    }
+
+    // Buscar fornecedores vinculados
+    const { data: vinculos } = await supabase
+      .from('representante_fornecedores')
+      .select('fornecedor_id')
+      .in('representante_id', representanteIds)
+
+    const fornecedorIds = vinculos?.map(v => v.fornecedor_id) || []
+
+    // Verificar se pedido existe e pertence a um fornecedor vinculado
+    const { data: pedido, error: pedidoError } = await supabase
+      .from('pedidos_compra')
+      .select('id, status_interno, fornecedor_id, empresa_id')
+      .eq('id', pedidoId)
+      .in('fornecedor_id', fornecedorIds)
+      .eq('is_excluded', false)
+      .single()
+
+    if (pedidoError || !pedido) {
+      return NextResponse.json(
+        { success: false, error: 'Pedido nao encontrado' },
+        { status: 404 }
+      )
+    }
+
+    // Verificar que a sugestao existe, pertence a este pedido, e foi criada por representante
+    const { data: sugestao, error: sugestaoError } = await supabase
+      .from('sugestoes_fornecedor')
+      .select('id, status, autor_tipo')
+      .eq('id', sugestaoId)
+      .eq('pedido_compra_id', pedidoId)
+      .eq('autor_tipo', 'representante')
+      .single()
+
+    if (sugestaoError || !sugestao) {
+      return NextResponse.json(
+        { success: false, error: 'Sugestao nao encontrada' },
+        { status: 404 }
+      )
+    }
+
+    // Apenas sugestoes pendentes podem ser excluidas
+    if (sugestao.status !== 'pendente') {
+      return NextResponse.json(
+        { success: false, error: 'Apenas sugestoes pendentes podem ser excluidas' },
+        { status: 400 }
+      )
+    }
+
+    // Deletar itens primeiro (FK)
+    await supabase
+      .from('sugestoes_fornecedor_itens')
+      .delete()
+      .eq('sugestao_id', sugestao.id)
+
+    // Deletar a sugestao
+    await supabase
+      .from('sugestoes_fornecedor')
+      .delete()
+      .eq('id', sugestao.id)
+
+    // Verificar se existem outras sugestoes para este pedido
+    const { data: outrasSugestoes } = await supabase
+      .from('sugestoes_fornecedor')
+      .select('id')
+      .eq('pedido_compra_id', pedidoId)
+
+    // Se nao ha mais sugestoes, reverter status_interno para enviado_fornecedor
+    if (!outrasSugestoes || outrasSugestoes.length === 0) {
+      await supabase
+        .from('pedidos_compra')
+        .update({
+          status_interno: 'enviado_fornecedor',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', pedidoId)
+        .eq('is_excluded', false)
+    }
+
+    // Buscar nome do representante para a timeline
+    const { data: repUser } = await supabase
+      .from('users_representante')
+      .select('nome')
+      .eq('id', user.representanteUserId)
+      .single()
+    const representanteNome = repUser?.nome || user.email
+
+    // Registrar na timeline
+    await supabase.from('pedido_timeline').insert({
+      pedido_compra_id: pedidoId,
+      evento: 'sugestao_excluida',
+      descricao: 'Sugestao comercial excluida pelo representante',
+      autor_tipo: 'representante',
+      autor_nome: representanteNome,
+    })
+
+    void logActivity({
+      userId: String(user.representanteUserId),
+      userType: 'representante',
+      userEmail: user.email || undefined,
+      userNome: user.nome || undefined,
+      action: 'sugestao_excluida',
+      empresaId: null,
+      metadata: { pedido_id: pedidoId, sugestao_id: sugestaoId },
+    }).catch(() => {})
+
+    return NextResponse.json({
+      success: true,
+      message: 'Sugestao excluida com sucesso',
+    })
+  } catch (error) {
+    console.error('Representante sugestao delete error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Erro interno do servidor' },
+      { status: 500 }
+    )
+  }
+}
