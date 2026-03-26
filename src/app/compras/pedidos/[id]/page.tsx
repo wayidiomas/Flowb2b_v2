@@ -18,6 +18,37 @@ import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import type { PedidoCompraDetalhes, FornecedorOption, SugestaoFornecedor, SugestaoItem, StatusInterno } from '@/types/pedido-compra'
 
+interface ValidacaoItemResult {
+  status: 'ok' | 'divergencia' | 'faltando' | 'extra'
+  item_pedido?: {
+    codigo: string | null
+    descricao: string | null
+    quantidade: number
+    valor: number | null
+    gtin: string | null
+  }
+  item_espelho?: {
+    codigo: string | null
+    nome: string | null
+    quantidade: number | null
+    preco_unitario: number | null
+    total: number | null
+  }
+  diferencas?: string[]
+}
+
+interface ValidacaoResult {
+  resumo: {
+    total_pedido: number
+    total_espelho: number
+    ok: number
+    divergencias: number
+    faltando: number
+    extras: number
+  }
+  itens: ValidacaoItemResult[]
+}
+
 // Status config (valores do Bling para pedido de compra)
 const STATUS_CONFIG: Record<number, { bg: string; text: string; label: string }> = {
   0: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Em Aberto' },
@@ -105,6 +136,9 @@ export default function VisualizarPedidoPage() {
   } | null>(null)
   const [processandoEspelho, setProcessandoEspelho] = useState(false)
   const [showEspelhoViewer, setShowEspelhoViewer] = useState(false)
+  const [validandoEspelho, setValidandoEspelho] = useState(false)
+  const [validacaoResult, setValidacaoResult] = useState<ValidacaoResult | null>(null)
+  const [showValidacaoModal, setShowValidacaoModal] = useState(false)
 
   // Modais de escolha destinatario (fornecedor vs representante)
   const [showTipoDestinatarioModal, setShowTipoDestinatarioModal] = useState(false)
@@ -214,6 +248,26 @@ export default function VisualizarPedidoPage() {
       alert('Erro ao processar espelho')
     } finally {
       setProcessandoEspelho(false)
+    }
+  }
+
+  const handleValidarEspelho = async () => {
+    setValidandoEspelho(true)
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedidoId}/espelho/validar`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setValidacaoResult(data)
+        setShowValidacaoModal(true)
+      } else {
+        alert(data.error || 'Erro ao validar espelho')
+      }
+    } catch {
+      alert('Erro ao validar espelho')
+    } finally {
+      setValidandoEspelho(false)
     }
   }
 
@@ -1000,6 +1054,28 @@ export default function VisualizarPedidoPage() {
                     >
                       Download
                     </a>
+                    <button
+                      onClick={handleValidarEspelho}
+                      disabled={validandoEspelho}
+                      className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg text-sm font-medium hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                    >
+                      {validandoEspelho ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Validando com IA...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Validar Espelho
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -1473,6 +1549,121 @@ export default function VisualizarPedidoPage() {
                   title="Espelho do pedido"
                 />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Validacao Espelho Modal */}
+      {showValidacaoModal && validacaoResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowValidacaoModal(false)} />
+          <div className="relative w-full max-w-4xl max-h-[90vh] mx-4 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Validacao do Espelho</h3>
+                  <p className="text-sm text-gray-500">Comparacao automatica via IA</p>
+                </div>
+                <button onClick={() => setShowValidacaoModal(false)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {/* Summary badges */}
+              <div className="flex flex-wrap gap-3 mt-3">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                  {validacaoResult.resumo.ok} OK
+                </span>
+                {validacaoResult.resumo.divergencias > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                    {validacaoResult.resumo.divergencias} Divergencias
+                  </span>
+                )}
+                {validacaoResult.resumo.faltando > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                    {validacaoResult.resumo.faltando} Faltando no espelho
+                  </span>
+                )}
+                {validacaoResult.resumo.extras > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                    + {validacaoResult.resumo.extras} Extras no espelho
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  Pedido: {validacaoResult.resumo.total_pedido} itens | Espelho: {validacaoResult.resumo.total_espelho} itens
+                </span>
+              </div>
+            </div>
+
+            {/* Results table */}
+            <div className="flex-1 overflow-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr className="text-xs font-semibold text-gray-500 uppercase">
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Produto (Pedido)</th>
+                    <th className="px-4 py-3 text-left">Produto (Espelho)</th>
+                    <th className="px-4 py-3 text-center">Qtd Pedido</th>
+                    <th className="px-4 py-3 text-center">Qtd Espelho</th>
+                    <th className="px-4 py-3 text-right">Preco Pedido</th>
+                    <th className="px-4 py-3 text-right">Preco Espelho</th>
+                    <th className="px-4 py-3 text-left">Observacao</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {[...validacaoResult.itens]
+                    .sort((a, b) => {
+                      const order = { divergencia: 0, faltando: 1, extra: 2, ok: 3 }
+                      return (order[a.status] ?? 4) - (order[b.status] ?? 4)
+                    })
+                    .map((item, idx) => (
+                      <tr key={idx} className={
+                        item.status === 'ok' ? 'bg-white' :
+                        item.status === 'divergencia' ? 'bg-amber-50' :
+                        item.status === 'faltando' ? 'bg-red-50' :
+                        'bg-blue-50'
+                      }>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            item.status === 'ok' ? 'bg-emerald-100 text-emerald-700' :
+                            item.status === 'divergencia' ? 'bg-amber-100 text-amber-700' :
+                            item.status === 'faltando' ? 'bg-red-100 text-red-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {item.status === 'ok' ? 'OK' :
+                             item.status === 'divergencia' ? 'Diverge' :
+                             item.status === 'faltando' ? 'Faltando' :
+                             '+ Extra'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {item.item_pedido ? (
+                            <div>
+                              <p className="font-medium text-gray-900 truncate max-w-[200px]">{item.item_pedido.descricao}</p>
+                              <p className="text-xs text-gray-400">{item.item_pedido.gtin || item.item_pedido.codigo || '-'}</p>
+                            </div>
+                          ) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {item.item_espelho ? (
+                            <div>
+                              <p className="font-medium text-gray-900 truncate max-w-[200px]">{item.item_espelho.nome}</p>
+                              <p className="text-xs text-gray-400">{item.item_espelho.codigo || '-'}</p>
+                            </div>
+                          ) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-center">{item.item_pedido?.quantidade ?? '-'}</td>
+                        <td className="px-4 py-3 text-sm text-center">{item.item_espelho?.quantidade ?? '-'}</td>
+                        <td className="px-4 py-3 text-sm text-right">{item.item_pedido?.valor != null ? `R$ ${item.item_pedido.valor.toFixed(2)}` : '-'}</td>
+                        <td className="px-4 py-3 text-sm text-right">{item.item_espelho?.preco_unitario != null ? `R$ ${item.item_espelho.preco_unitario.toFixed(2)}` : '-'}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{item.diferencas?.join('; ') || '-'}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
