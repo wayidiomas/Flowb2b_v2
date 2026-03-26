@@ -747,8 +747,24 @@ function ProductImageUpload({
   item: CatalogoItem
   onUploaded: (id: number, url: string | null) => void
 }) {
+  const [open, setOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [urlInput, setUrlInput] = useState('')
+  const [tab, setTab] = useState<'upload' | 'url'>('upload')
   const fileRef = useRef<HTMLInputElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+
+  // Fechar ao clicar fora
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -766,6 +782,7 @@ function ProductImageUpload({
       const data = await res.json()
       if (res.ok && data.imagem_url) {
         onUploaded(item.id, data.imagem_url)
+        setOpen(false)
       } else {
         alert(data.error || 'Erro ao enviar imagem')
       }
@@ -777,6 +794,32 @@ function ProductImageUpload({
     }
   }
 
+  const handleSaveUrl = async () => {
+    const url = urlInput.trim()
+    if (!url) return
+
+    setUploading(true)
+    try {
+      const res = await fetch(`/api/fornecedor/catalogo/itens/${item.id}/imagem`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imagem_url: url }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        onUploaded(item.id, url)
+        setOpen(false)
+        setUrlInput('')
+      } else {
+        alert(data.error || 'Erro ao salvar URL')
+      }
+    } catch {
+      alert('Erro ao salvar URL')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const handleRemove = async () => {
     setUploading(true)
     try {
@@ -785,6 +828,7 @@ function ProductImageUpload({
       })
       if (res.ok) {
         onUploaded(item.id, null)
+        setOpen(false)
       }
     } catch {
       alert('Erro ao remover imagem')
@@ -794,7 +838,7 @@ function ProductImageUpload({
   }
 
   return (
-    <div className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 group">
+    <div className="relative w-16 h-16 shrink-0">
       <input
         ref={fileRef}
         type="file"
@@ -802,52 +846,113 @@ function ProductImageUpload({
         className="hidden"
         onChange={handleFileChange}
       />
-      {uploading ? (
-        <div className="flex items-center justify-center w-full h-full">
-          <svg className="w-5 h-5 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-        </div>
-      ) : item.imagem_url ? (
-        <>
-          <img
-            src={item.imagem_url}
-            alt={item.nome}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+
+      {/* Thumbnail / Placeholder */}
+      <button
+        onClick={() => { setOpen(!open); setTab(item.imagem_url ? 'url' : 'upload') }}
+        className="w-full h-full rounded-lg overflow-hidden bg-gray-100 border border-gray-200 hover:border-[#336FB6] transition-colors flex items-center justify-center"
+      >
+        {item.imagem_url ? (
+          <img src={item.imagem_url} alt={item.nome} className="w-full h-full object-cover" />
+        ) : (
+          <div className="flex flex-col items-center text-gray-400">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+            </svg>
+            <span className="text-[9px] mt-0.5">Foto</span>
+          </div>
+        )}
+      </button>
+
+      {/* Popover */}
+      {open && (
+        <div
+          ref={popoverRef}
+          className="absolute top-full left-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-200 z-50 p-4"
+        >
+          {/* Preview */}
+          {item.imagem_url && (
+            <div className="mb-3 relative">
+              <img src={item.imagem_url} alt={item.nome} className="w-full h-32 object-contain rounded-lg bg-gray-50 border border-gray-100" />
+              <button
+                onClick={handleRemove}
+                disabled={uploading}
+                className="absolute top-1 right-1 p-1 bg-white rounded-full shadow border border-gray-200 text-red-500 hover:bg-red-50 disabled:opacity-50"
+                title="Remover imagem"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-3 bg-gray-100 rounded-lg p-0.5">
             <button
-              onClick={() => fileRef.current?.click()}
-              className="p-1 bg-white/90 rounded-full mr-1"
-              title="Trocar imagem"
+              onClick={() => setTab('upload')}
+              className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors ${tab === 'upload' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              <svg className="w-3.5 h-3.5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
-              </svg>
+              Enviar arquivo
             </button>
             <button
-              onClick={handleRemove}
-              className="p-1 bg-white/90 rounded-full"
-              title="Remover imagem"
+              onClick={() => setTab('url')}
+              className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors ${tab === 'url' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              <svg className="w-3.5 h-3.5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              URL externa
             </button>
           </div>
-        </>
-      ) : (
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="flex flex-col items-center justify-center w-full h-full text-gray-400 hover:text-[#336FB6] hover:bg-gray-50 transition-colors"
-          title="Adicionar imagem"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
-          </svg>
-          <span className="text-[9px] mt-0.5">Foto</span>
-        </button>
+
+          {tab === 'upload' ? (
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-[#336FB6] hover:text-[#336FB6] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {uploading ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  Clique para selecionar (JPEG, PNG, WebP)
+                </>
+              )}
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="https://exemplo.com/imagem.jpg"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+              <button
+                onClick={handleSaveUrl}
+                disabled={uploading || !urlInput.trim()}
+                className="w-full py-2 text-sm font-medium bg-[#336FB6] text-white rounded-lg hover:bg-[#2b5e9e] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {uploading ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Salvando...
+                  </>
+                ) : 'Salvar URL'}
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

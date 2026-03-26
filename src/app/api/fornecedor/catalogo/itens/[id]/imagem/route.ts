@@ -122,6 +122,70 @@ export async function POST(
   }
 }
 
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getCurrentUser()
+    if (!user || (user.tipo !== 'fornecedor' && user.tipo !== 'representante') || !user.cnpj) {
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const itemId = Number(id)
+    if (!itemId || isNaN(itemId)) {
+      return NextResponse.json({ error: 'ID invalido' }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const { imagem_url } = body
+
+    if (!imagem_url || typeof imagem_url !== 'string') {
+      return NextResponse.json({ error: 'URL da imagem e obrigatoria' }, { status: 400 })
+    }
+
+    const supabase = createServerSupabaseClient()
+    const cnpjLimpo = user.cnpj.replace(/\D/g, '')
+
+    const { data: catalogo } = await supabase
+      .from('catalogo_fornecedor')
+      .select('id')
+      .eq('cnpj', cnpjLimpo)
+      .single()
+
+    if (!catalogo) {
+      return NextResponse.json({ error: 'Catalogo nao encontrado' }, { status: 404 })
+    }
+
+    const { data: item } = await supabase
+      .from('catalogo_itens')
+      .select('id')
+      .eq('id', itemId)
+      .eq('catalogo_id', catalogo.id)
+      .single()
+
+    if (!item) {
+      return NextResponse.json({ error: 'Item nao encontrado no seu catalogo' }, { status: 404 })
+    }
+
+    const { error: updateError } = await supabase
+      .from('catalogo_itens')
+      .update({ imagem_url })
+      .eq('id', itemId)
+
+    if (updateError) {
+      console.error('Update error:', updateError)
+      return NextResponse.json({ error: 'Erro ao salvar URL da imagem' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, imagem_url })
+  } catch (error) {
+    console.error('Erro ao salvar URL da imagem:', error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
