@@ -636,6 +636,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
   const { pedido, itens, sugestoes: sugestoesExistentes, timeline } = data
   const canSuggest = ['enviado_fornecedor', 'sugestao_pendente'].includes(pedido.status_interno)
   const lastSugestao = sugestoesExistentes?.[0]
+  const hasPendingSugestao = lastSugestao?.status === 'pendente' && lastSugestao?.autor_tipo !== 'lojista'
   const canCancel = !ESTADOS_FINAIS.includes(pedido.status_interno)
 
   return (
@@ -1356,7 +1357,11 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
               <h2 className="text-lg font-semibold text-gray-900">
-                {canSuggest ? 'Itens - Enviar sugestao' : 'Itens do pedido'}
+                {canSuggest
+                  ? hasPendingSugestao
+                    ? 'Itens - Editar sugestao enviada'
+                    : 'Itens - Enviar sugestao'
+                  : 'Itens do pedido'}
               </h2>
               {canSuggest && (
                 <p className="text-sm text-gray-500 mt-1">
@@ -2014,7 +2019,7 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                     onClick={handleSubmitSugestao}
                     className="w-full sm:w-auto bg-[#336FB6] hover:bg-[#2660A5]"
                   >
-                    Enviar sugestao
+                    {hasPendingSugestao ? 'Reenviar sugestao' : 'Enviar sugestao'}
                   </Button>
                 </div>
               </div>

@@ -654,6 +654,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const { pedido, itens, sugestoes: sugestoesExistentes, timeline } = data
   const canSuggest = ['enviado_fornecedor', 'sugestao_pendente'].includes(pedido.status_interno)
   const lastSugestao = sugestoesExistentes?.[0]
+  const hasPendingSugestao = lastSugestao?.status === 'pendente' && lastSugestao?.autor_tipo !== 'lojista'
   const canCancel = !ESTADOS_FINAIS.includes(pedido.status_interno)
 
   return (
@@ -1399,7 +1400,11 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
             <h2 className="text-lg font-semibold text-gray-900">
-              {canSuggest ? 'Itens - Enviar sugestao' : 'Itens do pedido'}
+              {canSuggest
+                ? hasPendingSugestao
+                  ? 'Itens - Editar sugestao enviada'
+                  : 'Itens - Enviar sugestao'
+                : 'Itens do pedido'}
             </h2>
             {canSuggest && (
               <p className="text-sm text-gray-500 mt-1">
@@ -2062,7 +2067,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   onClick={handleSubmitSugestao}
                   className="w-full sm:w-auto"
                 >
-                  Enviar sugestao
+                  {hasPendingSugestao ? 'Reenviar sugestao' : 'Enviar sugestao'}
                 </Button>
               </div>
             </div>
