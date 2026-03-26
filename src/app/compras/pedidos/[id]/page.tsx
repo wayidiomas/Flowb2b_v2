@@ -104,6 +104,7 @@ export default function VisualizarPedidoPage() {
     prazo_entrega_fornecedor: string | null
   } | null>(null)
   const [processandoEspelho, setProcessandoEspelho] = useState(false)
+  const [showEspelhoViewer, setShowEspelhoViewer] = useState(false)
 
   // Modais de escolha destinatario (fornecedor vs representante)
   const [showTipoDestinatarioModal, setShowTipoDestinatarioModal] = useState(false)
@@ -987,17 +988,14 @@ export default function VisualizarPedidoPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <a
-                      href={espelhoInfo.espelho_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => setShowEspelhoViewer(true)}
                       className="px-3 py-1.5 bg-white border border-primary-300 rounded-lg text-sm font-medium text-primary-700 hover:bg-primary-50 transition-colors"
                     >
                       Visualizar
-                    </a>
+                    </button>
                     <a
-                      href={espelhoInfo.espelho_url}
-                      download
+                      href={`/api/pedidos-compra/${pedidoId}/espelho/download`}
                       className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                     >
                       Download
@@ -1423,6 +1421,63 @@ export default function VisualizarPedidoPage() {
           #print-area th, #print-area td { border: 1px solid #ddd !important; padding: 8px !important; }
         }
       `}</style>
+
+      {/* Espelho Viewer Modal */}
+      {showEspelhoViewer && espelhoInfo?.espelho_url && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowEspelhoViewer(false)}
+          />
+          <div className="relative w-full max-w-4xl h-[90vh] mx-4 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 shrink-0">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Espelho do Pedido</h3>
+                <p className="text-sm text-gray-500">{espelhoInfo.espelho_nome}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/api/pedidos-compra/${pedidoId}/espelho/download`}
+                  className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors flex items-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  Download
+                </a>
+                <button
+                  onClick={() => setShowEspelhoViewer(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {/* Content - iframe for PDF, img for images */}
+            <div className="flex-1 overflow-auto bg-gray-100">
+              {espelhoInfo.espelho_nome?.match(/\.(jpg|jpeg|png|webp)$/i) ? (
+                <div className="flex items-center justify-center min-h-full p-4">
+                  <img
+                    src={espelhoInfo.espelho_url}
+                    alt="Espelho do pedido"
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                  />
+                </div>
+              ) : (
+                <iframe
+                  src={espelhoInfo.espelho_url}
+                  className="w-full h-full border-0"
+                  title="Espelho do pedido"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </DashboardLayout>
     </RequirePermission>
   )
