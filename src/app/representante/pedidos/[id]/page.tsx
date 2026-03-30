@@ -307,6 +307,16 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
     setSugestoes(prev => prev.filter((_, i) => i !== index))
   }
 
+  // Handler para alterar (remover) espelho do pedido
+  const handleAlterarEspelho = async () => {
+    if (!confirm('Deseja remover o espelho atual e enviar outro?')) return
+    try {
+      const res = await fetch(`/api/representante/pedidos/${id}/espelho`, { method: 'DELETE' })
+      if (res.ok) window.location.reload()
+      else { const d = await res.json(); alert(d.error || 'Erro ao remover espelho') }
+    } catch { alert('Erro ao remover espelho') }
+  }
+
   // Handler para enviar espelho do pedido
   const handleEnviarEspelho = async () => {
     if (!espelhoFile) return
@@ -931,6 +941,14 @@ export default function RepresentantePedidoDetailPage({ params }: { params: Prom
                       >
                         Download
                       </a>
+                      {espelhoInfo.espelho_status === 'pendente' && (
+                        <button
+                          onClick={handleAlterarEspelho}
+                          className="shrink-0 px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-sm font-medium text-amber-700 hover:bg-amber-50 transition-colors"
+                        >
+                          Alterar
+                        </button>
+                      )}
                     </div>
 
                     {espelhoInfo.espelho_status === 'pendente' && (

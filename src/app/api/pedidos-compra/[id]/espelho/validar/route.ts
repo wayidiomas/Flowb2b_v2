@@ -77,15 +77,19 @@ export async function POST(
       .filter((id): id is number => id !== null)
 
     const gtinMap = new Map<number, string>()
+    const itensPorCaixaMap = new Map<number, number | null>()
+    const unidadeProdutoMap = new Map<number, string | null>()
     if (produtoIds.length > 0) {
       const { data: produtos } = await supabase
         .from('produtos')
-        .select('id, gtin')
+        .select('id, gtin, itens_por_caixa, unidade')
         .in('id', produtoIds)
         .eq('empresa_id', user.empresaId)
 
       for (const p of produtos || []) {
         if (p.gtin) gtinMap.set(p.id, p.gtin)
+        itensPorCaixaMap.set(p.id, p.itens_por_caixa)
+        unidadeProdutoMap.set(p.id, p.unidade)
       }
     }
 
@@ -128,6 +132,8 @@ Para cada item, extraia:
 - quantidade: quantidade (numero)
 - preco_unitario: preco unitario (numero decimal, ex: 121.15)
 - total: valor total da linha (numero decimal)
+- unidade: unidade de medida (UN, CX, FD, PCT, etc.)
+- embalagem: informacao de embalagem (ex: "UN C/ 4", "FD C/ 12", "CX C/ 6")
 
 IMPORTANTE:
 - O codigo_fornecedor geralmente aparece entre parenteses antes do nome do produto
@@ -138,7 +144,7 @@ IMPORTANTE:
 - Se um campo nao esta visivel, use null
 
 Retorne APENAS um JSON array, sem markdown:
-[{"codigo_fornecedor":"4006089","codigo_barras":"7897348205258","nome":"GOLDEN FORM CAES AD CARNE MB 1KG","quantidade":8,"preco_unitario":15.44,"total":123.52}]`
+[{"codigo_fornecedor":"4006089","codigo_barras":"7897348205258","nome":"GOLDEN FORM CAES AD CARNE MB 1KG","quantidade":8,"preco_unitario":15.44,"total":123.52,"unidade":"UN","embalagem":"FD C/ 4"}]`
 
     let itensEspelho: Array<{
       codigo: string | null
@@ -190,14 +196,18 @@ Retorne APENAS um JSON array, sem markdown:
     // Montar texto dos itens do pedido
     const pedidoTexto = itensPedidoRaw.map((item, i) => {
       const gtin = item.produto_id ? gtinMap.get(item.produto_id) || '' : ''
-      return `${i + 1}. GTIN:${gtin || 'N/A'} | CodForn:${item.codigo_fornecedor || 'N/A'} | CodProd:${item.codigo_produto || 'N/A'} | "${item.descricao || ''}" | Qtd:${item.quantidade} | R$${(item.valor || 0).toFixed(2)}`
+      const unidade = item.produto_id ? unidadeProdutoMap.get(item.produto_id) || item.unidade || '' : item.unidade || ''
+      const itens_por_caixa = item.produto_id ? itensPorCaixaMap.get(item.produto_id) : null
+      return `${i + 1}. GTIN:${gtin || 'N/A'} | CodForn:${item.codigo_fornecedor || 'N/A'} | CodProd:${item.codigo_produto || 'N/A'} | "${item.descricao || ''}" | Qtd:${item.quantidade} | UN:${unidade || 'N/A'} | CxCom:${itens_por_caixa || 'N/A'} | R$${(item.valor || 0).toFixed(2)}`
     }).join('\n')
 
     // Montar texto dos itens extraidos do espelho
     const espelhoTexto = itensEspelho.map((item, i) => {
       const cf = (item as Record<string, unknown>).codigo_fornecedor || (item as Record<string, unknown>).codigo || 'N/A'
       const cb = (item as Record<string, unknown>).codigo_barras || 'N/A'
-      return `${i + 1}. CodForn:${cf} | EAN:${cb} | "${item.nome || ''}" | Qtd:${item.quantidade ?? 'N/A'} | R$${item.preco_unitario?.toFixed(2) ?? 'N/A'} | Total:R$${item.total?.toFixed(2) ?? 'N/A'}`
+      const un = (item as Record<string, unknown>).unidade || 'N/A'
+      const emb = (item as Record<string, unknown>).embalagem || 'N/A'
+      return `${i + 1}. CodForn:${cf} | EAN:${cb} | "${item.nome || ''}" | Qtd:${item.quantidade ?? 'N/A'} | UN:${un} | Emb:${emb} | R$${item.preco_unitario?.toFixed(2) ?? 'N/A'} | Total:R$${item.total?.toFixed(2) ?? 'N/A'}`
     }).join('\n')
 
     const promptComparacao = `Voce e um validador de pedidos de compra B2B. Compare os itens do PEDIDO ORIGINAL com os itens EXTRAIDOS DO ESPELHO do fornecedor.
@@ -216,6 +226,12 @@ INSTRUCOES DE CRUZAMENTO (PRIORIDADE RIGOROSA):
 5. Para cada match encontrado: compare quantidade e preco (tolerancia de 2% no preco)
 6. Classifique: "ok" (tudo bate), "divergencia" (encontrou mas qtd ou preco diferem), "faltando" (nao achou no espelho)
 7. Itens do espelho sem correspondencia no pedido: "extra"
+
+REGRAS DE EMBALAGEM (MUITO IMPORTANTE):
+- Se a quantidade difere mas o VALOR TOTAL DA LINHA eh igual (tolerancia 2%), considere OK. Isso significa conversao de embalagem (ex: 4 UN = 1 fardo de 4).
+- Se o pedido tem Qtd=4 e CxCom=4, e o espelho tem Qtd=1 com embalagem tipo fardo/caixa, eh a mesma coisa: 1 cx de 4 = 4 unidades.
+- Priorize SEMPRE comparar o VALOR TOTAL da linha. Se o total bate, a diferenca de quantidade eh apenas conversao de embalagem e NAO eh divergencia.
+- Se Qtd_pedido = Qtd_espelho × itens_por_caixa (ou vice-versa), considere OK.
 
 Retorne APENAS JSON valido, sem markdown:
 {

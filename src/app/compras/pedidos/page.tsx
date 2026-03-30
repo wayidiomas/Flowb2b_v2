@@ -626,6 +626,25 @@ export default function PedidoCompraPage() {
     )
   }
 
+  // Finalizar pedido via API
+  const handleFinalizar = async (pedidoId: number) => {
+    if (!confirm('Deseja finalizar este pedido? Esta acao nao pode ser desfeita.')) return
+    setActionLoading(true)
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedidoId}/finalizar`, { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        await fetchPedidos()
+      } else {
+        alert(data.error || 'Erro ao finalizar')
+      }
+    } catch {
+      alert('Erro ao finalizar pedido')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   // Excluir pedidos (soft delete via API)
   const handleExcluir = async (ids?: number[]) => {
     const pedidoIds = ids || selectedPedidos
@@ -1366,6 +1385,20 @@ export default function PedidoCompraPage() {
                                       </button>
                                     )
                                   })()}
+
+                                  {/* Finalizar pedido */}
+                                  {['aceito', 'sugestao_pendente', 'enviado_fornecedor', 'rascunho'].includes(statusInterno) && (
+                                    <button
+                                      onClick={() => handleFinalizar(pedido.pedido_id)}
+                                      disabled={actionLoading}
+                                      className="inline-flex items-center justify-center w-8 h-8 text-green-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                                      title="Finalizar pedido"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                    </button>
+                                  )}
 
                                   {/* Excluir pedido (soft delete) */}
                                   <button

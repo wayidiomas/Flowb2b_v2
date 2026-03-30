@@ -686,6 +686,29 @@ export default function VisualizarPedidoPage() {
     }
   }
 
+  const handleRemoverItem = async (itemId: number, descricao: string) => {
+    if (!pedido) return
+    if (!confirm(`Remover "${descricao}" do pedido?`)) return
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedido.id}/itens?item_id=${itemId}`, { method: 'DELETE' })
+      if (res.ok) window.location.reload()
+      else { const d = await res.json(); alert(d.error || 'Erro ao remover') }
+    } catch { alert('Erro ao remover item') }
+  }
+
+  const handleEditarQuantidade = async (itemId: number, novaQtd: number) => {
+    if (!pedido || novaQtd < 1) return
+    try {
+      const res = await fetch(`/api/pedidos-compra/${pedido.id}/itens`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: itemId, quantidade: novaQtd }),
+      })
+      if (res.ok) window.location.reload()
+      else { const d = await res.json(); alert(d.error || 'Erro ao atualizar') }
+    } catch { alert('Erro ao atualizar quantidade') }
+  }
+
   const handleCancelar = async (motivo: string) => {
     if (!pedido) return
     setCancelando(true)
@@ -1281,6 +1304,9 @@ export default function VisualizarPedidoPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qtd</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                    {!['cancelado', 'finalizado'].includes(statusInterno) && (
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Acoes</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -1290,9 +1316,38 @@ export default function VisualizarPedidoPage() {
                       <td className="px-4 py-3 text-sm text-blue-600 font-medium">{item.codigo_fornecedor || '-'}</td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate" title={item.descricao}>{item.descricao}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 text-center">{item.unidade}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{item.quantidade}</td>
+                      {!['cancelado', 'finalizado'].includes(statusInterno) ? (
+                        <td className="px-4 py-3 text-right">
+                          <input
+                            type="number"
+                            min={1}
+                            defaultValue={item.quantidade}
+                            onBlur={(e) => {
+                              const val = parseInt(e.target.value)
+                              if (val > 0 && val !== item.quantidade) handleEditarQuantidade(item.id!, val)
+                            }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                            className="w-16 text-right text-sm font-medium text-gray-900 border border-gray-200 rounded px-2 py-1 focus:border-[#336FB6] focus:outline-none focus:ring-1 focus:ring-[#336FB6]/20"
+                          />
+                        </td>
+                      ) : (
+                        <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{item.quantidade}</td>
+                      )}
                       <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(item.valor)}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{formatCurrency(item.quantidade * item.valor)}</td>
+                      {!['cancelado', 'finalizado'].includes(statusInterno) && (
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => handleRemoverItem(item.id!, item.descricao)}
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Remover item"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -1310,10 +1365,40 @@ export default function VisualizarPedidoPage() {
                         {item.codigo_fornecedor && ` | Cod: ${item.codigo_fornecedor}`}
                       </p>
                     </div>
-                    <p className="text-sm font-semibold text-gray-900 ml-3">{formatCurrency(item.quantidade * item.valor)}</p>
+                    <div className="flex items-center gap-2 ml-3">
+                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.quantidade * item.valor)}</p>
+                      {!['cancelado', 'finalizado'].includes(statusInterno) && (
+                        <button
+                          onClick={() => handleRemoverItem(item.id!, item.descricao)}
+                          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Remover item"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-4 mt-1.5 text-xs text-gray-500">
-                    <span>{item.quantidade} {item.unidade}</span>
+                    {!['cancelado', 'finalizado'].includes(statusInterno) ? (
+                      <span className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={1}
+                          defaultValue={item.quantidade}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value)
+                            if (val > 0 && val !== item.quantidade) handleEditarQuantidade(item.id!, val)
+                          }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                          className="w-14 text-right text-xs font-medium text-gray-900 border border-gray-200 rounded px-1.5 py-0.5 focus:border-[#336FB6] focus:outline-none focus:ring-1 focus:ring-[#336FB6]/20"
+                        />
+                        <span>{item.unidade}</span>
+                      </span>
+                    ) : (
+                      <span>{item.quantidade} {item.unidade}</span>
+                    )}
                     <span>x {formatCurrency(item.valor)}</span>
                   </div>
                 </div>
@@ -1684,7 +1769,7 @@ export default function VisualizarPedidoPage() {
         return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowValidacaoModal(false)} />
-          <div className="relative w-full max-w-5xl max-h-[90vh] mx-4 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="relative w-full max-w-6xl max-h-[90vh] mx-4 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 shrink-0">
               <div className="flex items-center justify-between">
@@ -1759,7 +1844,6 @@ export default function VisualizarPedidoPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr className="text-xs font-semibold text-gray-500 uppercase">
-                    <th className="px-3 py-3 text-left">Status</th>
                     <th className="px-3 py-3 text-left">Produto (Pedido)</th>
                     <th className="px-3 py-3 text-left">Produto (Espelho)</th>
                     <th className="px-3 py-3 text-center">Qtd Ped.</th>
@@ -1767,6 +1851,7 @@ export default function VisualizarPedidoPage() {
                     <th className="px-3 py-3 text-right">Preco Ped.</th>
                     <th className="px-3 py-3 text-right">Preco Esp.</th>
                     <th className="px-3 py-3 text-left">Diferencas</th>
+                    <th className="px-3 py-3 text-left">Status</th>
                     <th className="px-3 py-3 text-left">Obs. Item</th>
                   </tr>
                 </thead>
@@ -1782,6 +1867,27 @@ export default function VisualizarPedidoPage() {
                         effectiveStatus === 'extra' ? 'bg-blue-50/60' :
                         'bg-gray-50/60'
                       }>
+                        <td className="px-3 py-2.5 text-sm">
+                          {item.item_pedido ? (
+                            <div>
+                              <p className="font-medium text-gray-900 line-clamp-2">{item.item_pedido.descricao}</p>
+                              <p className="text-xs text-gray-400">{item.item_pedido.gtin || item.item_pedido.codigo || '-'}</p>
+                            </div>
+                          ) : '-'}
+                        </td>
+                        <td className="px-3 py-2.5 text-sm">
+                          {item.item_espelho ? (
+                            <div>
+                              <p className="font-medium text-gray-900 line-clamp-2">{item.item_espelho.nome}</p>
+                              <p className="text-xs text-gray-400">{item.item_espelho.codigo || '-'}</p>
+                            </div>
+                          ) : '-'}
+                        </td>
+                        <td className="px-3 py-2.5 text-sm text-center">{item.item_pedido?.quantidade ?? '-'}</td>
+                        <td className="px-3 py-2.5 text-sm text-center">{item.item_espelho?.quantidade ?? '-'}</td>
+                        <td className="px-3 py-2.5 text-sm text-right">{item.item_pedido?.valor != null ? `R$ ${item.item_pedido.valor.toFixed(2)}` : '-'}</td>
+                        <td className="px-3 py-2.5 text-sm text-right">{item.item_espelho?.preco_unitario != null ? `R$ ${item.item_espelho.preco_unitario.toFixed(2)}` : '-'}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[140px]">{item.diferencas?.join('; ') || '-'}</td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-1">
                             <select
@@ -1813,27 +1919,6 @@ export default function VisualizarPedidoPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-3 py-2.5 text-sm">
-                          {item.item_pedido ? (
-                            <div>
-                              <p className="font-medium text-gray-900 truncate max-w-[180px]">{item.item_pedido.descricao}</p>
-                              <p className="text-xs text-gray-400">{item.item_pedido.gtin || item.item_pedido.codigo || '-'}</p>
-                            </div>
-                          ) : '-'}
-                        </td>
-                        <td className="px-3 py-2.5 text-sm">
-                          {item.item_espelho ? (
-                            <div>
-                              <p className="font-medium text-gray-900 truncate max-w-[180px]">{item.item_espelho.nome}</p>
-                              <p className="text-xs text-gray-400">{item.item_espelho.codigo || '-'}</p>
-                            </div>
-                          ) : '-'}
-                        </td>
-                        <td className="px-3 py-2.5 text-sm text-center">{item.item_pedido?.quantidade ?? '-'}</td>
-                        <td className="px-3 py-2.5 text-sm text-center">{item.item_espelho?.quantidade ?? '-'}</td>
-                        <td className="px-3 py-2.5 text-sm text-right">{item.item_pedido?.valor != null ? `R$ ${item.item_pedido.valor.toFixed(2)}` : '-'}</td>
-                        <td className="px-3 py-2.5 text-sm text-right">{item.item_espelho?.preco_unitario != null ? `R$ ${item.item_espelho.preco_unitario.toFixed(2)}` : '-'}</td>
-                        <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[140px]">{item.diferencas?.join('; ') || '-'}</td>
                         <td className="px-3 py-2.5">
                           <input
                             type="text"
