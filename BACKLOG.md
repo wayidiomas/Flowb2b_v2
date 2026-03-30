@@ -298,6 +298,57 @@ A cliente quer uma visão **unificada estilo vitrine** onde o lojista vê o cat�
 
 ---
 
+### Task 12: Upload de produtos em massa via Excel (fornecedor/representante)
+**Prioridade:** Alta
+**Solicitado por:** Lucas em 30/03/2026
+
+**Contexto:** Hoje o fornecedor só popula o catálogo via sincronização do Bling (que puxa de `fornecedores_produtos`). Não existe forma de subir produtos manualmente em massa. O fornecedor quer importar uma planilha Excel/CSV com seus produtos e preços.
+
+**Onde colocar na UI:**
+
+1. **Catálogo do fornecedor** (`/fornecedor/catalogo`) - botão **"Importar Excel"** ao lado de "Sincronizar" no header (linha ~1931-1944 de `page.tsx`). Layout:
+   ```
+   [Sincronizar]  [📥 Importar Excel]  135 produtos
+   ```
+
+2. **Tabela de preço** (`/fornecedor/tabelas-preco/nova`) - opção **"Importar preços da planilha"** como alternativa ao carregamento automático do catálogo.
+
+**Fluxo principal (catálogo):**
+1. Fornecedor clica "Importar Excel"
+2. Modal abre com:
+   - Área de upload (drag & drop ou click)
+   - Link para baixar **modelo/template** da planilha
+   - Selector de lojista (para qual empresa importar)
+3. Fornecedor sobe o arquivo (.xlsx ou .csv)
+4. Backend parseia a planilha e retorna preview:
+   - Produtos encontrados, novos, atualizados
+   - Erros de validação (campos faltando, formato errado)
+5. Fornecedor confirma → backend insere/atualiza `catalogo_itens`
+6. Resultado: "150 importados, 5 atualizados, 2 erros"
+
+**Template da planilha (colunas):**
+| codigo | codigo_barras (EAN) | nome | marca | unidade | itens_por_caixa | preco |
+|--------|-------------------|------|-------|---------|----------------|-------|
+| 4006089 | 7897348205258 | Golden Carne MB 1kg | GOLDEN | UN | 1 | 15.44 |
+
+**Matching na importação:**
+- Se produto já existe no catálogo (por codigo OU EAN): **atualiza** preço/nome
+- Se não existe: **cria** novo item em `catalogo_itens`
+- O `produto_id` é resolvido por GTIN na tabela `produtos` da empresa selecionada
+
+**O que implementar:**
+1. **Lib** `src/lib/excel-parser.ts` - parser de .xlsx e .csv (usar lib `xlsx` ou `papaparse`)
+2. **API** `POST /api/fornecedor/catalogo/importar` - recebe FormData com arquivo + empresa_id, retorna preview
+3. **API** `POST /api/fornecedor/catalogo/importar/confirmar` - confirma a importação e efetua insert/update
+4. **Frontend** botão + modal de upload em `src/app/fornecedor/catalogo/page.tsx`
+5. **Template** `.xlsx` estático em `public/templates/catalogo-template.xlsx`
+
+**Dependências:** Lib `xlsx` (SheetJS) para parse de Excel, ou `papaparse` para CSV
+
+**Complexidade:** Média-alta (~4h)
+
+---
+
 ### Task 2: Multi-Loja na Tabela de Preco + Ações na listagem
 **Prioridade:** Media
 **Status:** EM IMPLEMENTAÇÃO
