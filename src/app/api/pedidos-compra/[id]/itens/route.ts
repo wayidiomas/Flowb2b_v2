@@ -145,7 +145,7 @@ export async function POST(
       const outrasDespesas = pedidoAtual?.outras_despesas || 0
       const total = totalProdutos + frete - desconto + outrasDespesas
 
-      await supabase
+      const { error: totalError } = await supabase
         .from('pedidos_compra')
         .update({
           total_produtos: totalProdutos,
@@ -154,6 +154,10 @@ export async function POST(
         })
         .eq('id', parseInt(pedidoId))
         .eq('empresa_id', empresaId)
+
+      if (totalError) {
+        console.error('Erro ao recalcular total do pedido:', totalError)
+      }
     }
 
     // 5. Registrar na timeline
@@ -280,7 +284,7 @@ export async function DELETE(
       const outrasDespesas = pedidoAtual?.outras_despesas || 0
       const total = totalProdutos + frete - desconto + outrasDespesas
 
-      await supabase
+      const { error: totalError } = await supabase
         .from('pedidos_compra')
         .update({
           total_produtos: totalProdutos,
@@ -289,6 +293,10 @@ export async function DELETE(
         })
         .eq('id', parseInt(pedidoId))
         .eq('empresa_id', empresaId)
+
+      if (totalError) {
+        console.error('Erro ao recalcular total do pedido:', totalError)
+      }
     }
 
     // 5. Registrar na timeline
@@ -417,7 +425,7 @@ export async function PUT(
       const outrasDespesas = pedidoAtual?.outras_despesas || 0
       const total = totalProdutos + frete - desconto + outrasDespesas
 
-      await supabase
+      const { error: totalError } = await supabase
         .from('pedidos_compra')
         .update({
           total_produtos: totalProdutos,
@@ -426,6 +434,10 @@ export async function PUT(
         })
         .eq('id', parseInt(pedidoId))
         .eq('empresa_id', empresaId)
+
+      if (totalError) {
+        console.error('Erro ao recalcular total do pedido:', totalError)
+      }
     }
 
     // 5. Registrar na timeline

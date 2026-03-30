@@ -26,6 +26,9 @@ export async function POST(
       .eq('ativo', true)
 
     const representanteIds = representantes?.map(r => r.id) || []
+    if (representanteIds.length === 0) {
+      return NextResponse.json({ error: 'Sem acesso como representante' }, { status: 403 })
+    }
 
     // Buscar fornecedores vinculados
     const { data: vinculos } = await supabase

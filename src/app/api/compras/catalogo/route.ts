@@ -133,7 +133,10 @@ export async function GET(request: NextRequest) {
       .eq('ativo', true)
 
     if (search) {
-      query = query.or(`nome.ilike.%${search}%,codigo.ilike.%${search}%`)
+      const sanitized = search.replace(/[,%()\.]/g, '')
+      if (sanitized) {
+        query = query.or(`nome.ilike.%${sanitized}%,codigo.ilike.%${sanitized}%`)
+      }
     }
     if (marca) {
       query = query.ilike('marca', `%${marca}%`)
@@ -217,8 +220,8 @@ export async function GET(request: NextRequest) {
           const precoTabela = item.produto_id ? precosTabelaMap.get(item.produto_id) : null
           return {
             ...item,
-            preco_tabela: precoTabela?.preco_tabela || null,
-            desconto_tabela: precoTabela?.desconto_percentual || null,
+            preco_tabela: precoTabela?.preco_tabela ?? null,
+            desconto_tabela: precoTabela?.desconto_percentual ?? null,
           }
         })
       }
