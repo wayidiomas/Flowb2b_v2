@@ -43,6 +43,40 @@ interface Catalogo {
   fornecedor_id: number
 }
 
+interface ImportPreviewRow {
+  linha: number
+  codigo: string | null
+  ean: string | null
+  nome: string | null
+  preco: number | null
+}
+
+interface ImportError {
+  linha: number
+  campo: string
+  mensagem: string
+}
+
+interface ImportResumo {
+  total: number
+  novos: number
+  atualizados: number
+  erros: number
+}
+
+interface ImportPreviewResponse {
+  success: boolean
+  resumo: ImportResumo
+  novos: ImportPreviewRow[]
+  atualizados: ImportPreviewRow[]
+  erros: ImportError[]
+}
+
+interface ImportConfirmResponse {
+  success: boolean
+  resumo: ImportResumo
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -1630,9 +1664,9 @@ export default function FornecedorCatalogoPage() {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importEmpresaId, setImportEmpresaId] = useState<number | null>(null)
   const [importando, setImportando] = useState(false)
-  const [importPreview, setImportPreview] = useState<any>(null)
+  const [importPreview, setImportPreview] = useState<ImportPreviewResponse | null>(null)
   const [importStep, setImportStep] = useState<'upload' | 'preview' | 'done'>('upload')
-  const [importResult, setImportResult] = useState<any>(null)
+  const [importResult, setImportResult] = useState<ImportConfirmResponse | null>(null)
 
   // ------ Check if catalog exists ------
   const checkCatalogo = useCallback(async () => {
@@ -1761,45 +1795,51 @@ export default function FornecedorCatalogoPage() {
   }
 
   // ------ Import Excel handlers ------
+  const buildImportFormData = (mode: 'preview' | 'confirm') => {
+    const fd = new FormData()
+    fd.append('file', importFile!)
+    fd.append('empresa_id', String(importEmpresaId))
+    fd.append('mode', mode)
+    return fd
+  }
+
   const handleImportPreview = async () => {
     if (!importFile || !importEmpresaId) return
     setImportando(true)
     try {
-      const formData = new FormData()
-      formData.append('file', importFile)
-      formData.append('empresa_id', String(importEmpresaId))
-      formData.append('mode', 'preview')
-      const res = await fetch('/api/fornecedor/catalogo/importar', { method: 'POST', body: formData })
+      const res = await fetch('/api/fornecedor/catalogo/importar', { method: 'POST', body: buildImportFormData('preview') })
       const data = await res.json()
       if (res.ok && data.success) {
         setImportPreview(data)
         setImportStep('preview')
       } else {
-        alert(data.error || 'Erro ao processar planilha')
+        setToast({ message: data.error || 'Erro ao processar planilha', type: 'error' })
       }
-    } catch { alert('Erro ao processar planilha') }
-    finally { setImportando(false) }
+    } catch {
+      setToast({ message: 'Erro ao processar planilha', type: 'error' })
+    } finally {
+      setImportando(false)
+    }
   }
 
   const handleImportConfirm = async () => {
     if (!importFile || !importEmpresaId) return
     setImportando(true)
     try {
-      const formData = new FormData()
-      formData.append('file', importFile)
-      formData.append('empresa_id', String(importEmpresaId))
-      formData.append('mode', 'confirm')
-      const res = await fetch('/api/fornecedor/catalogo/importar', { method: 'POST', body: formData })
+      const res = await fetch('/api/fornecedor/catalogo/importar', { method: 'POST', body: buildImportFormData('confirm') })
       const data = await res.json()
       if (res.ok && data.success) {
         setImportResult(data)
         setImportStep('done')
         fetchItens() // refresh the catalog list
       } else {
-        alert(data.error || 'Erro ao importar')
+        setToast({ message: data.error || 'Erro ao importar', type: 'error' })
       }
-    } catch { alert('Erro ao importar') }
-    finally { setImportando(false) }
+    } catch {
+      setToast({ message: 'Erro ao importar', type: 'error' })
+    } finally {
+      setImportando(false)
+    }
   }
 
   // ------ Toggle ativo ------
@@ -1992,7 +2032,7 @@ export default function FornecedorCatalogoPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null) }}
+              onClick={() => { setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null); setImportEmpresaId(null) }}
               leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>}
             >
               Importar Excel
@@ -2314,24 +2354,12 @@ export default function FornecedorCatalogoPage() {
         </div>
       )}
       {/* Modal Importar Excel */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !importando && setShowImportModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col overflow-hidden">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Importar Produtos via Planilha</h3>
-                <p className="text-sm text-gray-500">Adicione ou atualize produtos no catalogo em massa</p>
-              </div>
-              <button onClick={() => !importando && setShowImportModal(false)} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto flex-1">
+      <Modal isOpen={showImportModal} onClose={() => !importando && setShowImportModal(false)} size="lg">
+        <ModalHeader onClose={() => !importando && setShowImportModal(false)}>
+          <ModalTitle>Importar Produtos via Planilha</ModalTitle>
+          <ModalDescription>Adicione ou atualize produtos no catalogo em massa</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
               {importStep === 'upload' && (
                 <div className="space-y-5">
                   {/* Step 1: Download template */}
@@ -2437,7 +2465,7 @@ export default function FornecedorCatalogoPage() {
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                       <p className="text-sm font-medium text-red-800 mb-2">Erros encontrados:</p>
                       <div className="max-h-32 overflow-y-auto space-y-1">
-                        {importPreview.erros.map((err: any, i: number) => (
+                        {importPreview.erros.map((err, i) => (
                           <p key={i} className="text-xs text-red-600">Linha {err.linha}: {err.campo} - {err.mensagem}</p>
                         ))}
                       </div>
@@ -2451,7 +2479,7 @@ export default function FornecedorCatalogoPage() {
                         <table className="w-full text-xs">
                           <thead className="bg-gray-50 sticky top-0"><tr><th className="px-2 py-1 text-left">Codigo</th><th className="px-2 py-1 text-left">Nome</th><th className="px-2 py-1 text-right">Preco</th></tr></thead>
                           <tbody className="divide-y divide-gray-100">
-                            {importPreview.novos.map((r: any, i: number) => (
+                            {importPreview.novos.map((r, i) => (
                               <tr key={i}><td className="px-2 py-1 font-mono">{r.codigo || r.ean || '-'}</td><td className="px-2 py-1 truncate max-w-[200px]">{r.nome}</td><td className="px-2 py-1 text-right">R$ {r.preco?.toFixed(2)}</td></tr>
                             ))}
                           </tbody>
@@ -2467,7 +2495,7 @@ export default function FornecedorCatalogoPage() {
                         <table className="w-full text-xs">
                           <thead className="bg-gray-50 sticky top-0"><tr><th className="px-2 py-1 text-left">Codigo</th><th className="px-2 py-1 text-left">Nome</th><th className="px-2 py-1 text-right">Preco</th></tr></thead>
                           <tbody className="divide-y divide-gray-100">
-                            {importPreview.atualizados.map((r: any, i: number) => (
+                            {importPreview.atualizados.map((r, i) => (
                               <tr key={i}><td className="px-2 py-1 font-mono">{r.codigo || r.ean || '-'}</td><td className="px-2 py-1 truncate max-w-[200px]">{r.nome}</td><td className="px-2 py-1 text-right">R$ {r.preco?.toFixed(2)}</td></tr>
                             ))}
                           </tbody>
@@ -2491,45 +2519,41 @@ export default function FornecedorCatalogoPage() {
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 shrink-0">
+        </ModalBody>
+        <ModalFooter>
               {importStep === 'upload' && (
                 <>
-                  <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50">Cancelar</button>
-                  <button
+                  <Button variant="outline" size="sm" onClick={() => setShowImportModal(false)}>Cancelar</Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    loading={importando}
                     onClick={handleImportPreview}
-                    disabled={!importFile || !importEmpresaId || importando}
-                    className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] rounded-xl hover:bg-[#2b5e9e] disabled:opacity-50 flex items-center gap-2"
+                    disabled={!importFile || !importEmpresaId}
                   >
-                    {importando ? (
-                      <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Processando...</>
-                    ) : 'Verificar planilha'}
-                  </button>
+                    Verificar planilha
+                  </Button>
                 </>
               )}
               {importStep === 'preview' && (
                 <>
-                  <button onClick={() => setImportStep('upload')} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50">Voltar</button>
-                  <button
+                  <Button variant="outline" size="sm" onClick={() => setImportStep('upload')}>Voltar</Button>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    loading={importando}
                     onClick={handleImportConfirm}
-                    disabled={importando || (importPreview?.resumo.novos === 0 && importPreview?.resumo.atualizados === 0)}
-                    className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+                    disabled={importPreview?.resumo.novos === 0 && importPreview?.resumo.atualizados === 0}
                   >
-                    {importando ? (
-                      <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Importando...</>
-                    ) : `Confirmar importacao (${(importPreview?.resumo.novos || 0) + (importPreview?.resumo.atualizados || 0)} itens)`}
-                  </button>
+                    {`Confirmar importacao (${(importPreview?.resumo.novos || 0) + (importPreview?.resumo.atualizados || 0)} itens)`}
+                  </Button>
                 </>
               )}
               {importStep === 'done' && (
-                <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] rounded-xl hover:bg-[#2b5e9e]">Fechar</button>
+                <Button variant="primary" size="sm" onClick={() => setShowImportModal(false)}>Fechar</Button>
               )}
-            </div>
-          </div>
-        </div>
-      )}
+        </ModalFooter>
+      </Modal>
     </FornecedorLayout>
   )
 }

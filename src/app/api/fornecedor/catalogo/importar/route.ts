@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
         nome: row.nome!,
         marca: row.marca || null,
         unidade: row.unidade || 'UN',
-        itens_por_caixa: row.itens_por_caixa || 1,
+        itens_por_caixa: row.itens_por_caixa ?? 1,
         preco_base: row.preco ?? 0,
         imagem_url: row.imagem_url || null,
         ativo: true,
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
       if (row.nome) updateData.nome = row.nome
       if (row.marca) updateData.marca = row.marca
       if (row.unidade) updateData.unidade = row.unidade
-      if (row.itens_por_caixa) updateData.itens_por_caixa = row.itens_por_caixa
+      if (row.itens_por_caixa !== null) updateData.itens_por_caixa = row.itens_por_caixa
       if (row.imagem_url) updateData.imagem_url = row.imagem_url
 
       await supabase
