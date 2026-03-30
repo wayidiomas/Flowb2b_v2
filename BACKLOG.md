@@ -298,19 +298,31 @@ A cliente quer uma visão **unificada estilo vitrine** onde o lojista vê o cat�
 
 ---
 
-### Task 2: Multi-Loja na Tabela de Preco
+### Task 2: Multi-Loja na Tabela de Preco + Ações na listagem
 **Prioridade:** Media
-**Contexto:** Cliente pediu que fornecedor possa criar UMA tabela de preco e aplicar em MULTIPLOS lojistas de uma vez, em vez de criar uma tabela separada para cada loja.
+**Status:** EM IMPLEMENTAÇÃO
 
-**Abordagem planejada:** Duplicacao via GTIN (sem mudanca de schema)
-1. Botao "Duplicar para outros lojistas" na listagem de tabelas
-2. Modal para selecionar lojas destino (mostra empresas vinculadas)
-3. Backend copia tabela + itens, mapeando produtos pelo GTIN/EAN em cada loja
-4. Se produto nao existe na loja destino, cria item so com GTIN (sem produto_id)
+**Contexto:** Fornecedor CDA serve 3 lojas (Duubpets 1, 2, 3). Precisa criar 3 tabelas separadas com mesmos preços. Quer criar 1 e duplicar para as outras.
 
-**Arquivos envolvidos:**
+**Desafio técnico:** `produto_id` é empresa-specific. Mesmo produto físico tem IDs diferentes por loja. Ponte: GTIN/EAN na tabela `produtos`.
+
+**Achados do code review da listagem (`fornecedor/tabelas-preco/page.tsx`):**
+- NÃO tem botão de editar tabela existente
+- NÃO tem botão de excluir tabela
+- NÃO tem botão de duplicar
+- Só tem "Ver detalhes" (expand) e "Nova Tabela"
+
+**O que implementar:**
+1. API `POST /api/fornecedor/tabelas-preco/[id]/duplicar` (nova):
+   - Body: `{ target_empresa_ids: [5, 6] }`
+   - Para cada empresa: busca fornecedor_id por CNPJ, cria tabela, mapeia itens por GTIN
+   - Se produto não existe na loja destino: cria item sem produto_id
+   - Retorna relatório por loja (copiados, sem match)
+2. Frontend `fornecedor/tabelas-preco/page.tsx`:
+   - Botão "Duplicar" (ícone copiar) → modal para selecionar lojas destino
+   - Botão "Excluir" (ícone lixeira) → confirm + DELETE API (já existe)
+   - Ambos na coluna de ações de cada tabela
+
+**Arquivos:**
 - `src/app/api/fornecedor/tabelas-preco/[id]/duplicar/route.ts` (novo)
-- `src/app/fornecedor/tabelas-preco/page.tsx` (botao + modal)
-- Tabelas: `tabelas_preco`, `itens_tabela_preco`, `produtos` (gtin)
-
-**Futuro (v2):** Criar tabela `tabelas_preco_lojas` (N:N) e itens baseados em GTIN em vez de produto_id.
+- `src/app/fornecedor/tabelas-preco/page.tsx` (botões + modal duplicação)

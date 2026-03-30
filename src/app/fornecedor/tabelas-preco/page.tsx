@@ -21,13 +21,18 @@ const statusLabels: Record<string, string> = {
 }
 
 export default function FornecedorTabelasPrecoPage() {
-  const { loading: authLoading } = useFornecedorAuth()
+  const { loading: authLoading, empresasVinculadas } = useFornecedorAuth()
   const [empresaId, setEmpresaId] = useState<number | null>(null)
   const [tabelas, setTabelas] = useState<TabelaPreco[]>([])
   const [loading, setLoading] = useState(false)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [expandedItens, setExpandedItens] = useState<ItemTabelaPreco[]>([])
   const [loadingItens, setLoadingItens] = useState(false)
+  const [showDuplicarModal, setShowDuplicarModal] = useState(false)
+  const [tabelaParaDuplicar, setTabelaParaDuplicar] = useState<{ id: number; nome: string; empresa_id: number } | null>(null)
+  const [targetEmpresas, setTargetEmpresas] = useState<number[]>([])
+  const [duplicando, setDuplicando] = useState(false)
+  const [excluindo, setExcluindo] = useState<number | null>(null)
 
   const fetchTabelas = useCallback(async () => {
     setLoading(true)
@@ -76,6 +81,55 @@ export default function FornecedorTabelasPrecoPage() {
   const formatCurrency = (value: number | null) => {
     if (value === null || value === undefined) return '-'
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+  }
+
+  const handleExcluirTabela = async (tabelaId: number) => {
+    if (!confirm('Deseja excluir esta tabela de preco?')) return
+    setExcluindo(tabelaId)
+    try {
+      const res = await fetch(`/api/fornecedor/tabelas-preco/${tabelaId}`, { method: 'DELETE' })
+      if (res.ok) {
+        fetchTabelas()
+      } else {
+        const d = await res.json()
+        alert(d.error || 'Erro ao excluir')
+      }
+    } catch {
+      alert('Erro ao excluir tabela')
+    } finally {
+      setExcluindo(null)
+    }
+  }
+
+  const handleAbrirDuplicar = (tabela: { id: number; nome: string; empresa_id: number }) => {
+    setTabelaParaDuplicar(tabela)
+    const outras = empresasVinculadas.filter(e => e.empresaId !== tabela.empresa_id).map(e => e.empresaId)
+    setTargetEmpresas(outras)
+    setShowDuplicarModal(true)
+  }
+
+  const handleDuplicar = async () => {
+    if (!tabelaParaDuplicar || targetEmpresas.length === 0) return
+    setDuplicando(true)
+    try {
+      const res = await fetch(`/api/fornecedor/tabelas-preco/${tabelaParaDuplicar.id}/duplicar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_empresa_ids: targetEmpresas }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        alert(`Tabela duplicada com sucesso para ${data.resultados.length} loja(s)!\n${data.resultados.map((r: { empresa_nome: string; itens_copiados: number; itens_sem_match: number }) => `${r.empresa_nome}: ${r.itens_copiados} itens (${r.itens_sem_match} sem match)`).join('\n')}`)
+        setShowDuplicarModal(false)
+        fetchTabelas()
+      } else {
+        alert(data.error || 'Erro ao duplicar')
+      }
+    } catch {
+      alert('Erro ao duplicar tabela')
+    } finally {
+      setDuplicando(false)
+    }
   }
 
   if (authLoading) {
@@ -159,14 +213,35 @@ export default function FornecedorTabelasPrecoPage() {
                               {tabela.total_itens ?? 0}
                             </td>
                             <td className="px-6 py-4">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="border-[#FFAA11] text-[#FFAA11] hover:bg-[#FFAA11] hover:text-white"
-                                onClick={() => toggleExpand(tabela.id)}
-                              >
-                                {isExpanded ? 'Fechar' : 'Ver detalhes'}
-                              </Button>
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleAbrirDuplicar({ id: tabela.id, nome: tabela.nome, empresa_id: tabela.empresa_id }) }}
+                                  className="p-1.5 text-[#336FB6] hover:bg-[#336FB6]/10 rounded-lg transition-colors"
+                                  title="Duplicar para outras lojas"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.5A1.125 1.125 0 014 20.625V7.875c0-.621.504-1.125 1.125-1.125H8.25m8.25 0v3.375c0 .621-.504 1.125-1.125 1.125h-3.375m0 0L15.75 6.75M12 10.125L15.75 6.75m0 0H12m3.75 0v3.375" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleExcluirTabela(tabela.id) }}
+                                  disabled={excluindo === tabela.id}
+                                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                  title="Excluir tabela"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                  </svg>
+                                </button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-[#FFAA11] text-[#FFAA11] hover:bg-[#FFAA11] hover:text-white ml-1"
+                                  onClick={() => toggleExpand(tabela.id)}
+                                >
+                                  {isExpanded ? 'Fechar' : 'Ver detalhes'}
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                           {isExpanded && (
@@ -266,12 +341,33 @@ export default function FornecedorTabelasPrecoPage() {
                           </div>
                           <span className="text-xs font-semibold text-gray-700">{tabela.total_itens ?? 0} itens</span>
                         </div>
-                        <button
-                          onClick={() => toggleExpand(tabela.id)}
-                          className="mt-3 w-full py-2 text-sm font-medium text-[#FFAA11] border border-[#FFAA11] rounded-xl hover:bg-[#FFAA11]/10 transition-colors"
-                        >
-                          {isExpanded ? 'Fechar' : 'Ver detalhes'}
-                        </button>
+                        <div className="flex items-center gap-2 mt-3">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleAbrirDuplicar({ id: tabela.id, nome: tabela.nome, empresa_id: tabela.empresa_id }) }}
+                            className="p-2 text-[#336FB6] hover:bg-[#336FB6]/10 rounded-lg transition-colors border border-[#336FB6]/20"
+                            title="Duplicar para outras lojas"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.5A1.125 1.125 0 014 20.625V7.875c0-.621.504-1.125 1.125-1.125H8.25m8.25 0v3.375c0 .621-.504 1.125-1.125 1.125h-3.375m0 0L15.75 6.75M12 10.125L15.75 6.75m0 0H12m3.75 0v3.375" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleExcluirTabela(tabela.id) }}
+                            disabled={excluindo === tabela.id}
+                            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-red-200 disabled:opacity-50"
+                            title="Excluir tabela"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => toggleExpand(tabela.id)}
+                            className="flex-1 py-2 text-sm font-medium text-[#FFAA11] border border-[#FFAA11] rounded-xl hover:bg-[#FFAA11]/10 transition-colors"
+                          >
+                            {isExpanded ? 'Fechar' : 'Ver detalhes'}
+                          </button>
+                        </div>
                       </div>
                       {isExpanded && (
                         <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
@@ -341,6 +437,80 @@ export default function FornecedorTabelasPrecoPage() {
           )}
         </div>
       </div>
+
+      {/* Modal Duplicar Tabela */}
+      {showDuplicarModal && tabelaParaDuplicar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !duplicando && setShowDuplicarModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Duplicar tabela</h3>
+                <p className="text-sm text-gray-500">{tabelaParaDuplicar.nome}</p>
+              </div>
+              <button onClick={() => !duplicando && setShowDuplicarModal(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-3">Selecione as lojas para onde deseja copiar esta tabela:</p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {empresasVinculadas
+                .filter(e => e.empresaId !== tabelaParaDuplicar.empresa_id)
+                .map(emp => (
+                  <label key={emp.empresaId} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={targetEmpresas.includes(emp.empresaId)}
+                      onChange={(e) => {
+                        if (e.target.checked) setTargetEmpresas(prev => [...prev, emp.empresaId])
+                        else setTargetEmpresas(prev => prev.filter(id => id !== emp.empresaId))
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-[#336FB6]"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{emp.nomeFantasia || emp.razaoSocial}</p>
+                    </div>
+                  </label>
+                ))}
+            </div>
+
+            {empresasVinculadas.filter(e => e.empresaId !== tabelaParaDuplicar.empresa_id).length === 0 && (
+              <p className="text-sm text-gray-500 text-center py-4">Nenhuma outra loja vinculada.</p>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowDuplicarModal(false)}
+                disabled={duplicando}
+                className="flex-1 py-2.5 px-4 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDuplicar}
+                disabled={duplicando || targetEmpresas.length === 0}
+                className="flex-1 py-2.5 px-4 bg-[#336FB6] text-white font-medium rounded-xl hover:bg-[#2b5e9e] disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {duplicando ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Duplicando...
+                  </>
+                ) : (
+                  `Duplicar para ${targetEmpresas.length} loja(s)`
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </FornecedorLayout>
   )
 }
