@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import {
   DoubleBezel,
   Eyebrow,
@@ -57,9 +58,14 @@ function FeatureDot({
 
 function EssentialCard() {
   return (
-    <DoubleBezel variant="warm" className="p-8">
+    <DoubleBezel variant="warm" className="p-8 relative overflow-hidden">
+      {/* Decorative elos */}
+      <div className="absolute -top-10 -right-10 w-[200px] h-[200px] opacity-15 pointer-events-none">
+        <Image src="/assets/branding/cloud-decoration.png" alt="" fill className="object-contain" />
+      </div>
+
       {/* Tag */}
-      <span className="text-[11px] uppercase tracking-[0.12em] text-white font-bold">
+      <span className="relative z-[1] text-[11px] uppercase tracking-[0.12em] text-white font-bold">
         Essencial
       </span>
 
@@ -101,9 +107,14 @@ function EssentialCard() {
 
 function ProCard() {
   return (
-    <DoubleBezel variant="accent" className="p-8">
+    <DoubleBezel variant="accent" className="p-8 relative overflow-hidden">
+      {/* Decorative elos */}
+      <div className="absolute -top-10 -right-10 w-[200px] h-[200px] opacity-10 pointer-events-none">
+        <Image src="/assets/branding/cloud-decoration.png" alt="" fill className="object-contain" />
+      </div>
+
       {/* Tag */}
-      <span className="text-[11px] uppercase tracking-[0.12em] text-[var(--cta)] font-bold flex items-center gap-2">
+      <span className="relative z-[1] text-[11px] uppercase tracking-[0.12em] text-[var(--cta)] font-bold flex items-center gap-2">
         <span className="w-1.5 h-1.5 rounded-full bg-[var(--cta)] animate-pulse" />
         Pro — Bling integrado
       </span>
