@@ -48,6 +48,11 @@ next-env.d.ts
 
 # Screenshots de teste
 *.png
+# Excecao: imagens da landing page e branding
+!public/assets/landing/**/*.png
+!public/assets/branding/**/*.png
+!src/app/icon.png
+!src/app/apple-icon.png
 
 # Supabase temp
 supabase/.temp/
