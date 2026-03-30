@@ -196,6 +196,19 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     prazo_entrega_fornecedor: string | null
   } | null>(null)
 
+  // Validacao IA do espelho
+  const [validandoEspelho, setValidandoEspelho] = useState(false)
+  const [validacaoResult, setValidacaoResult] = useState<{
+    resumo: { total_pedido: number; total_espelho: number; ok: number; divergencias: number; faltando: number; extras: number }
+    itens: Array<{
+      status: 'ok' | 'divergencia' | 'faltando' | 'extra'
+      item_pedido?: { codigo: string | null; descricao: string | null; quantidade: number; valor: number | null; gtin: string | null }
+      item_espelho?: { codigo: string | null; nome: string | null; quantidade: number | null; preco_unitario: number | null; total: number | null }
+      diferencas?: string[]
+    }>
+  } | null>(null)
+  const [showValidacaoModal, setShowValidacaoModal] = useState(false)
+
   useEffect(() => {
     if (!user) return
 
@@ -354,6 +367,27 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       setTimeout(() => setToast(null), 4000)
     } finally {
       setEnviandoEspelho(false)
+    }
+  }
+
+  // Handler para validar espelho com IA
+  const handleValidarEspelho = async () => {
+    setValidandoEspelho(true)
+    try {
+      const res = await fetch(`/api/fornecedor/pedidos/${id}/espelho/validar`, { method: 'POST' })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setValidacaoResult(data)
+        setShowValidacaoModal(true)
+      } else {
+        setToast({ type: 'error', msg: data.error || 'Erro ao validar espelho' })
+        setTimeout(() => setToast(null), 4000)
+      }
+    } catch {
+      setToast({ type: 'error', msg: 'Erro ao validar espelho' })
+      setTimeout(() => setToast(null), 4000)
+    } finally {
+      setValidandoEspelho(false)
     }
   }
 
@@ -977,6 +1011,40 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                     >
                       Download
                     </a>
+                    <button
+                      onClick={handleValidarEspelho}
+                      disabled={validandoEspelho}
+                      className="shrink-0 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg text-sm font-medium hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                    >
+                      {validandoEspelho ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Validando...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Validar com IA
+                        </>
+                      )}
+                    </button>
+                    {validacaoResult && !showValidacaoModal && (
+                      <button
+                        onClick={() => setShowValidacaoModal(true)}
+                        className="shrink-0 px-3 py-1.5 bg-white border border-purple-300 rounded-lg text-sm font-medium text-purple-700 hover:bg-purple-50 transition-colors flex items-center gap-1.5"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Ver validacao
+                      </button>
+                    )}
                     {espelhoInfo.espelho_status === 'pendente' && (
                       <button
                         onClick={handleAlterarEspelho}
@@ -2234,6 +2302,161 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           </div>
         </div>
       )}
+
+      {/* Modal Validacao IA do Espelho (somente leitura) */}
+      {showValidacaoModal && validacaoResult && (() => {
+        const resumo = validacaoResult.resumo
+        const sortedItens = [...validacaoResult.itens]
+          .map((item, originalIdx) => ({ ...item, _idx: originalIdx }))
+          .sort((a, b) => {
+            const order: Record<string, number> = { divergencia: 0, faltando: 1, extra: 2, ok: 3 }
+            return (order[a.status] ?? 5) - (order[b.status] ?? 5)
+          })
+        return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowValidacaoModal(false)} />
+          <div className="relative w-full max-w-6xl max-h-[90vh] mx-4 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Validacao do Espelho</h3>
+                  <p className="text-sm text-gray-500">Comparacao via IA -- verifique os itens antes do lojista revisar</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {espelhoInfo?.espelho_url && (
+                    <>
+                      <button
+                        onClick={() => { setShowValidacaoModal(false); setShowEspelhoViewer(true) }}
+                        className="px-3 py-1.5 bg-white border border-[#336FB6]/30 rounded-lg text-xs font-medium text-[#336FB6] hover:bg-[#336FB6]/5 transition-colors flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Ver espelho
+                      </button>
+                      <a
+                        href={`/api/fornecedor/pedidos/${id}/espelho/download`}
+                        className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        Download
+                      </a>
+                    </>
+                  )}
+                  <button onClick={() => setShowValidacaoModal(false)} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              {/* Summary badges */}
+              <div className="flex flex-wrap gap-2 mt-3">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                  {resumo.ok} OK
+                </span>
+                {resumo.divergencias > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                    {resumo.divergencias} Divergencias
+                  </span>
+                )}
+                {resumo.faltando > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                    {resumo.faltando} Faltando
+                  </span>
+                )}
+                {resumo.extras > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                    + {resumo.extras} Extras
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  Pedido: {resumo.total_pedido} itens | Espelho: {resumo.total_espelho} itens
+                </span>
+              </div>
+            </div>
+
+            {/* Results table (read-only) */}
+            <div className="flex-1 overflow-auto max-h-[60vh]">
+              <table className="w-full">
+                <thead className="bg-gray-50 sticky top-0 z-10">
+                  <tr className="text-xs font-semibold text-gray-500 uppercase">
+                    <th className="px-3 py-3 text-left">Produto (Pedido)</th>
+                    <th className="px-3 py-3 text-left">Produto (Espelho)</th>
+                    <th className="px-3 py-3 text-center">Qtd Ped.</th>
+                    <th className="px-3 py-3 text-center">Qtd Esp.</th>
+                    <th className="px-3 py-3 text-right">Preco Ped.</th>
+                    <th className="px-3 py-3 text-right">Preco Esp.</th>
+                    <th className="px-3 py-3 text-left">Diferencas</th>
+                    <th className="px-3 py-3 text-left">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {sortedItens.map((item) => (
+                    <tr key={item._idx} className={
+                      item.status === 'ok' ? 'bg-white' :
+                      item.status === 'divergencia' ? 'bg-amber-50/60' :
+                      item.status === 'faltando' ? 'bg-red-50/60' :
+                      item.status === 'extra' ? 'bg-blue-50/60' : 'bg-white'
+                    }>
+                      <td className="px-3 py-2.5 text-sm">
+                        {item.item_pedido ? (
+                          <div>
+                            <p className="font-medium text-gray-900 line-clamp-2">{item.item_pedido.descricao}</p>
+                            <p className="text-xs text-gray-400">{item.item_pedido.gtin || item.item_pedido.codigo || '-'}</p>
+                          </div>
+                        ) : '-'}
+                      </td>
+                      <td className="px-3 py-2.5 text-sm">
+                        {item.item_espelho ? (
+                          <div>
+                            <p className="font-medium text-gray-900 line-clamp-2">{item.item_espelho.nome}</p>
+                            <p className="text-xs text-gray-400">{item.item_espelho.codigo || '-'}</p>
+                          </div>
+                        ) : '-'}
+                      </td>
+                      <td className="px-3 py-2.5 text-sm text-center">{item.item_pedido?.quantidade ?? '-'}</td>
+                      <td className="px-3 py-2.5 text-sm text-center">{item.item_espelho?.quantidade ?? '-'}</td>
+                      <td className="px-3 py-2.5 text-sm text-right">{item.item_pedido?.valor != null ? `R$ ${item.item_pedido.valor.toFixed(2)}` : '-'}</td>
+                      <td className="px-3 py-2.5 text-sm text-right">{item.item_espelho?.preco_unitario != null ? `R$ ${item.item_espelho.preco_unitario.toFixed(2)}` : '-'}</td>
+                      <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[180px]">{item.diferencas?.join('; ') || '-'}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${
+                          item.status === 'ok' ? 'bg-emerald-100 text-emerald-700' :
+                          item.status === 'divergencia' ? 'bg-amber-100 text-amber-700' :
+                          item.status === 'faltando' ? 'bg-red-100 text-red-700' :
+                          item.status === 'extra' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          <span className="text-[10px] font-medium text-purple-500 bg-purple-50 px-1 py-0.5 rounded">IA</span>
+                          {item.status === 'ok' ? 'OK' : item.status === 'divergencia' ? 'Diverge' : item.status === 'faltando' ? 'Faltando' : '+ Extra'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
+              <p className="text-xs text-gray-500">
+                Resultado gerado por IA. Verifique se o espelho esta correto antes do lojista revisar.
+              </p>
+              <button
+                onClick={() => setShowValidacaoModal(false)}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+        )
+      })()}
     </FornecedorLayout>
   )
 }

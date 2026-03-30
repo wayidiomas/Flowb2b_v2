@@ -74,7 +74,28 @@ export async function GET(request: NextRequest) {
           }
         })
 
-      return NextResponse.json({ fornecedores: fornecedoresComCatalogo })
+      // Buscar quais fornecedores têm tabela de preço ativa para esta empresa
+      const fornecedorIdsList = fornecedoresComCatalogo.map(f => f.fornecedor_id)
+      let tabelasAtivasSet = new Set<number>()
+      if (fornecedorIdsList.length > 0) {
+        const { data: tabelasAtivas } = await supabase
+          .from('tabelas_preco')
+          .select('fornecedor_id')
+          .in('fornecedor_id', fornecedorIdsList)
+          .eq('empresa_id', user.empresaId)
+          .eq('status', 'ativa')
+
+        if (tabelasAtivas) {
+          tabelasAtivasSet = new Set(tabelasAtivas.map(t => t.fornecedor_id))
+        }
+      }
+
+      const fornecedoresComInfo = fornecedoresComCatalogo.map(f => ({
+        ...f,
+        tem_tabela_ativa: tabelasAtivasSet.has(f.fornecedor_id),
+      }))
+
+      return NextResponse.json({ fornecedores: fornecedoresComInfo })
     }
 
     // Com fornecedor_id: listar itens do catálogo com preço aplicável
@@ -135,6 +156,8 @@ export async function GET(request: NextRequest) {
       preco_aplicavel: item.preco_base,
       desconto_percentual: null as number | null,
       tem_preco_customizado: false,
+      preco_tabela: null as number | null,
+      desconto_tabela: null as number | null,
     }))
 
     if (itens && itens.length > 0) {
@@ -165,11 +188,48 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Buscar tabela de preço ativa para este fornecedor + empresa
+    const { data: tabelaAtiva } = await supabase
+      .from('tabelas_preco')
+      .select('id')
+      .eq('fornecedor_id', Number(fornecedorId))
+      .eq('empresa_id', user.empresaId)
+      .eq('status', 'ativa')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    let temTabelaAtiva = false
+    if (tabelaAtiva) {
+      temTabelaAtiva = true
+      const { data: itensTabela } = await supabase
+        .from('itens_tabela_preco')
+        .select('produto_id, preco_tabela, desconto_percentual')
+        .eq('tabela_preco_id', tabelaAtiva.id)
+
+      if (itensTabela && itensTabela.length > 0) {
+        const precosTabelaMap = new Map<number, { preco_tabela: number | null; desconto_percentual: number | null }>()
+        for (const it of itensTabela) {
+          if (it.produto_id) precosTabelaMap.set(it.produto_id, it)
+        }
+
+        itensComPreco = itensComPreco.map(item => {
+          const precoTabela = item.produto_id ? precosTabelaMap.get(item.produto_id) : null
+          return {
+            ...item,
+            preco_tabela: precoTabela?.preco_tabela || null,
+            desconto_tabela: precoTabela?.desconto_percentual || null,
+          }
+        })
+      }
+    }
+
     return NextResponse.json({
       itens: itensComPreco,
       total: count || 0,
       page,
       limit,
+      tem_tabela_ativa: temTabelaAtiva,
       fornecedor: {
         id: fornecedor.id,
         nome: fornecedor.nome_fantasia || fornecedor.nome,

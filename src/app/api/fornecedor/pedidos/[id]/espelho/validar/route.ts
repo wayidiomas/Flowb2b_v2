@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
-import { requirePermission } from '@/lib/permissions'
 import { validarEspelho } from '@/lib/espelho-validacao'
 
 export const maxDuration = 60
@@ -11,24 +10,31 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Auth
     const user = await getCurrentUser()
-    if (!user || !user.empresaId) {
+    if (!user || user.tipo !== 'fornecedor' || !user.cnpj) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
-    const permCheck = await requirePermission(user, 'pedidos')
-    if (!permCheck.allowed) return permCheck.response
-
-    const { id: pedidoId } = await params
+    const { id } = await params
     const supabase = createServerSupabaseClient()
 
-    // Validate pedido belongs to this empresa
+    // Validate fornecedor has access to this pedido
+    const { data: fornecedores } = await supabase
+      .from('fornecedores')
+      .select('id')
+      .eq('cnpj', user.cnpj)
+
+    if (!fornecedores || fornecedores.length === 0) {
+      return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
+    }
+
+    const fornecedorIds = fornecedores.map(f => f.id)
+
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
       .select('id')
-      .eq('id', pedidoId)
-      .eq('empresa_id', user.empresaId)
+      .eq('id', id)
+      .in('fornecedor_id', fornecedorIds)
       .eq('is_excluded', false)
       .single()
 
@@ -48,7 +54,7 @@ export async function POST(
 
     return NextResponse.json(result)
   } catch (error) {
-    console.error('Erro ao validar espelho:', error)
+    console.error('Erro ao validar espelho (fornecedor):', error)
     return NextResponse.json({ error: 'Erro interno ao validar espelho' }, { status: 500 })
   }
 }

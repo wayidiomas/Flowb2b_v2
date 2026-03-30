@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
-import { requirePermission } from '@/lib/permissions'
 import { validarEspelho } from '@/lib/espelho-validacao'
 
 export const maxDuration = 60
@@ -11,24 +10,41 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Auth
     const user = await getCurrentUser()
-    if (!user || !user.empresaId) {
-      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    if (!user || user.tipo !== 'representante' || !user.representanteUserId) {
+      return NextResponse.json({ error: 'Nao autenticado como representante' }, { status: 401 })
     }
 
-    const permCheck = await requirePermission(user, 'pedidos')
-    if (!permCheck.allowed) return permCheck.response
-
-    const { id: pedidoId } = await params
+    const { id } = await params
     const supabase = createServerSupabaseClient()
 
-    // Validate pedido belongs to this empresa
+    // Buscar representantes vinculados a este usuario
+    const { data: representantes } = await supabase
+      .from('representantes')
+      .select('id')
+      .eq('user_representante_id', user.representanteUserId)
+      .eq('ativo', true)
+
+    const representanteIds = representantes?.map(r => r.id) || []
+
+    // Buscar fornecedores vinculados
+    const { data: vinculos } = await supabase
+      .from('representante_fornecedores')
+      .select('fornecedor_id')
+      .in('representante_id', representanteIds)
+
+    const fornecedorIds = vinculos?.map(v => v.fornecedor_id) || []
+
+    if (fornecedorIds.length === 0) {
+      return NextResponse.json({ error: 'Sem fornecedores vinculados' }, { status: 403 })
+    }
+
+    // Validate representante has access to this pedido
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
       .select('id')
-      .eq('id', pedidoId)
-      .eq('empresa_id', user.empresaId)
+      .eq('id', id)
+      .in('fornecedor_id', fornecedorIds)
       .eq('is_excluded', false)
       .single()
 
@@ -48,7 +64,7 @@ export async function POST(
 
     return NextResponse.json(result)
   } catch (error) {
-    console.error('Erro ao validar espelho:', error)
+    console.error('Erro ao validar espelho (representante):', error)
     return NextResponse.json({ error: 'Erro interno ao validar espelho' }, { status: 500 })
   }
 }

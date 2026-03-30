@@ -57,6 +57,39 @@ function ChevronRightIcon() {
   )
 }
 
+function GridIcon() {
+  return (
+    <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+    </svg>
+  )
+}
+
+function ListIcon() {
+  return (
+    <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+    </svg>
+  )
+}
+
+function ImagePlaceholderIcon() {
+  return (
+    <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+    </svg>
+  )
+}
+
+function PriceTagBadge() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+    </svg>
+  )
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface FornecedorCatalogo {
@@ -65,6 +98,7 @@ interface FornecedorCatalogo {
   nome: string
   catalogo_id: number
   catalogo_nome: string
+  tem_tabela_ativa: boolean
 }
 
 interface ItemCatalogo {
@@ -78,6 +112,10 @@ interface ItemCatalogo {
   preco_aplicavel: number | null
   desconto_percentual: number | null
   ativo: boolean
+  imagem_url: string | null
+  preco_tabela: number | null
+  desconto_tabela: number | null
+  produto_id: number | null
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -108,6 +146,9 @@ export default function CatalogoPage() {
   const [search, setSearch] = useState('')
   const [marcaFilter, setMarcaFilter] = useState('')
   const [marcas, setMarcas] = useState<string[]>([])
+
+  // View mode
+  const [viewMode, setViewMode] = useState<'vitrine' | 'tabela'>('vitrine')
 
   // Debounce ref
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
@@ -264,7 +305,15 @@ export default function CatalogoPage() {
                 <p className="text-xs text-gray-500 truncate">{f.catalogo_nome}</p>
               </div>
             </div>
-            <div className="mt-3 flex items-center justify-end">
+            <div className="mt-3 flex items-center justify-between">
+              {f.tem_tabela_ativa ? (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                  <PriceTagBadge />
+                  Tabela ativa
+                </span>
+              ) : (
+                <span />
+              )}
               <span className="text-xs font-medium text-[#336FB6] group-hover:text-[#2660A5] flex items-center gap-1">
                 Ver catalogo
                 <ChevronRightIcon />
@@ -276,46 +325,192 @@ export default function CatalogoPage() {
     )
   }
 
+  // ─── Render: View Mode Toggle ─────────────────────────────────────────────
+
+  const renderViewToggle = () => (
+    <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-0.5">
+      <button
+        onClick={() => setViewMode('vitrine')}
+        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+          viewMode === 'vitrine' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+        }`}
+      >
+        <GridIcon />
+        Vitrine
+      </button>
+      <button
+        onClick={() => setViewMode('tabela')}
+        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+          viewMode === 'tabela' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+        }`}
+      >
+        <ListIcon />
+        Tabela
+      </button>
+    </div>
+  )
+
+  // ─── Render: Vitrine Grid ─────────────────────────────────────────────────
+
+  const renderVitrineGrid = () => {
+    if (loadingItens) {
+      return (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <Skeleton className="aspect-square w-full" />
+              <div className="p-3">
+                <Skeleton className="h-3 w-12 mb-1" />
+                <Skeleton className="h-4 w-full mb-1" />
+                <Skeleton className="h-3 w-16 mb-2" />
+                <Skeleton className="h-6 w-20" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    if (itens.length === 0) {
+      return (
+        <div className="py-16 text-center">
+          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+            <TagIcon />
+          </div>
+          <p className="text-sm font-medium text-gray-900">Nenhum produto encontrado</p>
+          <p className="text-xs text-gray-500 mt-1">
+            {search || marcaFilter
+              ? 'Tente ajustar os filtros de busca'
+              : 'Este catalogo ainda nao possui produtos'}
+          </p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
+        {itens.map((item) => (
+          <div key={item.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+            {/* Image */}
+            <div className="aspect-square bg-gray-50 flex items-center justify-center p-2">
+              {item.imagem_url ? (
+                <img src={item.imagem_url} alt={item.nome} className="w-full h-full object-contain" />
+              ) : (
+                <div className="text-gray-300 flex flex-col items-center">
+                  <ImagePlaceholderIcon />
+                  <span className="text-xs mt-1">Sem foto</span>
+                </div>
+              )}
+            </div>
+            {/* Info */}
+            <div className="p-3">
+              <p className="text-xs text-gray-400 font-mono">{item.codigo || '-'}</p>
+              <p className="text-sm font-medium text-gray-900 line-clamp-2 mt-0.5" title={item.nome}>{item.nome}</p>
+              {item.marca && <p className="text-xs text-gray-500 mt-0.5">{item.marca}</p>}
+              <div className="mt-2">
+                {item.preco_tabela ? (
+                  <div>
+                    <p className="text-lg font-bold text-[#336FB6]">{formatCurrency(item.preco_tabela)}</p>
+                    {item.desconto_tabela && item.desconto_tabela > 0 && (
+                      <p className="text-xs text-emerald-600">-{item.desconto_tabela.toFixed(1)}% desc.</p>
+                    )}
+                    <p className="text-xs text-gray-400 line-through">{formatCurrency(item.preco_base)}</p>
+                  </div>
+                ) : item.preco_aplicavel ? (
+                  <p className="text-lg font-bold text-gray-900">{formatCurrency(item.preco_aplicavel)}</p>
+                ) : (
+                  <p className="text-lg font-bold text-gray-900">{formatCurrency(item.preco_base)}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
+                <span>{item.unidade || 'UN'}</span>
+                {item.itens_por_caixa && <span>Cx c/ {item.itens_por_caixa}</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   // ─── Render: Items Table (Desktop) ────────────────────────────────────────
 
-  const renderItensTable = () => (
-    <div className="hidden md:block overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-t border-gray-100">
-            <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Codigo</th>
-            <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Produto</th>
-            <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Marca</th>
-            <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Unidade</th>
-            <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Cx.</th>
-            <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Preco</th>
-            <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Desconto</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {loadingItens ? (
-            <TableSkeleton columns={7} rows={8} />
-          ) : itens.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="px-4 py-12 text-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                    <TagIcon />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Nenhum produto encontrado</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {search || marcaFilter
-                        ? 'Tente ajustar os filtros de busca'
-                        : 'Este catalogo ainda nao possui produtos'}
-                    </p>
-                  </div>
-                </div>
-              </td>
+  const renderItensTable = () => {
+    if (loadingItens) {
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-t border-gray-100">
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50 w-10"></th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Codigo</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Produto</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Marca</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Unidade</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Cx.</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Preco</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Tabela</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Desconto</th>
+              </tr>
+            </thead>
+            <tbody>
+              <TableSkeleton columns={9} rows={8} />
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    if (itens.length === 0) {
+      return (
+        <div className="py-12 text-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+              <TagIcon />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-900">Nenhum produto encontrado</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {search || marcaFilter
+                  ? 'Tente ajustar os filtros de busca'
+                  : 'Este catalogo ainda nao possui produtos'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-t border-gray-100">
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50 w-10"></th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Codigo</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Produto</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Marca</th>
+              <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Unidade</th>
+              <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Cx.</th>
+              <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Preco</th>
+              <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Tabela</th>
+              <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Desconto</th>
             </tr>
-          ) : (
-            itens.map((item) => (
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {itens.map((item) => (
               <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                <td className="px-4 py-3">
+                  <div className="w-8 h-8 rounded bg-gray-50 flex items-center justify-center overflow-hidden">
+                    {item.imagem_url ? (
+                      <img src={item.imagem_url} alt="" className="w-full h-full object-contain" />
+                    ) : (
+                      <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+                      </svg>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-gray-600 font-mono text-xs">{item.codigo || '-'}</td>
                 <td className="px-4 py-3 text-gray-900">{item.nome}</td>
                 <td className="px-4 py-3 text-gray-600">{item.marca || '-'}</td>
@@ -325,25 +520,32 @@ export default function CatalogoPage() {
                   {formatCurrency(item.preco_aplicavel)}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {item.desconto_percentual && item.desconto_percentual > 0 ? (
+                  {item.preco_tabela ? (
+                    <span className="font-medium text-[#336FB6]">{formatCurrency(item.preco_tabela)}</span>
+                  ) : (
+                    <span className="text-gray-400">-</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {(item.desconto_tabela && item.desconto_tabela > 0) || (item.desconto_percentual && item.desconto_percentual > 0) ? (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                      -{item.desconto_percentual.toFixed(1)}%
+                      -{(item.desconto_tabela || item.desconto_percentual || 0).toFixed(1)}%
                     </span>
                   ) : (
                     <span className="text-gray-400">-</span>
                   )}
                 </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
 
-  // ─── Render: Items Cards (Mobile) ─────────────────────────────────────────
+  // ─── Render: Items Cards (Mobile - for tabela mode) ──────────────────────
 
-  const renderItensCards = () => (
+  const renderItensCardsMobile = () => (
     <div className="md:hidden space-y-3 p-4">
       {loadingItens ? (
         Array.from({ length: 5 }).map((_, i) => (
@@ -371,29 +573,52 @@ export default function CatalogoPage() {
       ) : (
         itens.map((item) => (
           <div key={item.id} className="bg-white rounded-lg border border-gray-100 p-4">
-            <div className="flex items-start justify-between gap-2 mb-1">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {item.codigo ? `${item.codigo} - ` : ''}{item.nome}
-                </p>
-                {item.marca && (
-                  <p className="text-xs text-gray-500">{item.marca}</p>
+            <div className="flex items-start gap-3">
+              {/* Thumbnail */}
+              <div className="w-12 h-12 rounded bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+                {item.imagem_url ? (
+                  <img src={item.imagem_url} alt="" className="w-full h-full object-contain" />
+                ) : (
+                  <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+                  </svg>
                 )}
               </div>
-              {item.desconto_percentual && item.desconto_percentual > 0 && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 shrink-0">
-                  -{item.desconto_percentual.toFixed(1)}%
-                </span>
-              )}
-            </div>
-            <div className="flex items-center justify-between mt-2">
-              <p className="text-xs text-gray-500">
-                {item.unidade || '-'}
-                {item.itens_por_caixa ? ` | Cx: ${item.itens_por_caixa} un` : ''}
-              </p>
-              <p className="text-sm font-semibold text-gray-900">
-                {formatCurrency(item.preco_aplicavel)}
-              </p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {item.codigo ? `${item.codigo} - ` : ''}{item.nome}
+                    </p>
+                    {item.marca && (
+                      <p className="text-xs text-gray-500">{item.marca}</p>
+                    )}
+                  </div>
+                  {((item.desconto_tabela && item.desconto_tabela > 0) || (item.desconto_percentual && item.desconto_percentual > 0)) && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 shrink-0">
+                      -{(item.desconto_tabela || item.desconto_percentual || 0).toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-gray-500">
+                    {item.unidade || '-'}
+                    {item.itens_por_caixa ? ` | Cx: ${item.itens_por_caixa} un` : ''}
+                  </p>
+                  <div className="text-right">
+                    {item.preco_tabela ? (
+                      <div>
+                        <p className="text-sm font-semibold text-[#336FB6]">{formatCurrency(item.preco_tabela)}</p>
+                        <p className="text-xs text-gray-400 line-through">{formatCurrency(item.preco_aplicavel)}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-900">
+                        {formatCurrency(item.preco_aplicavel)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         ))
@@ -466,6 +691,9 @@ export default function CatalogoPage() {
 
             <div className="flex-1" />
 
+            {/* View mode toggle */}
+            {renderViewToggle()}
+
             {/* Search */}
             <div className="relative w-full md:w-auto md:min-w-[260px]">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -505,8 +733,16 @@ export default function CatalogoPage() {
         renderFornecedores()
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          {renderItensTable()}
-          {renderItensCards()}
+          {viewMode === 'vitrine' ? (
+            renderVitrineGrid()
+          ) : (
+            <>
+              <div className="hidden md:block">
+                {renderItensTable()}
+              </div>
+              {renderItensCardsMobile()}
+            </>
+          )}
           {renderPagination()}
         </div>
       )}
