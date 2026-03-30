@@ -638,7 +638,7 @@ export default function PoliticaCompraPage() {
     <DashboardLayout>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-        <Link href="/" className="hover:text-[#336FB6]">
+        <Link href="/dashboard" className="hover:text-[#336FB6]">
           Dashboard
         </Link>
         <span>&gt;</span>

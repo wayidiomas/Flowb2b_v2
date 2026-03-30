@@ -287,7 +287,7 @@ export default function NovoColaboradorPage() {
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Acesso Negado</h2>
             <p className="text-gray-500 mb-4">Voce nao tem permissao para acessar esta pagina.</p>
             <Link
-              href="/"
+              href="/dashboard"
               className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
             >
               Voltar ao inicio

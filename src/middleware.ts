@@ -10,6 +10,7 @@ const COOKIE_NAME = 'flowb2b-auth-token'
 
 // Rotas publicas (nao precisam de autenticacao)
 const publicRoutes = [
+  '/',
   '/login',
   '/register',
   '/forgot-password',
@@ -23,6 +24,7 @@ const publicRoutes = [
   '/representante/registro',
   '/representante/convite',
   '/publico',
+  '/fornecedores',
 ]
 
 // Rotas de API publicas
@@ -53,7 +55,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Permitir rotas públicas
-  if (publicRoutes.some(route => pathname.startsWith(route))) {
+  if (publicRoutes.some(route => route === '/' ? pathname === '/' : pathname.startsWith(route))) {
     return NextResponse.next()
   }
 

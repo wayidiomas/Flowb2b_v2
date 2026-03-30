@@ -149,10 +149,10 @@ function CloseIcon({ className }: { className?: string }) {
 
 const bottomTabItems: TabItem[] = [
   {
-    href: '/',
+    href: '/dashboard',
     label: 'Dashboard',
     icon: DashboardIcon,
-    isActive: (pathname) => pathname === '/',
+    isActive: (pathname) => pathname === '/dashboard',
   },
   {
     href: '/compras/pedidos',

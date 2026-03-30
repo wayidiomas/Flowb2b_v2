@@ -393,7 +393,7 @@ function SyncStatusContent() {
                       Sincronizacao concluida com sucesso!
                     </p>
                     <Link
-                      href="/"
+                      href="/dashboard"
                       className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors"
                     >
                       Ir para o Dashboard
