@@ -1625,6 +1625,15 @@ export default function FornecedorCatalogoPage() {
   const [multiModalEmpresaId, setMultiModalEmpresaId] = useState<number | null>(null)
   const [showMultiModal, setShowMultiModal] = useState(false)
 
+  // Import Excel state
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importEmpresaId, setImportEmpresaId] = useState<number | null>(null)
+  const [importando, setImportando] = useState(false)
+  const [importPreview, setImportPreview] = useState<any>(null)
+  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'done'>('upload')
+  const [importResult, setImportResult] = useState<any>(null)
+
   // ------ Check if catalog exists ------
   const checkCatalogo = useCallback(async () => {
     setLoading(true)
@@ -1749,6 +1758,48 @@ export default function FornecedorCatalogoPage() {
     } finally {
       setSyncing(false)
     }
+  }
+
+  // ------ Import Excel handlers ------
+  const handleImportPreview = async () => {
+    if (!importFile || !importEmpresaId) return
+    setImportando(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', importFile)
+      formData.append('empresa_id', String(importEmpresaId))
+      formData.append('mode', 'preview')
+      const res = await fetch('/api/fornecedor/catalogo/importar', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setImportPreview(data)
+        setImportStep('preview')
+      } else {
+        alert(data.error || 'Erro ao processar planilha')
+      }
+    } catch { alert('Erro ao processar planilha') }
+    finally { setImportando(false) }
+  }
+
+  const handleImportConfirm = async () => {
+    if (!importFile || !importEmpresaId) return
+    setImportando(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', importFile)
+      formData.append('empresa_id', String(importEmpresaId))
+      formData.append('mode', 'confirm')
+      const res = await fetch('/api/fornecedor/catalogo/importar', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setImportResult(data)
+        setImportStep('done')
+        fetchItens() // refresh the catalog list
+      } else {
+        alert(data.error || 'Erro ao importar')
+      }
+    } catch { alert('Erro ao importar') }
+    finally { setImportando(false) }
   }
 
   // ------ Toggle ativo ------
@@ -1937,6 +1988,14 @@ export default function FornecedorCatalogoPage() {
               leftIcon={<SyncIcon className="w-4 h-4" />}
             >
               Sincronizar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null) }}
+              leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>}
+            >
+              Importar Excel
             </Button>
             <span className="px-3 py-1.5 bg-[#336FB6]/10 text-[#336FB6] text-sm font-semibold rounded-lg">
               {totalItens} produtos
@@ -2250,6 +2309,223 @@ export default function FornecedorCatalogoPage() {
               >
                 Limpar selecao
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Importar Excel */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !importando && setShowImportModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Importar Produtos via Planilha</h3>
+                <p className="text-sm text-gray-500">Adicione ou atualize produtos no catalogo em massa</p>
+              </div>
+              <button onClick={() => !importando && setShowImportModal(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {importStep === 'upload' && (
+                <div className="space-y-5">
+                  {/* Step 1: Download template */}
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">1. Baixe o modelo da planilha:</p>
+                    <a
+                      href="/api/fornecedor/catalogo/importar/template"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#336FB6]/10 text-[#336FB6] rounded-lg text-sm font-medium hover:bg-[#336FB6]/20 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+                      Baixar modelo Excel
+                    </a>
+                  </div>
+
+                  {/* Step 2: Field descriptions table */}
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">2. Preencha os campos:</p>
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Campo</th>
+                            <th className="px-3 py-2 text-center font-semibold text-gray-600">Obrigatorio</th>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Descricao</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">codigo_fornecedor</td><td className="px-3 py-1.5 text-center text-amber-600">Sim*</td><td className="px-3 py-1.5 text-gray-600">Seu codigo interno do produto</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">ean</td><td className="px-3 py-1.5 text-center text-amber-600">Sim*</td><td className="px-3 py-1.5 text-gray-600">Codigo de barras EAN (13 digitos)</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">nome</td><td className="px-3 py-1.5 text-center text-red-600">Sim</td><td className="px-3 py-1.5 text-gray-600">Nome/descricao do produto</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">marca</td><td className="px-3 py-1.5 text-center text-gray-400">Nao</td><td className="px-3 py-1.5 text-gray-600">Marca do produto</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">unidade</td><td className="px-3 py-1.5 text-center text-gray-400">Nao</td><td className="px-3 py-1.5 text-gray-600">UN, KG, LT (padrao: UN)</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">tipo_embalagem</td><td className="px-3 py-1.5 text-center text-gray-400">Nao</td><td className="px-3 py-1.5 text-gray-600">UN, CX, FD, PCT (caixa, fardo, pacote)</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">itens_por_caixa</td><td className="px-3 py-1.5 text-center text-gray-400">Nao</td><td className="px-3 py-1.5 text-gray-600">Qtd por embalagem (padrao: 1)</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">preco</td><td className="px-3 py-1.5 text-center text-red-600">Sim</td><td className="px-3 py-1.5 text-gray-600">Preco de venda (ex: 15.44)</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">imagem_url</td><td className="px-3 py-1.5 text-center text-gray-400">Nao</td><td className="px-3 py-1.5 text-gray-600">Link da foto do produto (https://...)</td></tr>
+                        </tbody>
+                      </table>
+                      <p className="px-3 py-2 text-xs text-gray-500 bg-gray-50 border-t border-gray-100">* Pelo menos um dos dois (codigo_fornecedor ou ean) deve estar preenchido</p>
+                    </div>
+                  </div>
+
+                  {/* Step 3: Select lojista */}
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">3. Selecione o lojista:</p>
+                    <select
+                      value={importEmpresaId || ''}
+                      onChange={(e) => setImportEmpresaId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                    >
+                      <option value="">Selecione...</option>
+                      {empresasVinculadas.map(emp => (
+                        <option key={emp.empresaId} value={emp.empresaId}>{emp.nomeFantasia || emp.razaoSocial}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Step 4: File upload */}
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">4. Envie a planilha preenchida:</p>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept=".xlsx,.csv,.xls"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                      />
+                      <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${importFile ? 'border-[#336FB6] bg-[#336FB6]/5' : 'border-gray-300 hover:border-[#336FB6]'}`}>
+                        {importFile ? (
+                          <div className="flex items-center justify-center gap-2 text-[#336FB6]">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className="text-sm font-medium">{importFile.name}</span>
+                          </div>
+                        ) : (
+                          <div className="text-gray-500">
+                            <svg className="w-8 h-8 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                            <p className="text-sm">Clique ou arraste o arquivo (.xlsx ou .csv)</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {importStep === 'preview' && importPreview && (
+                <div className="space-y-4">
+                  <div className="flex gap-3">
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">{importPreview.resumo.novos} novos</span>
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">{importPreview.resumo.atualizados} atualizados</span>
+                    {importPreview.resumo.erros > 0 && (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">{importPreview.resumo.erros} erros</span>
+                    )}
+                  </div>
+
+                  {importPreview.erros.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm font-medium text-red-800 mb-2">Erros encontrados:</p>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {importPreview.erros.map((err: any, i: number) => (
+                          <p key={i} className="text-xs text-red-600">Linha {err.linha}: {err.campo} - {err.mensagem}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {importPreview.novos.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-emerald-700 mb-1">Novos produtos ({importPreview.novos.length}):</p>
+                      <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 sticky top-0"><tr><th className="px-2 py-1 text-left">Codigo</th><th className="px-2 py-1 text-left">Nome</th><th className="px-2 py-1 text-right">Preco</th></tr></thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {importPreview.novos.map((r: any, i: number) => (
+                              <tr key={i}><td className="px-2 py-1 font-mono">{r.codigo || r.ean || '-'}</td><td className="px-2 py-1 truncate max-w-[200px]">{r.nome}</td><td className="px-2 py-1 text-right">R$ {r.preco?.toFixed(2)}</td></tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {importPreview.atualizados.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-blue-700 mb-1">Atualizados ({importPreview.atualizados.length}):</p>
+                      <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 sticky top-0"><tr><th className="px-2 py-1 text-left">Codigo</th><th className="px-2 py-1 text-left">Nome</th><th className="px-2 py-1 text-right">Preco</th></tr></thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {importPreview.atualizados.map((r: any, i: number) => (
+                              <tr key={i}><td className="px-2 py-1 font-mono">{r.codigo || r.ean || '-'}</td><td className="px-2 py-1 truncate max-w-[200px]">{r.nome}</td><td className="px-2 py-1 text-right">R$ {r.preco?.toFixed(2)}</td></tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {importStep === 'done' && importResult && (
+                <div className="text-center py-6">
+                  <svg className="w-16 h-16 text-emerald-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">Importacao concluida!</h4>
+                  <div className="flex justify-center gap-4 text-sm">
+                    <span className="text-emerald-600 font-medium">{importResult.resumo.novos} novos</span>
+                    <span className="text-blue-600 font-medium">{importResult.resumo.atualizados} atualizados</span>
+                    {importResult.resumo.erros > 0 && <span className="text-red-600 font-medium">{importResult.resumo.erros} erros</span>}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 shrink-0">
+              {importStep === 'upload' && (
+                <>
+                  <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50">Cancelar</button>
+                  <button
+                    onClick={handleImportPreview}
+                    disabled={!importFile || !importEmpresaId || importando}
+                    className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] rounded-xl hover:bg-[#2b5e9e] disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {importando ? (
+                      <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Processando...</>
+                    ) : 'Verificar planilha'}
+                  </button>
+                </>
+              )}
+              {importStep === 'preview' && (
+                <>
+                  <button onClick={() => setImportStep('upload')} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50">Voltar</button>
+                  <button
+                    onClick={handleImportConfirm}
+                    disabled={importando || (importPreview?.resumo.novos === 0 && importPreview?.resumo.atualizados === 0)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {importando ? (
+                      <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Importando...</>
+                    ) : `Confirmar importacao (${(importPreview?.resumo.novos || 0) + (importPreview?.resumo.atualizados || 0)} itens)`}
+                  </button>
+                </>
+              )}
+              {importStep === 'done' && (
+                <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] rounded-xl hover:bg-[#2b5e9e]">Fechar</button>
+              )}
             </div>
           </div>
         </div>
