@@ -595,15 +595,15 @@
 
 | Projeto | Commits |
 |---------|---------|
-| FlowB2B_Client | 27 |
+| FlowB2B_Client | 28 |
 | validacao_ean | 0 |
 | flowB2BAPI | 0 |
-| **Total** | **27** |
+| **Total** | **28** |
 
 | Tipo | Qtd |
 |------|-----|
 | feat | 11 |
-| fix | 14 |
+| fix | 15 |
 | refactor | 2 |
 
 ---
@@ -685,13 +685,14 @@
 
 | Projeto | Commits |
 |---------|---------|
-| FlowB2B_Client | 8 |
+| FlowB2B_Client | 9 |
 | validacao_ean | 0 |
 | flowB2BAPI | 0 |
-| **Total** | **8** |
+| **Total** | **9** |
 
 | Tipo | Qtd |
 |------|-----|
 | feat | 6 |
 | fix | 1 |
 | refactor | 1 |
+| docs | 1 |
