@@ -96,7 +96,11 @@ function LoginForm() {
     const result = await login(email, password)
 
     if (result.success) {
-      router.push(redirect)
+      if (result.role === 'superadmin') {
+        router.push('/admin/dashboard')
+      } else {
+        router.push(redirect)
+      }
     } else {
       setError(result.error || 'Erro ao fazer login')
     }

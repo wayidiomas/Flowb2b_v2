@@ -36,7 +36,7 @@ interface AuthContextType {
   loading: boolean
   switchEmpresa: (empresaId: number) => Promise<void>
   switchingEmpresa: boolean
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; role?: string }>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
 }
@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.success) {
         await refreshUser()
-        return { success: true }
+        return { success: true, role: data.user?.role as string | undefined }
       }
 
       return { success: false, error: data.error }
