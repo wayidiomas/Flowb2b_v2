@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
     const supabase = createServerSupabaseClient()
     const { searchParams } = new URL(request.url)
     const fornecedorId = searchParams.get('fornecedor_id')
+    const tabelaId = searchParams.get('tabela_id')
     const search = searchParams.get('search')
     const marca = searchParams.get('marca')
     const page = Math.max(1, Number(searchParams.get('page')) || 1)
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
       // Buscar quais fornecedores têm tabela de preço ativa para esta empresa
       const fornecedorIdsList = fornecedoresComCatalogo.map(f => f.fornecedor_id)
       let tabelasAtivasSet = new Set<number>()
+      const tabelasCountMap = new Map<number, number>()
       if (fornecedorIdsList.length > 0) {
         const { data: tabelasAtivas } = await supabase
           .from('tabelas_preco')
@@ -87,12 +89,16 @@ export async function GET(request: NextRequest) {
 
         if (tabelasAtivas) {
           tabelasAtivasSet = new Set(tabelasAtivas.map(t => t.fornecedor_id))
+          for (const t of tabelasAtivas) {
+            tabelasCountMap.set(t.fornecedor_id, (tabelasCountMap.get(t.fornecedor_id) || 0) + 1)
+          }
         }
       }
 
       const fornecedoresComInfo = fornecedoresComCatalogo.map(f => ({
         ...f,
         tem_tabela_ativa: tabelasAtivasSet.has(f.fornecedor_id),
+        tabelas_ativas_count: tabelasCountMap.get(f.fornecedor_id) || 0,
       }))
 
       return NextResponse.json({ fornecedores: fornecedoresComInfo })
@@ -191,24 +197,36 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Buscar tabela de preço ativa para este fornecedor + empresa
-    const { data: tabelaAtiva } = await supabase
+    // Buscar todas as tabelas de preço ativas para este fornecedor + empresa
+    const { data: tabelasAtivas } = await supabase
       .from('tabelas_preco')
-      .select('id')
+      .select('id, nome, created_at')
       .eq('fornecedor_id', Number(fornecedorId))
       .eq('empresa_id', user.empresaId)
       .eq('status', 'ativa')
       .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
 
-    let temTabelaAtiva = false
-    if (tabelaAtiva) {
-      temTabelaAtiva = true
+    const temTabelaAtiva = !!(tabelasAtivas && tabelasAtivas.length > 0)
+
+    // Determinar qual tabela usar
+    let tabelaSelecionada: { id: number; nome: string } | null = null
+
+    if (tabelaId === '0' || tabelaId === 'none') {
+      // User explicitly wants base price (no table)
+      tabelaSelecionada = null
+    } else if (tabelaId) {
+      // User selected a specific table
+      tabelaSelecionada = (tabelasAtivas || []).find(t => t.id === Number(tabelaId)) || null
+    } else {
+      // Default: most recent
+      tabelaSelecionada = (tabelasAtivas || [])[0] || null
+    }
+
+    if (tabelaSelecionada) {
       const { data: itensTabela } = await supabase
         .from('itens_tabela_preco')
         .select('produto_id, preco_tabela, desconto_percentual')
-        .eq('tabela_preco_id', tabelaAtiva.id)
+        .eq('tabela_preco_id', tabelaSelecionada.id)
 
       if (itensTabela && itensTabela.length > 0) {
         const precosTabelaMap = new Map<number, { preco_tabela: number | null; desconto_percentual: number | null }>()
@@ -233,6 +251,12 @@ export async function GET(request: NextRequest) {
       page,
       limit,
       tem_tabela_ativa: temTabelaAtiva,
+      tabelas_disponiveis: (tabelasAtivas || []).map(t => ({
+        id: t.id,
+        nome: t.nome,
+        created_at: t.created_at,
+      })),
+      tabela_selecionada_id: tabelaSelecionada?.id || null,
       fornecedor: {
         id: fornecedor.id,
         nome: fornecedor.nome_fantasia || fornecedor.nome,

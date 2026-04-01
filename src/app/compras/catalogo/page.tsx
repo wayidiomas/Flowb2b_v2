@@ -99,6 +99,13 @@ interface FornecedorCatalogo {
   catalogo_id: number
   catalogo_nome: string
   tem_tabela_ativa: boolean
+  tabelas_ativas_count: number
+}
+
+interface TabelaDisponivel {
+  id: number
+  nome: string
+  created_at: string
 }
 
 interface ItemCatalogo {
@@ -147,6 +154,10 @@ export default function CatalogoPage() {
   const [marcaFilter, setMarcaFilter] = useState('')
   const [marcas, setMarcas] = useState<string[]>([])
 
+  // Price table selection
+  const [tabelasDisponiveis, setTabelasDisponiveis] = useState<TabelaDisponivel[]>([])
+  const [tabelaSelecionadaId, setTabelaSelecionadaId] = useState<string>('') // '' = default (most recent), '0' = no table
+
   // View mode
   const [viewMode, setViewMode] = useState<'vitrine' | 'tabela'>('vitrine')
 
@@ -175,7 +186,7 @@ export default function CatalogoPage() {
 
   // ─── Fetch items ──────────────────────────────────────────────────────────
 
-  const fetchItens = useCallback(async (fornecedorId: number, pageNum: number, searchText: string, marcaText: string) => {
+  const fetchItens = useCallback(async (fornecedorId: number, pageNum: number, searchText: string, marcaText: string, tabelaId: string = '') => {
     setLoadingItens(true)
     try {
       const params = new URLSearchParams({
@@ -185,11 +196,17 @@ export default function CatalogoPage() {
       })
       if (searchText) params.set('search', searchText)
       if (marcaText) params.set('marca', marcaText)
+      if (tabelaId) params.set('tabela_id', tabelaId)
 
       const res = await fetch(`/api/compras/catalogo?${params}`)
       const data = await res.json()
       setItens(data.itens || [])
       setTotalItens(data.total || 0)
+
+      // Capture available tables from response
+      if (data.tabelas_disponiveis) {
+        setTabelasDisponiveis(data.tabelas_disponiveis)
+      }
 
       // Extract unique marcas for filter (from first load without marca filter)
       if (!marcaText && pageNum === 1 && !searchText) {
@@ -209,11 +226,11 @@ export default function CatalogoPage() {
     }
   }, [])
 
-  // Re-fetch when page/marca changes
+  // Re-fetch when page/marca/tabela changes
   useEffect(() => {
     if (!selectedFornecedor) return
-    fetchItens(selectedFornecedor.fornecedor_id, page, search, marcaFilter)
-  }, [selectedFornecedor, page, marcaFilter])
+    fetchItens(selectedFornecedor.fornecedor_id, page, search, marcaFilter, tabelaSelecionadaId)
+  }, [selectedFornecedor, page, marcaFilter, tabelaSelecionadaId])
 
   // Debounced search
   const handleSearchChange = (value: string) => {
@@ -222,7 +239,7 @@ export default function CatalogoPage() {
     debounceRef.current = setTimeout(() => {
       setPage(1)
       if (selectedFornecedor) {
-        fetchItens(selectedFornecedor.fornecedor_id, 1, value, marcaFilter)
+        fetchItens(selectedFornecedor.fornecedor_id, 1, value, marcaFilter, tabelaSelecionadaId)
       }
     }, 300)
   }
@@ -235,7 +252,9 @@ export default function CatalogoPage() {
     setMarcaFilter('')
     setPage(1)
     setItens([])
-    fetchItens(f.fornecedor_id, 1, '', '')
+    setTabelaSelecionadaId('')
+    setTabelasDisponiveis([])
+    fetchItens(f.fornecedor_id, 1, '', '', '')
   }
 
   const goBack = () => {
@@ -245,6 +264,8 @@ export default function CatalogoPage() {
     setMarcaFilter('')
     setPage(1)
     setMarcas([])
+    setTabelaSelecionadaId('')
+    setTabelasDisponiveis([])
   }
 
   // Pagination
@@ -415,6 +436,9 @@ export default function CatalogoPage() {
                       <p className="text-xs text-emerald-600">-{item.desconto_tabela.toFixed(1)}% desc.</p>
                     )}
                     <p className="text-xs text-gray-400 line-through">{formatCurrency(item.preco_base)}</p>
+                    {tabelaSelecionadaId !== '0' && (
+                      <p className="text-[10px] text-[#336FB6] mt-0.5">Preco da tabela</p>
+                    )}
                   </div>
                 ) : item.preco_aplicavel ? (
                   <p className="text-lg font-bold text-gray-900">{formatCurrency(item.preco_aplicavel)}</p>
@@ -688,6 +712,28 @@ export default function CatalogoPage() {
             <p className="text-sm font-medium text-gray-900 shrink-0">
               {selectedFornecedor.nome}
             </p>
+
+            {tabelasDisponiveis.length > 1 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Tabela de precos:</label>
+                <select
+                  value={tabelaSelecionadaId}
+                  onChange={(e) => {
+                    setTabelaSelecionadaId(e.target.value)
+                    setPage(1)
+                  }}
+                  className="px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] bg-white"
+                >
+                  <option value="">Mais recente</option>
+                  {tabelasDisponiveis.map(t => (
+                    <option key={t.id} value={String(t.id)}>
+                      {t.nome}
+                    </option>
+                  ))}
+                  <option value="0">Sem tabela (preco base)</option>
+                </select>
+              </div>
+            )}
 
             <div className="flex-1" />
 
