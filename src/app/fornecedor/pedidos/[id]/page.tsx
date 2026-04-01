@@ -208,6 +208,15 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     }>
   } | null>(null)
   const [showValidacaoModal, setShowValidacaoModal] = useState(false)
+  const [validacaoItens, setValidacaoItens] = useState<Array<{
+    status: string
+    item_pedido?: { codigo: string | null; descricao: string | null; quantidade: number; valor: number | null; gtin: string | null }
+    item_espelho?: { codigo: string | null; nome: string | null; quantidade: number | null; preco_unitario: number | null; total: number | null }
+    diferencas?: string[]
+    motivo_faltante?: string | null
+    previsao_retorno?: string | null
+  }>>([])
+  const [salvandoDisponibilidade, setSalvandoDisponibilidade] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -378,6 +387,11 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       const data = await res.json()
       if (res.ok && data.success) {
         setValidacaoResult(data)
+        setValidacaoItens(data.itens.map((item: any) => ({
+          ...item,
+          motivo_faltante: null,
+          previsao_retorno: null,
+        })))
         setShowValidacaoModal(true)
       } else {
         setToast({ type: 'error', msg: data.error || 'Erro ao validar espelho' })
@@ -388,6 +402,52 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       setTimeout(() => setToast(null), 4000)
     } finally {
       setValidandoEspelho(false)
+    }
+  }
+
+  // Handler para salvar disponibilidade dos itens faltando
+  const handleSalvarDisponibilidade = async () => {
+    setSalvandoDisponibilidade(true)
+    try {
+      // Build all items payload
+      const todosItens = validacaoItens.map(i => ({
+        status_ia: i.status,
+        status_manual: i.status,
+        item_pedido_codigo: i.item_pedido?.codigo,
+        item_pedido_descricao: i.item_pedido?.descricao,
+        item_pedido_quantidade: i.item_pedido?.quantidade,
+        item_pedido_valor: i.item_pedido?.valor,
+        item_pedido_gtin: i.item_pedido?.gtin,
+        item_espelho_codigo: i.item_espelho?.codigo,
+        item_espelho_nome: i.item_espelho?.nome,
+        item_espelho_quantidade: i.item_espelho?.quantidade,
+        item_espelho_preco: i.item_espelho?.preco_unitario,
+        diferencas: i.diferencas,
+        motivo_faltante: i.motivo_faltante || null,
+        previsao_retorno: i.previsao_retorno || null,
+      }))
+
+      const res = await fetch(`/api/fornecedor/pedidos/${id}/espelho/disponibilidade`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itens: todosItens,
+        }),
+      })
+      if (res.ok) {
+        setShowValidacaoModal(false)
+        setToast({ type: 'success', msg: 'Disponibilidade salva com sucesso!' })
+        setTimeout(() => setToast(null), 4000)
+      } else {
+        const d = await res.json()
+        setToast({ type: 'error', msg: d.error || 'Erro ao salvar disponibilidade' })
+        setTimeout(() => setToast(null), 4000)
+      }
+    } catch {
+      setToast({ type: 'error', msg: 'Erro ao salvar disponibilidade' })
+      setTimeout(() => setToast(null), 4000)
+    } finally {
+      setSalvandoDisponibilidade(false)
     }
   }
 
@@ -2303,10 +2363,10 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         </div>
       )}
 
-      {/* Modal Validacao IA do Espelho (somente leitura) */}
+      {/* Modal Validacao IA do Espelho (parcialmente editavel para itens faltando) */}
       {showValidacaoModal && validacaoResult && (() => {
         const resumo = validacaoResult.resumo
-        const sortedItens = [...validacaoResult.itens]
+        const sortedItens = [...validacaoItens]
           .map((item, originalIdx) => ({ ...item, _idx: originalIdx }))
           .sort((a, b) => {
             const order: Record<string, number> = { divergencia: 0, faltando: 1, extra: 2, ok: 3 }
@@ -2321,7 +2381,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Validacao do Espelho</h3>
-                  <p className="text-sm text-gray-500">Comparacao via IA -- verifique os itens antes do lojista revisar</p>
+                  <p className="text-sm text-gray-500">Comparacao via IA -- informe o motivo dos itens faltantes</p>
                 </div>
                 <div className="flex items-center gap-2">
                   {espelhoInfo?.espelho_url && (
@@ -2380,7 +2440,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               </div>
             </div>
 
-            {/* Results table (read-only) */}
+            {/* Results table */}
             <div className="flex-1 overflow-auto max-h-[60vh]">
               <table className="w-full">
                 <thead className="bg-gray-50 sticky top-0 z-10">
@@ -2404,12 +2464,50 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                       item.status === 'extra' ? 'bg-blue-50/60' : 'bg-white'
                     }>
                       <td className="px-3 py-2.5 text-sm">
-                        {item.item_pedido ? (
-                          <div>
-                            <p className="font-medium text-gray-900 line-clamp-2">{item.item_pedido.descricao}</p>
-                            <p className="text-xs text-gray-400">{item.item_pedido.gtin || item.item_pedido.codigo || '-'}</p>
-                          </div>
-                        ) : '-'}
+                        <div>
+                          {item.item_pedido ? (
+                            <div>
+                              <p className="font-medium text-gray-900 line-clamp-2">{item.item_pedido.descricao}</p>
+                              <p className="text-xs text-gray-400">{item.item_pedido.gtin || item.item_pedido.codigo || '-'}</p>
+                            </div>
+                          ) : '-'}
+                          {/* Motivo faltante controls for faltando items */}
+                          {(item.status === 'faltando') && (
+                            <div className="flex items-center gap-3 mt-2 pt-2 border-t border-red-100">
+                              <select
+                                value={item.motivo_faltante || ''}
+                                onChange={(e) => {
+                                  const newItens = [...validacaoItens]
+                                  newItens[item._idx].motivo_faltante = e.target.value || null
+                                  if (e.target.value !== 'ruptura') {
+                                    newItens[item._idx].previsao_retorno = null
+                                  }
+                                  setValidacaoItens(newItens)
+                                }}
+                                className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white"
+                              >
+                                <option value="">Selecione o motivo...</option>
+                                <option value="ruptura">Ruptura (sem estoque)</option>
+                                <option value="descontinuado">Descontinuado</option>
+                              </select>
+                              {item.motivo_faltante === 'ruptura' && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-gray-500">Previsao retorno:</span>
+                                  <input
+                                    type="date"
+                                    value={item.previsao_retorno || ''}
+                                    onChange={(e) => {
+                                      const newItens = [...validacaoItens]
+                                      newItens[item._idx].previsao_retorno = e.target.value || null
+                                      setValidacaoItens(newItens)
+                                    }}
+                                    className="text-xs border border-gray-300 rounded-lg px-2 py-1.5"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 text-sm">
                         {item.item_espelho ? (
@@ -2442,16 +2540,35 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between shrink-0">
               <p className="text-xs text-gray-500">
-                Resultado gerado por IA. Verifique se o espelho esta correto antes do lojista revisar.
+                Resultado gerado por IA. Informe o motivo dos itens faltantes para o lojista.
               </p>
-              <button
-                onClick={() => setShowValidacaoModal(false)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-sm font-medium"
-              >
-                Fechar
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowValidacaoModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  Fechar
+                </button>
+                {validacaoItens.some(i => i.status === 'faltando' && i.motivo_faltante) && (
+                  <button
+                    onClick={handleSalvarDisponibilidade}
+                    disabled={salvandoDisponibilidade}
+                    className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] rounded-xl hover:bg-[#2b5e9e] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {salvandoDisponibilidade ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Salvando...
+                      </>
+                    ) : 'Salvar disponibilidade'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

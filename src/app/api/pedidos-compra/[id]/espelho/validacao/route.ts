@@ -125,6 +125,8 @@ export async function POST(
         item_espelho_preco?: number
         diferencas?: string[]
         observacao_item?: string
+        motivo_faltante?: 'ruptura' | 'descontinuado' | null
+        previsao_retorno?: string | null
       }>
     }
 
@@ -237,6 +239,8 @@ export async function POST(
         item_espelho_preco: item.item_espelho_preco ?? null,
         diferencas: item.diferencas || null,
         observacao_item: item.observacao_item || null,
+        motivo_faltante: item.motivo_faltante || null,
+        previsao_retorno: item.previsao_retorno || null,
       }))
 
       const { data: newItens, error: insertError } = await supabase

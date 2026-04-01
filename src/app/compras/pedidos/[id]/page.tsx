@@ -37,6 +37,8 @@ interface ValidacaoItemResult {
   }
   diferencas?: string[]
   observacao_item?: string
+  motivo_faltante?: 'ruptura' | 'descontinuado' | null
+  previsao_retorno?: string | null
 }
 
 interface ValidacaoResult {
@@ -258,6 +260,8 @@ export default function VisualizarPedidoPage() {
             } : undefined,
             diferencas: item.diferencas as string[] | undefined,
             observacao_item: item.observacao_item as string | undefined,
+            motivo_faltante: (item.motivo_faltante as 'ruptura' | 'descontinuado') || null,
+            previsao_retorno: (item.previsao_retorno as string) || null,
           }))
           setValidacaoResult({
             resumo: {
@@ -353,6 +357,8 @@ export default function VisualizarPedidoPage() {
             item_espelho_preco: item.item_espelho?.preco_unitario,
             diferencas: item.diferencas,
             observacao_item: item.observacao_item,
+            motivo_faltante: item.motivo_faltante || null,
+            previsao_retorno: item.previsao_retorno || null,
           })),
         }),
       })
@@ -1835,6 +1841,24 @@ export default function VisualizarPedidoPage() {
                     {manualResumo.faltando} Faltando
                   </span>
                 )}
+                {(() => {
+                  const rupturas = validacaoItens.filter(i => (i.status_manual || i.status) === 'faltando' && i.motivo_faltante === 'ruptura').length
+                  const descontinuados = validacaoItens.filter(i => (i.status_manual || i.status) === 'faltando' && i.motivo_faltante === 'descontinuado').length
+                  return (
+                    <>
+                      {rupturas > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                          ⏳ {rupturas} Ruptura
+                        </span>
+                      )}
+                      {descontinuados > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+                          🚫 {descontinuados} Descontinuado
+                        </span>
+                      )}
+                    </>
+                  )
+                })()}
                 {manualResumo.extras > 0 && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
                     + {manualResumo.extras} Extras
@@ -1930,6 +1954,21 @@ export default function VisualizarPedidoPage() {
                               <span className="text-[10px] font-medium text-purple-500 bg-purple-50 px-1 py-0.5 rounded" title="Status sugerido pela IA">IA</span>
                             )}
                           </div>
+                          {/* Motivo da falta (set by fornecedor) */}
+                          {(effectiveStatus === 'faltando') && item.motivo_faltante && (
+                            <div className={`mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                              item.motivo_faltante === 'ruptura'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {item.motivo_faltante === 'ruptura' ? '⏳ Ruptura' : '🚫 Descontinuado'}
+                              {item.motivo_faltante === 'ruptura' && item.previsao_retorno && (
+                                <span className="text-amber-500 ml-1">
+                                  (retorno: {new Date(item.previsao_retorno).toLocaleDateString('pt-BR')})
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2.5">
                           <input
