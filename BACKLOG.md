@@ -315,21 +315,61 @@ A cliente quer uma visão **unificada estilo vitrine** onde o lojista vê o cat�
 
 **Fluxo principal (catálogo):**
 1. Fornecedor clica "Importar Excel"
-2. Modal abre com:
-   - Área de upload (drag & drop ou click)
-   - Link para baixar **modelo/template** da planilha
-   - Selector de lojista (para qual empresa importar)
-3. Fornecedor sobe o arquivo (.xlsx ou .csv)
-4. Backend parseia a planilha e retorna preview:
-   - Produtos encontrados, novos, atualizados
-   - Erros de validação (campos faltando, formato errado)
-5. Fornecedor confirma → backend insere/atualiza `catalogo_itens`
-6. Resultado: "150 importados, 5 atualizados, 2 erros"
+2. Modal abre em 2 etapas:
 
-**Template da planilha (colunas):**
-| codigo | codigo_barras (EAN) | nome | marca | unidade | itens_por_caixa | preco |
-|--------|-------------------|------|-------|---------|----------------|-------|
-| 4006089 | 7897348205258 | Golden Carne MB 1kg | GOLDEN | UN | 1 | 15.44 |
+   **Etapa 1 - Instruções + Download do modelo:**
+   ```
+   ┌─────────────────────────────────────────────────────────┐
+   │ Importar Produtos via Planilha                          │
+   │                                                         │
+   │ 1. Baixe o modelo da planilha:                          │
+   │    [📥 Baixar modelo Excel]                             │
+   │                                                         │
+   │ 2. Preencha os campos:                                  │
+   │                                                         │
+   │  Campo             │ Obrigatório │ Descrição            │
+   │  codigo_fornecedor  │ Sim*       │ Seu código interno   │
+   │  ean                │ Sim*       │ Código de barras     │
+   │                     │            │ (EAN 13 dígitos)     │
+   │  nome               │ Sim        │ Nome do produto      │
+   │  marca              │ Não        │ Marca                │
+   │  unidade            │ Não        │ UN, KG, LT (def: UN) │
+   │  tipo_embalagem     │ Não        │ UN, CX, FD, PCT      │
+   │  itens_por_caixa    │ Não        │ Qtd por embalagem    │
+   │  preco              │ Sim        │ Preço de venda       │
+   │  imagem_url         │ Não        │ Link da foto (https) │
+   │                                                         │
+   │  * Pelo menos um dos dois (codigo OU ean)               │
+   │                                                         │
+   │ 3. Selecione o lojista: [Duubpets 2 ▼]                 │
+   │ 4. Envie a planilha preenchida:                         │
+   │    [📎 Selecionar arquivo .xlsx ou .csv]                │
+   │                                                         │
+   │                              [Cancelar]  [Importar]     │
+   └─────────────────────────────────────────────────────────┘
+   ```
+
+   **Etapa 2 - Preview + Confirmação:**
+   - Mostra tabela com resultados do parse
+   - X novos, Y atualizados, Z erros (com detalhes)
+   - Fornecedor confirma → backend efetua insert/update
+
+3. Resultado: "150 importados, 5 atualizados, 2 erros"
+
+**Template da planilha (colunas baseadas nos dados reais do catalogo_itens + produtos):**
+| codigo_fornecedor* | ean* | nome** | marca | unidade | tipo_embalagem | itens_por_caixa | preco** | imagem_url |
+|-------------------|------|--------|-------|---------|---------------|----------------|---------|------------|
+| 6001 | 7898652420405 | PET WORKS RASQUEADEIRA N2 | PET WORKS | UN | UN | 1 | 10.45 | |
+| 4006089 | 7897348205258 | GOLDEN CARNE MB 1KG | GOLDEN | UN | FD | 4 | 15.44 | https://exemplo.com/foto.jpg |
+| 4035002 | 7897348205067 | GOLDEN COOKIE 350G | GOLDEN | UN | CX | 10 | 11.52 | |
+
+\* Pelo menos um dos dois obrigatório (usado para matching)
+\** Obrigatório
+
+- **unidade**: UN, KG, LT, etc. (unidade de venda). Default: UN
+- **tipo_embalagem**: UN, CX, FD, PCT (como é vendido - unidade, caixa, fardo, pacote). Default: UN
+- **itens_por_caixa**: quantas unidades por embalagem (ex: fardo com 4 = 4). Default: 1
+- **imagem_url**: link externo da foto do produto (opcional). Aceita qualquer URL https
 
 **Matching na importação:**
 - Se produto já existe no catálogo (por codigo OU EAN): **atualiza** preço/nome
@@ -346,6 +386,19 @@ A cliente quer uma visão **unificada estilo vitrine** onde o lojista vê o cat�
 **Dependências:** Lib `xlsx` (SheetJS) para parse de Excel, ou `papaparse` para CSV
 
 **Complexidade:** Média-alta (~4h)
+
+---
+
+### Task 13: Catálogo público + solicitar atendimento + preço da tabela selecionada no carrinho
+**Prioridade:** Alta
+**Status:** IMPLEMENTADO
+
+**O que foi feito:**
+1. API catálogo mostra TODOS os catálogos (vinculados + não vinculados) com flag `vinculado`
+2. Lojista vinculado: botão "Adicionar" no carrinho
+3. Lojista NÃO vinculado: botão "Solicitar atendimento" (cria solicitação)
+4. Carrinho atualiza preços quando troca tabela de preço no dropdown
+5. Nova tabela `solicitacoes_atendimento` para requests de vínculo
 
 ---
 

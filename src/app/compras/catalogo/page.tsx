@@ -95,13 +95,14 @@ function PriceTagBadge() {
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface FornecedorCatalogo {
-  fornecedor_id: number
+  fornecedor_id: number | null
   cnpj: string
   nome: string
   catalogo_id: number
   catalogo_nome: string
   tem_tabela_ativa: boolean
   tabelas_ativas_count: number
+  vinculado: boolean
 }
 
 interface TabelaDisponivel {
@@ -175,6 +176,10 @@ export default function CatalogoPage() {
   // View mode
   const [viewMode, setViewMode] = useState<'vitrine' | 'tabela'>('vitrine')
 
+  // Vinculado state
+  const [isVinculado, setIsVinculado] = useState(false)
+  const [solicitacaoEnviada, setSolicitacaoEnviada] = useState(false)
+
   // Cart state
   const [cart, setCart] = useState<CartItem[]>([])
   const [showCartModal, setShowCartModal] = useState(false)
@@ -208,14 +213,18 @@ export default function CatalogoPage() {
 
   // ─── Fetch items ──────────────────────────────────────────────────────────
 
-  const fetchItens = useCallback(async (fornecedorId: number, pageNum: number, searchText: string, marcaText: string, tabelaId: string = '') => {
+  const fetchItens = useCallback(async (fornecedorIdParam: number | null, catalogoIdParam: number, pageNum: number, searchText: string, marcaText: string, tabelaId: string = '') => {
     setLoadingItens(true)
     try {
       const params = new URLSearchParams({
-        fornecedor_id: String(fornecedorId),
         page: String(pageNum),
         limit: String(limit),
       })
+      if (fornecedorIdParam) {
+        params.set('fornecedor_id', String(fornecedorIdParam))
+      } else {
+        params.set('catalogo_id', String(catalogoIdParam))
+      }
       if (searchText) params.set('search', searchText)
       if (marcaText) params.set('marca', marcaText)
       if (tabelaId) params.set('tabela_id', tabelaId)
@@ -228,6 +237,20 @@ export default function CatalogoPage() {
       // Capture available tables from response
       if (data.tabelas_disponiveis) {
         setTabelasDisponiveis(data.tabelas_disponiveis)
+      }
+
+      // Update cart prices from new items data (e.g. when switching price tables)
+      if (cart.length > 0 && data.itens) {
+        setCart(prev => prev.map(cartItem => {
+          const catalogItem = (data.itens as ItemCatalogo[]).find((i: ItemCatalogo) => i.codigo === cartItem.codigo)
+          if (catalogItem) {
+            return {
+              ...cartItem,
+              preco: catalogItem.preco_tabela ?? catalogItem.preco_aplicavel ?? catalogItem.preco_base ?? cartItem.preco,
+            }
+          }
+          return cartItem
+        }))
       }
 
       // Extract unique marcas for filter (from first load without marca filter)
@@ -246,12 +269,12 @@ export default function CatalogoPage() {
     } finally {
       setLoadingItens(false)
     }
-  }, [])
+  }, [cart.length])
 
   // Re-fetch when page/marca/tabela changes
   useEffect(() => {
     if (!selectedFornecedor) return
-    fetchItens(selectedFornecedor.fornecedor_id, page, search, marcaFilter, tabelaSelecionadaId)
+    fetchItens(selectedFornecedor.fornecedor_id, selectedFornecedor.catalogo_id, page, search, marcaFilter, tabelaSelecionadaId)
   }, [selectedFornecedor, page, marcaFilter, tabelaSelecionadaId])
 
   // Debounced search
@@ -261,7 +284,7 @@ export default function CatalogoPage() {
     debounceRef.current = setTimeout(() => {
       setPage(1)
       if (selectedFornecedor) {
-        fetchItens(selectedFornecedor.fornecedor_id, 1, value, marcaFilter, tabelaSelecionadaId)
+        fetchItens(selectedFornecedor.fornecedor_id, selectedFornecedor.catalogo_id, 1, value, marcaFilter, tabelaSelecionadaId)
       }
     }, 300)
   }
@@ -270,6 +293,8 @@ export default function CatalogoPage() {
 
   const selectFornecedor = (f: FornecedorCatalogo) => {
     setSelectedFornecedor(f)
+    setIsVinculado(f.vinculado)
+    setSolicitacaoEnviada(false)
     setSearch('')
     setMarcaFilter('')
     setPage(1)
@@ -277,11 +302,13 @@ export default function CatalogoPage() {
     setTabelaSelecionadaId('')
     setTabelasDisponiveis([])
     setCart([])
-    fetchItens(f.fornecedor_id, 1, '', '', '')
+    fetchItens(f.fornecedor_id, f.catalogo_id, 1, '', '', '')
   }
 
   const goBack = () => {
     setSelectedFornecedor(null)
+    setIsVinculado(false)
+    setSolicitacaoEnviada(false)
     setItens([])
     setSearch('')
     setMarcaFilter('')
@@ -290,6 +317,28 @@ export default function CatalogoPage() {
     setTabelaSelecionadaId('')
     setTabelasDisponiveis([])
     setCart([])
+  }
+
+  // ─── Solicitar atendimento ─────────────────────────────────────────────────
+
+  const handleSolicitarAtendimento = async () => {
+    if (!selectedFornecedor) return
+    try {
+      const res = await fetch('/api/compras/catalogo/solicitar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          catalogo_fornecedor_id: selectedFornecedor.catalogo_id,
+          fornecedor_cnpj: selectedFornecedor.cnpj,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setSolicitacaoEnviada(true)
+      } else {
+        alert(data.error || 'Erro ao solicitar')
+      }
+    } catch { alert('Erro ao solicitar atendimento') }
   }
 
   // ─── Cart helpers ──────────────────────────────────────────────────────────
@@ -416,12 +465,12 @@ export default function CatalogoPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {fornecedores.map((f) => (
           <button
-            key={f.fornecedor_id}
+            key={`${f.catalogo_id}-${f.fornecedor_id ?? 'pub'}`}
             onClick={() => selectFornecedor(f)}
             className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 text-left hover:border-[#336FB6]/30 hover:shadow-md transition-all group"
           >
             <div className="flex items-center gap-3 mb-1">
-              <div className="w-10 h-10 rounded-lg bg-[#336FB6]/10 flex items-center justify-center text-[#336FB6] group-hover:bg-[#336FB6]/15 transition-colors">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${f.vinculado ? 'bg-[#336FB6]/10 text-[#336FB6] group-hover:bg-[#336FB6]/15' : 'bg-gray-100 text-gray-400 group-hover:bg-gray-150'}`}>
                 <BuildingIcon />
               </div>
               <div className="min-w-0 flex-1">
@@ -430,14 +479,19 @@ export default function CatalogoPage() {
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between">
-              {f.tem_tabela_ativa ? (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                  <PriceTagBadge />
-                  Tabela ativa
-                </span>
-              ) : (
-                <span />
-              )}
+              <div className="flex items-center gap-1.5">
+                {f.vinculado ? (
+                  <span className="px-2 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-700 rounded-full">Vinculado</span>
+                ) : (
+                  <span className="px-2 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded-full">Nao vinculado</span>
+                )}
+                {f.tem_tabela_ativa && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    <PriceTagBadge />
+                    Tabela ativa
+                  </span>
+                )}
+              </div>
               <span className="text-xs font-medium text-[#336FB6] group-hover:text-[#2660A5] flex items-center gap-1">
                 Ver catalogo
                 <ChevronRightIcon />
@@ -553,18 +607,20 @@ export default function CatalogoPage() {
                 <span>{item.unidade || 'UN'}</span>
                 {item.itens_por_caixa && <span>Cx c/ {item.itens_por_caixa}</span>}
               </div>
-              {/* Add to cart button */}
-              <button
-                onClick={(e) => { e.stopPropagation(); addToCart(item) }}
-                className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                {cart.find(c => c.codigo === (item.codigo || ''))
-                  ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade} no carrinho`
-                  : 'Adicionar'}
-              </button>
+              {/* Add to cart button - only for vinculados */}
+              {isVinculado && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); addToCart(item) }}
+                  className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  {cart.find(c => c.codigo === (item.codigo || ''))
+                    ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade} no carrinho`
+                    : 'Adicionar'}
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -677,17 +733,19 @@ export default function CatalogoPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-center">
-                  <button
-                    onClick={() => addToCart(item)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    {cart.find(c => c.codigo === (item.codigo || ''))
-                      ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade}`
-                      : 'Adicionar'}
-                  </button>
+                  {isVinculado && (
+                    <button
+                      onClick={() => addToCart(item)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                      {cart.find(c => c.codigo === (item.codigo || ''))
+                        ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade}`
+                        : 'Adicionar'}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -774,18 +832,20 @@ export default function CatalogoPage() {
                 </div>
               </div>
             </div>
-            {/* Add to cart button */}
-            <button
-              onClick={() => addToCart(item)}
-              className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              {cart.find(c => c.codigo === (item.codigo || ''))
-                ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade} no carrinho`
-                : 'Adicionar'}
-            </button>
+            {/* Add to cart button - only for vinculados */}
+            {isVinculado && (
+              <button
+                onClick={() => addToCart(item)}
+                className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                {cart.find(c => c.codigo === (item.codigo || ''))
+                  ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade} no carrinho`
+                  : 'Adicionar'}
+              </button>
+            )}
           </div>
         ))
       )}
@@ -916,8 +976,25 @@ export default function CatalogoPage() {
         </div>
       )}
 
+      {/* Banner for non-linked suppliers */}
+      {!isVinculado && selectedFornecedor && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between mb-4">
+          <div>
+            <p className="text-sm font-medium text-amber-800">Voce ainda nao compra deste fornecedor</p>
+            <p className="text-xs text-amber-600">Envie uma solicitacao para comecar a fazer pedidos</p>
+          </div>
+          <button
+            onClick={handleSolicitarAtendimento}
+            disabled={solicitacaoEnviada}
+            className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-xl hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ml-4"
+          >
+            {solicitacaoEnviada ? 'Solicitacao enviada' : 'Solicitar atendimento'}
+          </button>
+        </div>
+      )}
+
       {/* Content */}
-      <div className={cart.length > 0 && selectedFornecedor ? 'pb-20' : ''}>
+      <div className={cart.length > 0 && selectedFornecedor && isVinculado ? 'pb-20' : ''}>
         {!selectedFornecedor ? (
           renderFornecedores()
         ) : (
@@ -938,7 +1015,7 @@ export default function CatalogoPage() {
       </div>
 
       {/* Floating cart bar */}
-      {cart.length > 0 && selectedFornecedor && (
+      {cart.length > 0 && selectedFornecedor && isVinculado && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 px-4 py-3">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
