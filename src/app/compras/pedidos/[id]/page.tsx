@@ -235,7 +235,7 @@ export default function VisualizarPedidoPage() {
 
   // Carregar validacao salva do espelho (se existir)
   useEffect(() => {
-    if (!espelhoInfo?.espelho_url) return
+    if (!pedidoId) return
     fetch(`/api/pedidos-compra/${pedidoId}/espelho/validacao`)
       .then(res => res.json())
       .then(data => {
@@ -279,7 +279,7 @@ export default function VisualizarPedidoPage() {
         }
       })
       .catch(() => {})
-  }, [espelhoInfo, pedidoId])
+  }, [pedidoId])
 
   // Handler para aprovar/rejeitar espelho
   const handleEspelhoAction = async (action: 'aprovar' | 'rejeitar') => {
