@@ -62,15 +62,6 @@ export async function POST(
     // -------------------------------------------------------
     const fornecedorEmpresaIds = fornecedores.map(f => f.empresa_id)
 
-    // Nao pode duplicar para a mesma empresa de origem
-    const selfTargets = target_empresa_ids.filter(id => id === sourceTabela.empresa_id)
-    if (selfTargets.length > 0) {
-      return NextResponse.json(
-        { error: 'Nao e possivel duplicar para a mesma empresa de origem' },
-        { status: 400 }
-      )
-    }
-
     // Cada target deve ser uma empresa que o fornecedor atende
     const invalidTargets = target_empresa_ids.filter(id => !fornecedorEmpresaIds.includes(id))
     if (invalidTargets.length > 0) {
@@ -145,7 +136,9 @@ export async function POST(
         .insert({
           fornecedor_id: targetFornecedor.id,
           empresa_id: targetEmpresaId,
-          nome: `${sourceTabela.nome} - ${empresaNome}`,
+          nome: targetEmpresaId === sourceTabela.empresa_id
+            ? `${sourceTabela.nome} - Copia`
+            : `${sourceTabela.nome} - ${empresaNome}`,
           vigencia_inicio: sourceTabela.vigencia_inicio,
           vigencia_fim: sourceTabela.vigencia_fim,
           observacao: sourceTabela.observacao,

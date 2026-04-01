@@ -455,9 +455,33 @@ export default function FornecedorTabelasPrecoPage() {
               </button>
             </div>
 
-            <p className="text-sm text-gray-600 mb-3">Selecione as lojas para onde deseja copiar esta tabela:</p>
+            <p className="text-sm text-gray-600 mb-3">Selecione onde deseja copiar esta tabela:</p>
 
             <div className="space-y-2 max-h-60 overflow-y-auto">
+              {/* Mesma loja (clonar para editar preços) */}
+              {(() => {
+                const mesmaLoja = empresasVinculadas.find(e => e.empresaId === tabelaParaDuplicar.empresa_id)
+                if (!mesmaLoja) return null
+                return (
+                  <label className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={targetEmpresas.includes(mesmaLoja.empresaId)}
+                      onChange={(e) => {
+                        if (e.target.checked) setTargetEmpresas(prev => [...prev, mesmaLoja.empresaId])
+                        else setTargetEmpresas(prev => prev.filter(id => id !== mesmaLoja.empresaId))
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-[#336FB6]"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{mesmaLoja.nomeFantasia || mesmaLoja.razaoSocial}</p>
+                      <p className="text-xs text-amber-600">Mesma loja — cria uma copia para ajustar precos</p>
+                    </div>
+                  </label>
+                )
+              })()}
+
+              {/* Outras lojas */}
               {empresasVinculadas
                 .filter(e => e.empresaId !== tabelaParaDuplicar.empresa_id)
                 .map(emp => (
@@ -473,14 +497,11 @@ export default function FornecedorTabelasPrecoPage() {
                     />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{emp.nomeFantasia || emp.razaoSocial}</p>
+                      <p className="text-xs text-gray-500">Outra loja — mapeia produtos por EAN</p>
                     </div>
                   </label>
                 ))}
             </div>
-
-            {empresasVinculadas.filter(e => e.empresaId !== tabelaParaDuplicar.empresa_id).length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">Nenhuma outra loja vinculada.</p>
-            )}
 
             <div className="flex gap-3 mt-6">
               <button
