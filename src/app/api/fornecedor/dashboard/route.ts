@@ -22,6 +22,7 @@ export async function GET() {
         pedidosPendentes: 0,
         totalEmAberto: 0,
         sugestoesEnviadas: 0,
+        solicitacoesPendentes: 0,
         pedidosRecentes: [],
         empresasVinculadas: [],
       })
@@ -52,6 +53,14 @@ export async function GET() {
       .from('sugestoes_fornecedor')
       .select('id', { count: 'exact', head: true })
       .eq('fornecedor_user_id', user.fornecedorUserId)
+
+    // Count pending solicitations for this fornecedor's CNPJ
+    const cnpjLimpo = user.cnpj.replace(/\D/g, '')
+    const { count: solicitacoesPendentes } = await supabase
+      .from('solicitacoes_atendimento')
+      .select('id', { count: 'exact', head: true })
+      .eq('fornecedor_cnpj', cnpjLimpo)
+      .eq('status', 'pendente')
 
     // Buscar nomes das empresas
     const { data: empresas } = await supabase
@@ -93,6 +102,7 @@ export async function GET() {
       pedidosPendentes,
       totalEmAberto,
       sugestoesEnviadas: sugestoesEnviadas || 0,
+      solicitacoesPendentes: solicitacoesPendentes || 0,
       pedidosRecentes: pedidosComEmpresa,
       empresasVinculadas,
     })
