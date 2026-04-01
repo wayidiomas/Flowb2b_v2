@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { Skeleton, TableSkeleton } from '@/components/ui'
@@ -129,6 +129,7 @@ interface ItemCatalogo {
 }
 
 interface CartItem {
+  catalogo_item_id: number
   produto_id: number | null
   codigo: string
   nome: string
@@ -142,9 +143,10 @@ interface CartItem {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const formatCurrency = (value: number | null) => {
   if (value === null || value === undefined) return '-'
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+  return currencyFormatter.format(value)
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -240,17 +242,20 @@ export default function CatalogoPage() {
       }
 
       // Update cart prices from new items data (e.g. when switching price tables)
-      if (cart.length > 0 && data.itens) {
-        setCart(prev => prev.map(cartItem => {
-          const catalogItem = (data.itens as ItemCatalogo[]).find((i: ItemCatalogo) => i.codigo === cartItem.codigo)
-          if (catalogItem) {
-            return {
-              ...cartItem,
-              preco: catalogItem.preco_tabela ?? catalogItem.preco_aplicavel ?? catalogItem.preco_base ?? cartItem.preco,
+      if (data.itens) {
+        setCart(prev => {
+          if (prev.length === 0) return prev
+          return prev.map(cartItem => {
+            const catalogItem = (data.itens as ItemCatalogo[]).find((i: ItemCatalogo) => i.id === cartItem.catalogo_item_id)
+            if (catalogItem) {
+              return {
+                ...cartItem,
+                preco: catalogItem.preco_tabela ?? catalogItem.preco_aplicavel ?? catalogItem.preco_base ?? cartItem.preco,
+              }
             }
-          }
-          return cartItem
-        }))
+            return cartItem
+          })
+        })
       }
 
       // Extract unique marcas for filter (from first load without marca filter)
@@ -269,7 +274,7 @@ export default function CatalogoPage() {
     } finally {
       setLoadingItens(false)
     }
-  }, [cart.length])
+  }, [])
 
   // Re-fetch when page/marca/tabela changes
   useEffect(() => {
@@ -302,7 +307,6 @@ export default function CatalogoPage() {
     setTabelaSelecionadaId('')
     setTabelasDisponiveis([])
     setCart([])
-    fetchItens(f.fornecedor_id, f.catalogo_id, 1, '', '', '')
   }
 
   const goBack = () => {
@@ -345,11 +349,12 @@ export default function CatalogoPage() {
 
   const addToCart = (item: ItemCatalogo) => {
     setCart(prev => {
-      const existing = prev.find(c => c.codigo === (item.codigo || ''))
+      const existing = prev.find(c => c.catalogo_item_id === item.id)
       if (existing) {
-        return prev.map(c => c.codigo === (item.codigo || '') ? { ...c, quantidade: c.quantidade + 1 } : c)
+        return prev.map(c => c.catalogo_item_id === item.id ? { ...c, quantidade: c.quantidade + 1 } : c)
       }
       return [...prev, {
+        catalogo_item_id: item.id,
         produto_id: item.produto_id || null,
         codigo: item.codigo || '',
         nome: item.nome,
@@ -363,23 +368,28 @@ export default function CatalogoPage() {
     })
   }
 
-  const updateCartQty = (codigo: string, qty: number) => {
+  const updateCartQty = (catalogoItemId: number, qty: number) => {
     if (qty <= 0) {
-      setCart(prev => prev.filter(c => c.codigo !== codigo))
+      setCart(prev => prev.filter(c => c.catalogo_item_id !== catalogoItemId))
     } else {
-      setCart(prev => prev.map(c => c.codigo === codigo ? { ...c, quantidade: qty } : c))
+      setCart(prev => prev.map(c => c.catalogo_item_id === catalogoItemId ? { ...c, quantidade: qty } : c))
     }
   }
 
-  const removeFromCart = (codigo: string) => {
-    setCart(prev => prev.filter(c => c.codigo !== codigo))
+  const removeFromCart = (catalogoItemId: number) => {
+    setCart(prev => prev.filter(c => c.catalogo_item_id !== catalogoItemId))
   }
 
-  const cartTotal = cart.reduce((sum, item) => sum + item.quantidade * item.preco, 0)
-  const cartItemCount = cart.reduce((sum, item) => sum + item.quantidade, 0)
+  const cartMap = useMemo(() => new Map(cart.map(c => [c.catalogo_item_id, c])), [cart])
+  const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.quantidade * item.preco, 0), [cart])
+  const cartItemCount = useMemo(() => cart.reduce((sum, item) => sum + item.quantidade, 0), [cart])
 
   const handleCriarPedido = async () => {
     if (!selectedFornecedor || cart.length === 0) return
+    if (!selectedFornecedor.fornecedor_id) {
+      alert('Fornecedor nao vinculado. Solicite atendimento primeiro.')
+      return
+    }
     setCriandoPedido(true)
     try {
       const res = await fetch('/api/pedidos-compra/catalogo', {
@@ -407,9 +417,8 @@ export default function CatalogoPage() {
         setCart([])
         setCheckoutObs('')
         setCheckoutDataPrevista('')
-        if (confirm(`Pedido #${data.numero} criado com sucesso!${data.bling_sync ? ' (sincronizado com Bling)' : ''}\n\nDeseja ver o pedido?`)) {
-          window.location.href = `/compras/pedidos/${data.pedido_id}`
-        }
+        // Navigate to the created order
+        window.location.href = `/compras/pedidos/${data.pedido_id}`
       } else {
         alert(data.error || 'Erro ao criar pedido')
       }
@@ -616,8 +625,8 @@ export default function CatalogoPage() {
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                   </svg>
-                  {cart.find(c => c.codigo === (item.codigo || ''))
-                    ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade} no carrinho`
+                  {cartMap.get(item.id)
+                    ? `${cartMap.get(item.id)!.quantidade} no carrinho`
                     : 'Adicionar'}
                 </button>
               )}
@@ -741,8 +750,8 @@ export default function CatalogoPage() {
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                       </svg>
-                      {cart.find(c => c.codigo === (item.codigo || ''))
-                        ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade}`
+                      {cartMap.get(item.id)
+                        ? `${cartMap.get(item.id)!.quantidade}`
                         : 'Adicionar'}
                     </button>
                   )}
@@ -841,8 +850,8 @@ export default function CatalogoPage() {
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
-                {cart.find(c => c.codigo === (item.codigo || ''))
-                  ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade} no carrinho`
+                {cartMap.get(item.id)
+                  ? `${cartMap.get(item.id)!.quantidade} no carrinho`
                   : 'Adicionar'}
               </button>
             )}
@@ -1057,7 +1066,7 @@ export default function CatalogoPage() {
           ) : (
             <div className="space-y-3">
               {cart.map(item => (
-                <div key={item.codigo} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <div key={item.catalogo_item_id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                   {/* Thumbnail */}
                   <div className="w-12 h-12 bg-white rounded-lg border flex items-center justify-center shrink-0">
                     {item.imagem_url ? (
@@ -1073,14 +1082,14 @@ export default function CatalogoPage() {
                   </div>
                   {/* Qty controls */}
                   <div className="flex items-center gap-2">
-                    <button onClick={() => updateCartQty(item.codigo, item.quantidade - 1)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">-</button>
+                    <button onClick={() => updateCartQty(item.catalogo_item_id, item.quantidade - 1)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">-</button>
                     <span className="text-sm font-semibold w-8 text-center">{item.quantidade}</span>
-                    <button onClick={() => updateCartQty(item.codigo, item.quantidade + 1)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">+</button>
+                    <button onClick={() => updateCartQty(item.catalogo_item_id, item.quantidade + 1)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">+</button>
                   </div>
                   {/* Subtotal */}
                   <p className="text-sm font-bold text-gray-900 w-24 text-right">{formatCurrency(item.quantidade * item.preco)}</p>
                   {/* Remove */}
-                  <button onClick={() => removeFromCart(item.codigo)} className="p-1 text-red-400 hover:text-red-600">
+                  <button onClick={() => removeFromCart(item.catalogo_item_id)} className="p-1 text-red-400 hover:text-red-600">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -1122,7 +1131,7 @@ export default function CatalogoPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {cart.map(item => (
-                  <tr key={item.codigo}>
+                  <tr key={item.catalogo_item_id}>
                     <td className="px-3 py-2">
                       <p className="font-medium text-gray-900">{item.nome}</p>
                       <p className="text-xs text-gray-400">{item.codigo}</p>
