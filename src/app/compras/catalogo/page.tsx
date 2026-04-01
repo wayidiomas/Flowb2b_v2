@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { Skeleton, TableSkeleton } from '@/components/ui'
+import { Button } from '@/components/ui/Button'
+import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from '@/components/ui/Modal'
 import { useAuth } from '@/contexts/AuthContext'
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
@@ -125,6 +127,18 @@ interface ItemCatalogo {
   produto_id: number | null
 }
 
+interface CartItem {
+  produto_id: number | null
+  codigo: string
+  nome: string
+  marca: string | null
+  unidade: string
+  itens_por_caixa: number | null
+  preco: number
+  quantidade: number
+  imagem_url: string | null
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const formatCurrency = (value: number | null) => {
@@ -160,6 +174,14 @@ export default function CatalogoPage() {
 
   // View mode
   const [viewMode, setViewMode] = useState<'vitrine' | 'tabela'>('vitrine')
+
+  // Cart state
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [showCartModal, setShowCartModal] = useState(false)
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false)
+  const [criandoPedido, setCriandoPedido] = useState(false)
+  const [checkoutObs, setCheckoutObs] = useState('')
+  const [checkoutDataPrevista, setCheckoutDataPrevista] = useState('')
 
   // Debounce ref
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
@@ -254,6 +276,7 @@ export default function CatalogoPage() {
     setItens([])
     setTabelaSelecionadaId('')
     setTabelasDisponiveis([])
+    setCart([])
     fetchItens(f.fornecedor_id, 1, '', '', '')
   }
 
@@ -266,6 +289,86 @@ export default function CatalogoPage() {
     setMarcas([])
     setTabelaSelecionadaId('')
     setTabelasDisponiveis([])
+    setCart([])
+  }
+
+  // ─── Cart helpers ──────────────────────────────────────────────────────────
+
+  const addToCart = (item: ItemCatalogo) => {
+    setCart(prev => {
+      const existing = prev.find(c => c.codigo === (item.codigo || ''))
+      if (existing) {
+        return prev.map(c => c.codigo === (item.codigo || '') ? { ...c, quantidade: c.quantidade + 1 } : c)
+      }
+      return [...prev, {
+        produto_id: item.produto_id || null,
+        codigo: item.codigo || '',
+        nome: item.nome,
+        marca: item.marca,
+        unidade: item.unidade || 'UN',
+        itens_por_caixa: item.itens_por_caixa,
+        preco: item.preco_tabela ?? item.preco_aplicavel ?? item.preco_base ?? 0,
+        quantidade: 1,
+        imagem_url: item.imagem_url,
+      }]
+    })
+  }
+
+  const updateCartQty = (codigo: string, qty: number) => {
+    if (qty <= 0) {
+      setCart(prev => prev.filter(c => c.codigo !== codigo))
+    } else {
+      setCart(prev => prev.map(c => c.codigo === codigo ? { ...c, quantidade: qty } : c))
+    }
+  }
+
+  const removeFromCart = (codigo: string) => {
+    setCart(prev => prev.filter(c => c.codigo !== codigo))
+  }
+
+  const cartTotal = cart.reduce((sum, item) => sum + item.quantidade * item.preco, 0)
+  const cartItemCount = cart.reduce((sum, item) => sum + item.quantidade, 0)
+
+  const handleCriarPedido = async () => {
+    if (!selectedFornecedor || cart.length === 0) return
+    setCriandoPedido(true)
+    try {
+      const res = await fetch('/api/pedidos-compra/catalogo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fornecedor_id: selectedFornecedor.fornecedor_id,
+          empresa_id: empresa?.id,
+          itens: cart.map(item => ({
+            produto_id: item.produto_id,
+            codigo: item.codigo,
+            descricao: item.nome,
+            unidade: item.unidade,
+            quantidade: item.quantidade,
+            valor: item.preco,
+            itens_por_caixa: item.itens_por_caixa,
+          })),
+          observacoes: checkoutObs || undefined,
+          data_prevista: checkoutDataPrevista || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setShowCheckoutModal(false)
+        setCart([])
+        setCheckoutObs('')
+        setCheckoutDataPrevista('')
+        if (confirm(`Pedido #${data.numero} criado com sucesso!${data.bling_sync ? ' (sincronizado com Bling)' : ''}\n\nDeseja ver o pedido?`)) {
+          window.location.href = `/compras/pedidos/${data.pedido_id}`
+        }
+      } else {
+        alert(data.error || 'Erro ao criar pedido')
+      }
+    } catch {
+      alert('Erro ao criar pedido')
+    } finally {
+      setCriandoPedido(false)
+    }
   }
 
   // Pagination
@@ -450,6 +553,18 @@ export default function CatalogoPage() {
                 <span>{item.unidade || 'UN'}</span>
                 {item.itens_por_caixa && <span>Cx c/ {item.itens_por_caixa}</span>}
               </div>
+              {/* Add to cart button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); addToCart(item) }}
+                className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                {cart.find(c => c.codigo === (item.codigo || ''))
+                  ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade} no carrinho`
+                  : 'Adicionar'}
+              </button>
             </div>
           </div>
         ))}
@@ -475,10 +590,11 @@ export default function CatalogoPage() {
                 <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Preco</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Tabela</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Desconto</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50 w-28"></th>
               </tr>
             </thead>
             <tbody>
-              <TableSkeleton columns={9} rows={8} />
+              <TableSkeleton columns={10} rows={8} />
             </tbody>
           </table>
         </div>
@@ -519,6 +635,7 @@ export default function CatalogoPage() {
               <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Preco</th>
               <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Tabela</th>
               <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50">Desconto</th>
+              <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase bg-gray-50/50 w-28"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -558,6 +675,19 @@ export default function CatalogoPage() {
                   ) : (
                     <span className="text-gray-400">-</span>
                   )}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <button
+                    onClick={() => addToCart(item)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    {cart.find(c => c.codigo === (item.codigo || ''))
+                      ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade}`
+                      : 'Adicionar'}
+                  </button>
                 </td>
               </tr>
             ))}
@@ -644,6 +774,18 @@ export default function CatalogoPage() {
                 </div>
               </div>
             </div>
+            {/* Add to cart button */}
+            <button
+              onClick={() => addToCart(item)}
+              className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              {cart.find(c => c.codigo === (item.codigo || ''))
+                ? `${cart.find(c => c.codigo === (item.codigo || ''))!.quantidade} no carrinho`
+                : 'Adicionar'}
+            </button>
           </div>
         ))
       )}
@@ -775,23 +917,173 @@ export default function CatalogoPage() {
       )}
 
       {/* Content */}
-      {!selectedFornecedor ? (
-        renderFornecedores()
-      ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          {viewMode === 'vitrine' ? (
-            renderVitrineGrid()
-          ) : (
-            <>
-              <div className="hidden md:block">
-                {renderItensTable()}
+      <div className={cart.length > 0 && selectedFornecedor ? 'pb-20' : ''}>
+        {!selectedFornecedor ? (
+          renderFornecedores()
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+            {viewMode === 'vitrine' ? (
+              renderVitrineGrid()
+            ) : (
+              <>
+                <div className="hidden md:block">
+                  {renderItensTable()}
+                </div>
+                {renderItensCardsMobile()}
+              </>
+            )}
+            {renderPagination()}
+          </div>
+        )}
+      </div>
+
+      {/* Floating cart bar */}
+      {cart.length > 0 && selectedFornecedor && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[#336FB6] text-white rounded-full flex items-center justify-center font-bold text-sm">
+                {cartItemCount}
               </div>
-              {renderItensCardsMobile()}
-            </>
-          )}
-          {renderPagination()}
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{cart.length} produto(s) no carrinho</p>
+                <p className="text-sm text-[#336FB6] font-bold">{formatCurrency(cartTotal)}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowCartModal(true)}
+                className="px-4 py-2 text-sm font-medium text-[#336FB6] border border-[#336FB6] rounded-xl hover:bg-[#336FB6]/5"
+              >
+                Ver carrinho
+              </button>
+              <button
+                onClick={() => setShowCheckoutModal(true)}
+                className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] rounded-xl hover:bg-[#2b5e9e]"
+              >
+                Finalizar pedido
+              </button>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Cart modal */}
+      <Modal isOpen={showCartModal} onClose={() => setShowCartModal(false)} size="lg">
+        <ModalHeader onClose={() => setShowCartModal(false)}>
+          <ModalTitle>Carrinho ({cart.length} itens)</ModalTitle>
+          <ModalDescription>{selectedFornecedor?.nome || ''}</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          {cart.length === 0 ? (
+            <p className="text-center text-gray-500 py-8">Carrinho vazio</p>
+          ) : (
+            <div className="space-y-3">
+              {cart.map(item => (
+                <div key={item.codigo} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                  {/* Thumbnail */}
+                  <div className="w-12 h-12 bg-white rounded-lg border flex items-center justify-center shrink-0">
+                    {item.imagem_url ? (
+                      <img src={item.imagem_url} alt="" className="w-full h-full object-contain rounded-lg" />
+                    ) : (
+                      <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>
+                    )}
+                  </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{item.nome}</p>
+                    <p className="text-xs text-gray-500">{item.codigo} · {formatCurrency(item.preco)}/{item.unidade}</p>
+                  </div>
+                  {/* Qty controls */}
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => updateCartQty(item.codigo, item.quantidade - 1)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">-</button>
+                    <span className="text-sm font-semibold w-8 text-center">{item.quantidade}</span>
+                    <button onClick={() => updateCartQty(item.codigo, item.quantidade + 1)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">+</button>
+                  </div>
+                  {/* Subtotal */}
+                  <p className="text-sm font-bold text-gray-900 w-24 text-right">{formatCurrency(item.quantidade * item.preco)}</p>
+                  {/* Remove */}
+                  <button onClick={() => removeFromCart(item.codigo)} className="p-1 text-red-400 hover:text-red-600">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <div className="flex items-center justify-between w-full">
+            <div>
+              <p className="text-lg font-bold text-gray-900">{formatCurrency(cartTotal)}</p>
+              <p className="text-xs text-gray-500">{cartItemCount} itens</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowCartModal(false)}>Continuar comprando</Button>
+              <Button variant="primary" onClick={() => { setShowCartModal(false); setShowCheckoutModal(true) }} disabled={cart.length === 0}>Finalizar pedido</Button>
+            </div>
+          </div>
+        </ModalFooter>
+      </Modal>
+
+      {/* Checkout modal */}
+      <Modal isOpen={showCheckoutModal} onClose={() => !criandoPedido && setShowCheckoutModal(false)} size="xl">
+        <ModalHeader onClose={() => !criandoPedido && setShowCheckoutModal(false)}>
+          <ModalTitle>Finalizar Pedido</ModalTitle>
+          <ModalDescription>{selectedFornecedor?.nome || ''} · {cart.length} itens · {formatCurrency(cartTotal)}</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          {/* Items table */}
+          <div className="overflow-x-auto border border-gray-200 rounded-lg mb-4">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Produto</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600">Qtd</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Preco</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {cart.map(item => (
+                  <tr key={item.codigo}>
+                    <td className="px-3 py-2">
+                      <p className="font-medium text-gray-900">{item.nome}</p>
+                      <p className="text-xs text-gray-400">{item.codigo}</p>
+                    </td>
+                    <td className="px-3 py-2 text-center">{item.quantidade} {item.unidade}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(item.preco)}</td>
+                    <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.quantidade * item.preco)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50">
+                <tr>
+                  <td colSpan={3} className="px-3 py-2 text-right font-semibold text-gray-700">Total:</td>
+                  <td className="px-3 py-2 text-right font-bold text-[#336FB6] text-lg">{formatCurrency(cartTotal)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Extra fields */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Previsao de entrega</label>
+              <input type="date" value={checkoutDataPrevista} onChange={(e) => setCheckoutDataPrevista(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Observacoes</label>
+              <textarea value={checkoutObs} onChange={(e) => setCheckoutObs(e.target.value)} rows={2} placeholder="Observacoes para o fornecedor..." className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]" />
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" onClick={() => setShowCheckoutModal(false)} disabled={criandoPedido}>Voltar</Button>
+          <Button variant="success" loading={criandoPedido} onClick={handleCriarPedido}>
+            Criar Pedido ({formatCurrency(cartTotal)})
+          </Button>
+        </ModalFooter>
+      </Modal>
     </DashboardLayout>
     </RequirePermission>
   )
