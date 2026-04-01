@@ -197,14 +197,20 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Buscar todas as tabelas de preço ativas para este fornecedor + empresa
-    const { data: tabelasAtivas } = await supabase
+    // Buscar todas as tabelas de preço ativas e não expiradas para este fornecedor + empresa
+    const { data: tabelasAtivasRaw } = await supabase
       .from('tabelas_preco')
-      .select('id, nome, created_at')
+      .select('id, nome, created_at, vigencia_fim')
       .eq('fornecedor_id', Number(fornecedorId))
       .eq('empresa_id', user.empresaId)
       .eq('status', 'ativa')
       .order('created_at', { ascending: false })
+
+    // Filtrar tabelas expiradas (vigencia_fim < hoje)
+    const hoje = new Date().toISOString().split('T')[0]
+    const tabelasAtivas = (tabelasAtivasRaw || []).filter(t =>
+      !t.vigencia_fim || t.vigencia_fim >= hoje
+    )
 
     const temTabelaAtiva = !!(tabelasAtivas && tabelasAtivas.length > 0)
 
@@ -256,7 +262,7 @@ export async function GET(request: NextRequest) {
         nome: t.nome,
         created_at: t.created_at,
       })),
-      tabela_selecionada_id: tabelaSelecionada?.id || null,
+      tabela_selecionada_id: tabelaSelecionada?.id ?? null,
       fornecedor: {
         id: fornecedor.id,
         nome: fornecedor.nome_fantasia || fornecedor.nome,

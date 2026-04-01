@@ -429,7 +429,7 @@ export default function CatalogoPage() {
               <p className="text-sm font-medium text-gray-900 line-clamp-2 mt-0.5" title={item.nome}>{item.nome}</p>
               {item.marca && <p className="text-xs text-gray-500 mt-0.5">{item.marca}</p>}
               <div className="mt-2">
-                {item.preco_tabela ? (
+                {item.preco_tabela != null ? (
                   <div>
                     <p className="text-lg font-bold text-[#336FB6]">{formatCurrency(item.preco_tabela)}</p>
                     {item.desconto_tabela && item.desconto_tabela > 0 && (
@@ -544,7 +544,7 @@ export default function CatalogoPage() {
                   {formatCurrency(item.preco_aplicavel)}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {item.preco_tabela ? (
+                  {item.preco_tabela != null ? (
                     <span className="font-medium text-[#336FB6]">{formatCurrency(item.preco_tabela)}</span>
                   ) : (
                     <span className="text-gray-400">-</span>
@@ -630,7 +630,7 @@ export default function CatalogoPage() {
                     {item.itens_por_caixa ? ` | Cx: ${item.itens_por_caixa} un` : ''}
                   </p>
                   <div className="text-right">
-                    {item.preco_tabela ? (
+                    {item.preco_tabela != null ? (
                       <div>
                         <p className="text-sm font-semibold text-[#336FB6]">{formatCurrency(item.preco_tabela)}</p>
                         <p className="text-xs text-gray-400 line-through">{formatCurrency(item.preco_aplicavel)}</p>
@@ -713,7 +713,7 @@ export default function CatalogoPage() {
               {selectedFornecedor.nome}
             </p>
 
-            {tabelasDisponiveis.length > 1 && (
+            {tabelasDisponiveis.length >= 1 && (
               <div className="flex items-center gap-2">
                 <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Tabela de precos:</label>
                 <select
