@@ -252,14 +252,17 @@ ${pedidoTexto}
 ITENS DO ESPELHO DO FORNECEDOR (${itensEspelho.length} itens):
 ${espelhoTexto}
 
+REGRA FUNDAMENTAL: Cada item do pedido deve aparecer EXATAMENTE UMA VEZ no resultado. Cada item do espelho deve ser usado EXATAMENTE UMA VEZ. NAO DUPLIQUE itens. O total de itens no resultado deve ser: total_pedido + extras do espelho.
+
 INSTRUCOES DE CRUZAMENTO (PRIORIDADE RIGOROSA):
-1. PRIMEIRO: Cruze por CodForn do pedido com CodForn do espelho (match EXATO de codigo do fornecedor). Ex: CodForn:4008009 no pedido = CodForn:4008009 no espelho = MATCH
-2. SEGUNDO: Se nao encontrou por CodForn, cruze por GTIN/EAN (match exato de codigo de barras)
-3. TERCEIRO: Somente se nao encontrou por codigo, tente por nome do produto (entenda abreviacoes: "AD"=adulto, "FIL"=filhote, "MB"=mini bits, "PEQ"=pequeno, "RÇ ESP"=racas especificas)
+1. PRIMEIRO: Cruze por CodForn do pedido com CodForn do espelho (match EXATO de codigo do fornecedor). Ex: CodForn:4008009 no pedido = CodForn:4008009 no espelho = MATCH. Cada codigo so pode ser usado UMA VEZ.
+2. SEGUNDO: Se nao encontrou por CodForn, cruze por GTIN/EAN (match exato de codigo de barras). Cada EAN so pode ser usado UMA VEZ.
+3. TERCEIRO: Somente se nao encontrou por codigo, tente por nome do produto (entenda abreviacoes: "AD"=adulto, "FIL"=filhote, "MB"=mini bits, "PEQ"=pequeno, "RÇ ESP"=racas especificas). Cada nome so pode ser usado UMA VEZ.
 4. NAO faca match por nome se os codigos sao diferentes! Codigos diferentes = produtos diferentes.
 5. Para cada match encontrado: compare quantidade e preco (tolerancia de 2% no preco)
 6. Classifique: "ok" (tudo bate), "divergencia" (encontrou mas qtd ou preco diferem), "faltando" (nao achou no espelho)
-7. Itens do espelho sem correspondencia no pedido: "extra"
+7. Itens do espelho que SOBRARAM sem correspondencia no pedido: "extra"
+8. NUNCA liste o mesmo item duas vezes. Se ja fez match, NAO use esse item novamente.
 
 REGRAS DE EMBALAGEM (MUITO IMPORTANTE):
 - Se a quantidade difere mas o VALOR TOTAL DA LINHA eh igual (tolerancia 2%), considere OK. Isso significa conversao de embalagem (ex: 4 UN = 1 fardo de 4).
