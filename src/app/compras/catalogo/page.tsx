@@ -490,9 +490,9 @@ export default function CatalogoPage() {
             <div className="mt-3 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 {f.vinculado ? (
-                  <span className="px-2 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-700 rounded-full">Vinculado</span>
+                  <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">Vinculado</span>
                 ) : (
-                  <span className="px-2 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded-full">Nao vinculado</span>
+                  <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 rounded-full">Nao vinculado</span>
                 )}
                 {f.tem_tabela_ativa && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
@@ -577,7 +577,7 @@ export default function CatalogoPage() {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
         {itens.map((item) => (
-          <div key={item.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+          <div key={item.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-200">
             {/* Image */}
             <div className="aspect-square bg-gray-50 flex items-center justify-center p-2">
               {item.imagem_url ? (
@@ -590,7 +590,7 @@ export default function CatalogoPage() {
               )}
             </div>
             {/* Info */}
-            <div className="p-3">
+            <div className="p-4">
               <p className="text-xs text-gray-400 font-mono">{item.codigo || '-'}</p>
               <p className="text-sm font-medium text-gray-900 line-clamp-2 mt-0.5" title={item.nome}>{item.nome}</p>
               {item.marca && <p className="text-xs text-gray-500 mt-0.5">{item.marca}</p>}
@@ -618,17 +618,39 @@ export default function CatalogoPage() {
               </div>
               {/* Add to cart button - only for vinculados */}
               {isVinculado && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); addToCart(item) }}
-                  className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                  </svg>
-                  {cartMap.get(item.id)
-                    ? `${cartMap.get(item.id)!.quantidade} no carrinho`
-                    : 'Adicionar'}
-                </button>
+                (() => {
+                  const inCart = cartMap.get(item.id)
+                  if (!inCart) {
+                    return (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); addToCart(item) }}
+                        className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 border-2 border-[#336FB6] text-[#336FB6] text-xs font-semibold rounded-xl hover:bg-[#336FB6] hover:text-white transition-all"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Adicionar
+                      </button>
+                    )
+                  }
+                  return (
+                    <div className="mt-2 flex items-center justify-between bg-[#336FB6] rounded-xl px-1 py-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); updateCartQty(item.id, inCart.quantidade - 1) }}
+                        className="w-8 h-8 flex items-center justify-center text-white rounded-lg hover:bg-white/20 transition-colors text-lg font-bold"
+                      >
+                        −
+                      </button>
+                      <span className="text-white font-bold text-sm">{inCart.quantidade}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); updateCartQty(item.id, inCart.quantidade + 1) }}
+                        className="w-8 h-8 flex items-center justify-center text-white rounded-lg hover:bg-white/20 transition-colors text-lg font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )
+                })()
               )}
             </div>
           </div>
@@ -743,17 +765,39 @@ export default function CatalogoPage() {
                 </td>
                 <td className="px-4 py-3 text-center">
                   {isVinculado && (
-                    <button
-                      onClick={() => addToCart(item)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                      </svg>
-                      {cartMap.get(item.id)
-                        ? `${cartMap.get(item.id)!.quantidade}`
-                        : 'Adicionar'}
-                    </button>
+                    (() => {
+                      const inCart = cartMap.get(item.id)
+                      if (!inCart) {
+                        return (
+                          <button
+                            onClick={() => addToCart(item)}
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 border-2 border-[#336FB6] text-[#336FB6] text-xs font-semibold rounded-xl hover:bg-[#336FB6] hover:text-white transition-all"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                            Adicionar
+                          </button>
+                        )
+                      }
+                      return (
+                        <div className="inline-flex items-center justify-between bg-[#336FB6] rounded-xl px-1 py-1">
+                          <button
+                            onClick={() => updateCartQty(item.id, inCart.quantidade - 1)}
+                            className="w-7 h-7 flex items-center justify-center text-white rounded-lg hover:bg-white/20 transition-colors text-sm font-bold"
+                          >
+                            −
+                          </button>
+                          <span className="text-white font-bold text-xs px-2">{inCart.quantidade}</span>
+                          <button
+                            onClick={() => updateCartQty(item.id, inCart.quantidade + 1)}
+                            className="w-7 h-7 flex items-center justify-center text-white rounded-lg hover:bg-white/20 transition-colors text-sm font-bold"
+                          >
+                            +
+                          </button>
+                        </div>
+                      )
+                    })()
                   )}
                 </td>
               </tr>
@@ -843,17 +887,39 @@ export default function CatalogoPage() {
             </div>
             {/* Add to cart button - only for vinculados */}
             {isVinculado && (
-              <button
-                onClick={() => addToCart(item)}
-                className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 bg-[#336FB6] text-white text-xs font-medium rounded-lg hover:bg-[#2b5e9e] transition-colors"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                {cartMap.get(item.id)
-                  ? `${cartMap.get(item.id)!.quantidade} no carrinho`
-                  : 'Adicionar'}
-              </button>
+              (() => {
+                const inCart = cartMap.get(item.id)
+                if (!inCart) {
+                  return (
+                    <button
+                      onClick={() => addToCart(item)}
+                      className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 border-2 border-[#336FB6] text-[#336FB6] text-xs font-semibold rounded-xl hover:bg-[#336FB6] hover:text-white transition-all"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                      Adicionar
+                    </button>
+                  )
+                }
+                return (
+                  <div className="mt-3 flex items-center justify-between bg-[#336FB6] rounded-xl px-1 py-1">
+                    <button
+                      onClick={() => updateCartQty(item.id, inCart.quantidade - 1)}
+                      className="w-8 h-8 flex items-center justify-center text-white rounded-lg hover:bg-white/20 transition-colors text-lg font-bold"
+                    >
+                      −
+                    </button>
+                    <span className="text-white font-bold text-sm">{inCart.quantidade}</span>
+                    <button
+                      onClick={() => updateCartQty(item.id, inCart.quantidade + 1)}
+                      className="w-8 h-8 flex items-center justify-center text-white rounded-lg hover:bg-white/20 transition-colors text-lg font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
+                )
+              })()
             )}
           </div>
         ))
@@ -987,23 +1053,32 @@ export default function CatalogoPage() {
 
       {/* Banner for non-linked suppliers */}
       {!isVinculado && selectedFornecedor && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between mb-4">
-          <div>
-            <p className="text-sm font-medium text-amber-800">Voce ainda nao compra deste fornecedor</p>
-            <p className="text-xs text-amber-600">Envie uma solicitacao para comecar a fazer pedidos</p>
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 flex items-center justify-between mb-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.15c0 .415.336.75.75.75z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Voce ainda nao compra deste fornecedor</p>
+              <p className="text-xs text-amber-700 mt-0.5">Envie uma solicitacao para comecar a fazer pedidos pelo catalogo</p>
+            </div>
           </div>
-          <button
-            onClick={handleSolicitarAtendimento}
+          <Button
+            variant="primary"
+            size="md"
             disabled={solicitacaoEnviada}
-            className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-xl hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ml-4"
+            onClick={handleSolicitarAtendimento}
+            className="bg-amber-600 hover:bg-amber-700 shrink-0"
           >
             {solicitacaoEnviada ? 'Solicitacao enviada' : 'Solicitar atendimento'}
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Content */}
-      <div className={cart.length > 0 && selectedFornecedor && isVinculado ? 'pb-20' : ''}>
+      <div className={cart.length > 0 && selectedFornecedor && isVinculado ? 'pb-24' : ''}>
         {!selectedFornecedor ? (
           renderFornecedores()
         ) : (
@@ -1025,30 +1100,31 @@ export default function CatalogoPage() {
 
       {/* Floating cart bar */}
       {cart.length > 0 && selectedFornecedor && isVinculado && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 px-4 py-3">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-100 shadow-[0px_-4px_20px_rgba(0,0,0,0.1)] z-50 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[#336FB6] text-white rounded-full flex items-center justify-center font-bold text-sm">
-                {cartItemCount}
+              <div className="relative">
+                <div className="w-11 h-11 bg-[#336FB6] text-white rounded-full flex items-center justify-center font-bold text-sm shadow-lg shadow-[#336FB6]/30">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+                  </svg>
+                </div>
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {cartItemCount}
+                </span>
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-900">{cart.length} produto(s) no carrinho</p>
-                <p className="text-sm text-[#336FB6] font-bold">{formatCurrency(cartTotal)}</p>
+                <p className="text-sm font-semibold text-gray-900">{cart.length} produto(s)</p>
+                <p className="text-base font-bold text-[#336FB6]">{formatCurrency(cartTotal)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowCartModal(true)}
-                className="px-4 py-2 text-sm font-medium text-[#336FB6] border border-[#336FB6] rounded-xl hover:bg-[#336FB6]/5"
-              >
+              <Button variant="outline" size="md" onClick={() => setShowCartModal(true)}>
                 Ver carrinho
-              </button>
-              <button
-                onClick={() => setShowCheckoutModal(true)}
-                className="px-4 py-2 text-sm font-medium text-white bg-[#336FB6] rounded-xl hover:bg-[#2b5e9e]"
-              >
+              </Button>
+              <Button variant="primary" size="md" onClick={() => setShowCheckoutModal(true)}>
                 Finalizar pedido
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1081,10 +1157,10 @@ export default function CatalogoPage() {
                     <p className="text-xs text-gray-500">{item.codigo} · {formatCurrency(item.preco)}/{item.unidade}</p>
                   </div>
                   {/* Qty controls */}
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => updateCartQty(item.catalogo_item_id, item.quantidade - 1)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">-</button>
-                    <span className="text-sm font-semibold w-8 text-center">{item.quantidade}</span>
-                    <button onClick={() => updateCartQty(item.catalogo_item_id, item.quantidade + 1)} className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">+</button>
+                  <div className="flex items-center gap-0 bg-gray-100 rounded-lg">
+                    <button onClick={() => updateCartQty(item.catalogo_item_id, item.quantidade - 1)} className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-red-500 rounded-l-lg hover:bg-gray-200 transition-colors font-bold">−</button>
+                    <span className="w-8 text-center text-sm font-bold text-gray-900">{item.quantidade}</span>
+                    <button onClick={() => updateCartQty(item.catalogo_item_id, item.quantidade + 1)} className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-[#336FB6] rounded-r-lg hover:bg-gray-200 transition-colors font-bold">+</button>
                   </div>
                   {/* Subtotal */}
                   <p className="text-sm font-bold text-gray-900 w-24 text-right">{formatCurrency(item.quantidade * item.preco)}</p>
