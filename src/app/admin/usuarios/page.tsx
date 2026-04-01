@@ -49,7 +49,7 @@ interface Representante {
   codigo_acesso: string | null
 }
 
-type TabKey = 'lojistas' | 'fornecedores' | 'representantes'
+type TabKey = 'lojistas' | 'colaboradores' | 'fornecedores' | 'representantes'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -139,11 +139,20 @@ export default function UsuariosPage() {
       const params = new URLSearchParams()
       if (debouncedSearch) params.set('search', debouncedSearch)
       if (statusFilter) params.set('status', statusFilter)
-      if (activeTab === 'lojistas' && tipoFilter) params.set('tipo', tipoFilter)
       params.set('page', String(page))
       params.set('limit', '20')
 
-      const res = await fetch(`/api/admin/usuarios/${activeTab}?${params.toString()}`)
+      // Lojistas e Colaboradores usam a mesma API com filtro de tipo
+      let apiTab = activeTab as string
+      if (activeTab === 'lojistas') {
+        apiTab = 'lojistas'
+        params.set('tipo', 'lojista')
+      } else if (activeTab === 'colaboradores') {
+        apiTab = 'lojistas'
+        params.set('tipo', 'colaborador')
+      }
+
+      const res = await fetch(`/api/admin/usuarios/${apiTab}?${params.toString()}`)
       const json = await res.json()
 
       if (!res.ok) {
@@ -151,7 +160,7 @@ export default function UsuariosPage() {
         return
       }
 
-      if (activeTab === 'lojistas') setLojistas(json.data)
+      if (activeTab === 'lojistas' || activeTab === 'colaboradores') setLojistas(json.data)
       else if (activeTab === 'fornecedores') setFornecedores(json.data)
       else setRepresentantes(json.data)
 
@@ -161,7 +170,7 @@ export default function UsuariosPage() {
     } finally {
       setLoading(false)
     }
-  }, [activeTab, debouncedSearch, statusFilter, tipoFilter, page])
+  }, [activeTab, debouncedSearch, statusFilter, page])
 
   useEffect(() => {
     fetchData()
@@ -276,7 +285,8 @@ export default function UsuariosPage() {
   // Tab definitions
   // ---------------------------------------------------------------------------
   const tabs: Array<{ key: TabKey; label: string; count: number }> = [
-    { key: 'lojistas', label: 'Usuarios', count: activeTab === 'lojistas' ? pagination.total : 0 },
+    { key: 'lojistas', label: 'Lojistas', count: activeTab === 'lojistas' ? pagination.total : 0 },
+    { key: 'colaboradores', label: 'Colaboradores', count: activeTab === 'colaboradores' ? pagination.total : 0 },
     { key: 'fornecedores', label: 'Fornecedores', count: activeTab === 'fornecedores' ? pagination.total : 0 },
     { key: 'representantes', label: 'Representantes', count: activeTab === 'representantes' ? pagination.total : 0 },
   ]
@@ -716,26 +726,14 @@ export default function UsuariosPage() {
               <option value="inativo">Inativo</option>
             </select>
 
-            {/* Tipo filter (only for lojistas/usuarios tab) */}
-            {activeTab === 'lojistas' && (
-              <select
-                value={tipoFilter}
-                onChange={(e) => setTipoFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
-              >
-                <option value="">Todos os tipos</option>
-                <option value="lojista">Lojista</option>
-                <option value="colaborador">Colaborador</option>
-                <option value="superadmin">Superadmin</option>
-              </select>
-            )}
+            {/* Tipo filter removed - each tab is now a type */}
           </div>
         </div>
 
         {/* Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
-            {activeTab === 'lojistas' && <LojistasTable />}
+            {(activeTab === 'lojistas' || activeTab === 'colaboradores') && <LojistasTable />}
             {activeTab === 'fornecedores' && <FornecedoresTable />}
             {activeTab === 'representantes' && <RepresentantesTable />}
           </div>
