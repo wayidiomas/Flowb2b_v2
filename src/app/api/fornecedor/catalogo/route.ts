@@ -18,7 +18,7 @@ export async function GET() {
 
     const { data: catalogo, error } = await supabase
       .from('catalogo_fornecedor')
-      .select('*')
+      .select('id, cnpj, nome, status, created_at, updated_at, slug, logo_url, banner_url, cor_primaria, descricao, whatsapp, publico')
       .eq('cnpj', cnpjLimpo)
       .single()
 

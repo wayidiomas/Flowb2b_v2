@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     const empresaId = searchParams.get('empresa_id')
     const marca = searchParams.get('marca')
+    const categoria = searchParams.get('categoria')
     const ativo = searchParams.get('ativo')
     const page = Math.max(1, Number(searchParams.get('page')) || 1)
     const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || 50))
@@ -50,6 +51,9 @@ export async function GET(request: NextRequest) {
     }
     if (marca) {
       query = query.ilike('marca', `%${marca}%`)
+    }
+    if (categoria) {
+      query = query.eq('categoria', categoria)
     }
     if (ativo !== null && ativo !== undefined && ativo !== '') {
       query = query.eq('ativo', ativo === 'true')

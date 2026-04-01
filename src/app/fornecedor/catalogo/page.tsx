@@ -13,6 +13,7 @@ import {
   ModalBody,
   ModalFooter,
 } from '@/components/ui/Modal'
+import { CATEGORIAS_PET } from '@/lib/categorias-pet'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,6 +33,9 @@ interface CatalogoItem {
   ativo: boolean
   ordem: number | null
   imagem_url: string | null
+  categoria: string | null
+  descricao_produto: string | null
+  destaque: boolean
   preco_customizado?: number | null
   desconto_percentual?: number | null
   ativo_lojista?: boolean | null
@@ -1176,6 +1180,8 @@ function ProductCard({
   onUpdatePreco,
   onPersonalizar,
   onImageUploaded,
+  onCategoriaChange,
+  onDestaqueToggle,
   saving,
   isSelected,
   onToggleSelect,
@@ -1186,6 +1192,8 @@ function ProductCard({
   onUpdatePreco: (id: number, preco: number) => void
   onPersonalizar: (item: CatalogoItem) => void
   onImageUploaded: (id: number, url: string | null) => void
+  onCategoriaChange: (id: number, categoria: string | null) => void
+  onDestaqueToggle: (id: number, destaque: boolean) => void
   saving?: boolean
   isSelected?: boolean
   onToggleSelect?: (id: number) => void
@@ -1206,7 +1214,18 @@ function ProductCard({
           )}
           <ProductImageUpload item={item} onUploaded={onImageUploaded} />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.nome}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-gray-900 line-clamp-2 flex-1">{item.nome}</p>
+              <button
+                onClick={() => onDestaqueToggle(item.id, !item.destaque)}
+                className={`p-1 rounded-lg transition-colors shrink-0 ${item.destaque ? 'text-amber-500 bg-amber-50' : 'text-gray-300 hover:text-amber-400'}`}
+                title={item.destaque ? 'Remover destaque' : 'Destacar produto'}
+              >
+                <svg className="w-4 h-4" fill={item.destaque ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                </svg>
+              </button>
+            </div>
             <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
               <span className="font-mono">{item.codigo || '-'}</span>
               {item.marca && (
@@ -1232,6 +1251,19 @@ function ProductCard({
             <span>Cx: {item.itens_por_caixa} un</span>
           </>
         )}
+      </div>
+
+      <div className="mt-2">
+        <select
+          value={item.categoria || ''}
+          onChange={(e) => onCategoriaChange(item.id, e.target.value || null)}
+          className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white w-full"
+        >
+          <option value="">Sem categoria</option>
+          {CATEGORIAS_PET.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
       </div>
 
       <div className="mt-3 flex items-center justify-between">
@@ -1659,6 +1691,23 @@ export default function FornecedorCatalogoPage() {
   const [multiModalEmpresaId, setMultiModalEmpresaId] = useState<number | null>(null)
   const [showMultiModal, setShowMultiModal] = useState(false)
 
+  // Profile modal state
+  const [showPerfilModal, setShowPerfilModal] = useState(false)
+  const [perfilData, setPerfilData] = useState<{
+    nome: string
+    slug: string
+    logo_url: string
+    banner_url: string
+    cor_primaria: string
+    descricao: string
+    whatsapp: string
+    publico: boolean
+  } | null>(null)
+  const [salvandoPerfil, setSalvandoPerfil] = useState(false)
+
+  // Category filter
+  const [categoriaFilter, setCategoriaFilter] = useState('')
+
   // Import Excel state
   const [showImportModal, setShowImportModal] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
@@ -1679,6 +1728,16 @@ export default function FornecedorCatalogoPage() {
         if (data.exists && data.catalogo) {
           setCatalogo(data.catalogo)
           setTotalItens(data.total_itens || 0)
+          setPerfilData({
+            nome: data.catalogo.nome || '',
+            slug: data.catalogo.slug || '',
+            logo_url: data.catalogo.logo_url || '',
+            banner_url: data.catalogo.banner_url || '',
+            cor_primaria: data.catalogo.cor_primaria || '#336FB6',
+            descricao: data.catalogo.descricao || '',
+            whatsapp: data.catalogo.whatsapp || '',
+            publico: data.catalogo.publico ?? false,
+          })
         }
       }
     } catch (err) {
@@ -1703,6 +1762,7 @@ export default function FornecedorCatalogoPage() {
       if (debouncedSearch) params.set('search', debouncedSearch)
       if (lojistaFilter) params.set('empresa_id', String(lojistaFilter))
       if (marcaFilter) params.set('marca', marcaFilter)
+      if (categoriaFilter) params.set('categoria', categoriaFilter)
       if (!showInativos) params.set('ativo', 'true')
       params.set('page', String(page))
       params.set('limit', String(LIMIT))
@@ -1719,7 +1779,7 @@ export default function FornecedorCatalogoPage() {
     } finally {
       setLoading(false)
     }
-  }, [catalogoExists, debouncedSearch, lojistaFilter, marcaFilter, showInativos, page])
+  }, [catalogoExists, debouncedSearch, lojistaFilter, marcaFilter, categoriaFilter, showInativos, page])
 
   useEffect(() => {
     if (catalogoExists) {
@@ -1745,7 +1805,7 @@ export default function FornecedorCatalogoPage() {
   useEffect(() => {
     setPage(1)
     setSelectedIds(new Set())
-  }, [debouncedSearch, lojistaFilter, marcaFilter, showInativos])
+  }, [debouncedSearch, lojistaFilter, marcaFilter, categoriaFilter, showInativos])
 
   // ------ Create catalog ------
   const handleCreateCatalogo = async () => {
@@ -1926,6 +1986,50 @@ export default function FornecedorCatalogoPage() {
     }
   }
 
+  // ------ Categoria change (fire-and-forget) ------
+  const handleCategoriaChange = async (itemId: number, categoria: string | null) => {
+    setItens(prev => prev.map(i => i.id === itemId ? { ...i, categoria } : i))
+    await fetch('/api/fornecedor/catalogo/itens/batch', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itens: [{ id: itemId, categoria }] }),
+    })
+  }
+
+  // ------ Destaque toggle (fire-and-forget) ------
+  const handleDestaqueToggle = async (itemId: number, destaque: boolean) => {
+    setItens(prev => prev.map(i => i.id === itemId ? { ...i, destaque } : i))
+    await fetch('/api/fornecedor/catalogo/itens/batch', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itens: [{ id: itemId, destaque }] }),
+    })
+  }
+
+  // ------ Salvar perfil do catalogo ------
+  const handleSalvarPerfil = async () => {
+    if (!perfilData) return
+    setSalvandoPerfil(true)
+    try {
+      const res = await fetch('/api/fornecedor/catalogo/perfil', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(perfilData),
+      })
+      if (res.ok) {
+        setShowPerfilModal(false)
+        setToast({ message: 'Catalogo personalizado!', type: 'success' })
+      } else {
+        const d = await res.json()
+        setToast({ message: d.error || 'Erro ao salvar', type: 'error' })
+      }
+    } catch {
+      setToast({ message: 'Erro ao salvar', type: 'error' })
+    } finally {
+      setSalvandoPerfil(false)
+    }
+  }
+
   // ------ Auth loading ------
   if (authLoading) {
     return (
@@ -2037,6 +2141,14 @@ export default function FornecedorCatalogoPage() {
             >
               Importar Excel
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPerfilModal(true)}
+              leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" /></svg>}
+            >
+              Personalizar
+            </Button>
             <span className="px-3 py-1.5 bg-[#336FB6]/10 text-[#336FB6] text-sm font-semibold rounded-lg">
               {totalItens} produtos
             </span>
@@ -2074,6 +2186,18 @@ export default function FornecedorCatalogoPage() {
               onSelect={setMarcaFilter}
             />
           )}
+
+          {/* Categoria filter */}
+          <select
+            value={categoriaFilter}
+            onChange={(e) => { setCategoriaFilter(e.target.value); setPage(1) }}
+            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white hover:border-[#336FB6]/40 focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-colors"
+          >
+            <option value="">Todas categorias</option>
+            {CATEGORIAS_PET.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
 
           {/* Show inativos toggle */}
           <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -2128,10 +2252,14 @@ export default function FornecedorCatalogoPage() {
                           className="w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20"
                         />
                       </th>
+                      <th className="px-2 py-4 w-10 text-center">
+                        <svg className="w-4 h-4 text-amber-500 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
+                      </th>
                       <th className="px-6 py-4 w-12">Ativo</th>
                       <th className="px-4 py-4 w-16">Foto</th>
                       <th className="px-6 py-4">Codigo</th>
                       <th className="px-6 py-4">Nome</th>
+                      <th className="px-4 py-4">Categoria</th>
                       <th className="px-6 py-4">Marca</th>
                       <th className="px-6 py-4 text-center">UN / Cx</th>
                       <th className="px-6 py-4 text-right">Preco Base</th>
@@ -2165,6 +2293,17 @@ export default function FornecedorCatalogoPage() {
                               className="w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20"
                             />
                           </td>
+                          <td className="px-2 py-4 text-center">
+                            <button
+                              onClick={() => handleDestaqueToggle(item.id, !item.destaque)}
+                              className={`p-1 rounded-lg transition-colors ${item.destaque ? 'text-amber-500 bg-amber-50' : 'text-gray-300 hover:text-amber-400'}`}
+                              title={item.destaque ? 'Remover destaque' : 'Destacar produto'}
+                            >
+                              <svg className="w-4 h-4" fill={item.destaque ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                              </svg>
+                            </button>
+                          </td>
                           <td className="px-6 py-4">
                             <ToggleSwitch
                               checked={item.ativo}
@@ -2177,6 +2316,18 @@ export default function FornecedorCatalogoPage() {
                           <td className="px-6 py-4 text-sm font-mono text-gray-700">{item.codigo || '-'}</td>
                           <td className="px-6 py-4 text-sm text-gray-900 font-medium max-w-xs truncate">
                             {item.nome}
+                          </td>
+                          <td className="px-4 py-2">
+                            <select
+                              value={item.categoria || ''}
+                              onChange={(e) => handleCategoriaChange(item.id, e.target.value || null)}
+                              className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white w-full"
+                            >
+                              <option value="">Sem categoria</option>
+                              {CATEGORIAS_PET.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-500">{item.marca || '-'}</td>
                           <td className="px-6 py-4 text-sm text-gray-500 text-center">
@@ -2235,6 +2386,8 @@ export default function FornecedorCatalogoPage() {
                     onUpdatePreco={handleUpdatePreco}
                     onPersonalizar={setModalItem}
                     onImageUploaded={handleImageUploaded}
+                    onCategoriaChange={handleCategoriaChange}
+                    onDestaqueToggle={handleDestaqueToggle}
                     saving={savingItemId === item.id}
                     isSelected={selectedIds.has(item.id)}
                     onToggleSelect={(id) => {
@@ -2552,6 +2705,110 @@ export default function FornecedorCatalogoPage() {
               {importStep === 'done' && (
                 <Button variant="primary" size="sm" onClick={() => setShowImportModal(false)}>Fechar</Button>
               )}
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal Personalizar Catalogo */}
+      <Modal isOpen={showPerfilModal} onClose={() => setShowPerfilModal(false)} size="lg">
+        <ModalHeader onClose={() => setShowPerfilModal(false)}>
+          <ModalTitle>Personalizar Catalogo</ModalTitle>
+          <ModalDescription>Configure a aparencia do seu catalogo</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          <div className="space-y-4">
+            {/* Logo */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Logo</label>
+              <input
+                type="url"
+                value={perfilData?.logo_url || ''}
+                onChange={(e) => setPerfilData(prev => prev ? { ...prev, logo_url: e.target.value } : prev)}
+                placeholder="https://..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+            </div>
+            {/* Banner */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Banner</label>
+              <input
+                type="url"
+                value={perfilData?.banner_url || ''}
+                onChange={(e) => setPerfilData(prev => prev ? { ...prev, banner_url: e.target.value } : prev)}
+                placeholder="https://..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+            </div>
+            {/* Cor primaria */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cor primaria</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={perfilData?.cor_primaria || '#336FB6'}
+                  onChange={(e) => setPerfilData(prev => prev ? { ...prev, cor_primaria: e.target.value } : prev)}
+                  className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={perfilData?.cor_primaria || ''}
+                  onChange={(e) => setPerfilData(prev => prev ? { ...prev, cor_primaria: e.target.value } : prev)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                  placeholder="#336FB6"
+                />
+              </div>
+            </div>
+            {/* Descricao */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Descricao</label>
+              <textarea
+                value={perfilData?.descricao || ''}
+                onChange={(e) => setPerfilData(prev => prev ? { ...prev, descricao: e.target.value } : prev)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] resize-none"
+                placeholder="Descreva seu catalogo..."
+              />
+            </div>
+            {/* WhatsApp */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
+              <input
+                type="tel"
+                value={perfilData?.whatsapp || ''}
+                onChange={(e) => setPerfilData(prev => prev ? { ...prev, whatsapp: e.target.value } : prev)}
+                placeholder="(11) 99999-9999"
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+            </div>
+            {/* Slug */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Link do catalogo</label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500 whitespace-nowrap">flowb2b.com/catalogo/</span>
+                <input
+                  type="text"
+                  value={perfilData?.slug || ''}
+                  onChange={(e) => setPerfilData(prev => prev ? { ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') } : prev)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                  placeholder="minha-loja"
+                />
+              </div>
+            </div>
+            {/* Publico toggle */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Catalogo publico</p>
+                <p className="text-xs text-gray-500">Qualquer pessoa pode ver seu catalogo</p>
+              </div>
+              <ToggleSwitch
+                checked={perfilData?.publico || false}
+                onChange={(val) => setPerfilData(prev => prev ? { ...prev, publico: val } : prev)}
+              />
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" size="md" onClick={() => setShowPerfilModal(false)}>Cancelar</Button>
+          <Button variant="primary" size="md" loading={salvandoPerfil} onClick={handleSalvarPerfil}>Salvar</Button>
         </ModalFooter>
       </Modal>
     </FornecedorLayout>
