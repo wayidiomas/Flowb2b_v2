@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const statusFilter = searchParams.get('status')
     const searchQuery = searchParams.get('search')?.toLowerCase().trim()
-    const origemFilter = searchParams.get('origem') || 'flowb2b'
+    const origemFilter = searchParams.get('origem') || 'plataforma'
 
     // Buscar fornecedores vinculados ao CNPJ
     const { data: fornecedores, error: fornError } = await supabase
@@ -77,7 +77,9 @@ export async function GET(request: NextRequest) {
       .neq('status_interno', 'cancelado')
       .order('data', { ascending: false })
 
-    if (origemFilter !== 'todos') {
+    if (origemFilter === 'plataforma') {
+      query = query.in('origem', ['flowb2b', 'catalogo'])
+    } else if (origemFilter !== 'todos') {
       query = query.eq('origem', origemFilter)
     }
 

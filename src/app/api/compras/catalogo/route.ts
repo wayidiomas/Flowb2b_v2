@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
     const tabelaId = searchParams.get('tabela_id')
     const search = searchParams.get('search')
     const marca = searchParams.get('marca')
+    const filtro = searchParams.get('filtro') // 'todos' | 'meus' | 'novos'
     const page = Math.max(1, Number(searchParams.get('page')) || 1)
     const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || 50))
     const offset = (page - 1) * limit
@@ -231,10 +232,7 @@ export async function GET(request: NextRequest) {
       .eq('catalogo_id', catalogoDbId)
       .eq('ativo', true)
 
-    // Para fornecedores vinculados, filtrar por empresa_id (itens customizados)
-    if (isVinculado) {
-      query = query.eq('empresa_id', user.empresaId)
-    }
+    // Não filtra por empresa_id: itens do catálogo são do fornecedor e visíveis para todos os lojistas
 
     if (search) {
       const sanitized = search.replace(/[,%()\.]/g, '')
@@ -353,25 +351,59 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Deduplicar itens para catálogos não vinculados (podem ter itens duplicados entre empresas)
-    if (!isVinculado && itensComPreco.length > 0) {
-      const seen = new Map<string, typeof itensComPreco[0]>()
-      for (const item of itensComPreco) {
+    // Marcar ja_trabalho: verificar quais produto_ids existem em fornecedores_produtos desta empresa
+    const produtoIdsFromCatalog = itensComPreco
+      .map(i => i.produto_id)
+      .filter((id): id is number => id !== null && id !== undefined)
+
+    const meusProdutoIds = new Set<number>()
+    if (produtoIdsFromCatalog.length > 0 && isVinculado) {
+      const { data: meusProds } = await supabase
+        .from('fornecedores_produtos')
+        .select('produto_id')
+        .in('produto_id', [...new Set(produtoIdsFromCatalog)])
+        .eq('empresa_id', user.empresaId)
+
+      for (const mp of meusProds || []) {
+        meusProdutoIds.add(mp.produto_id)
+      }
+    }
+
+    let itensComFlag = itensComPreco.map(item => ({
+      ...item,
+      ja_trabalho: item.produto_id ? meusProdutoIds.has(item.produto_id) : false,
+    }))
+
+    // Aplicar filtro meus/novos
+    if (filtro === 'meus') {
+      itensComFlag = itensComFlag.filter(i => i.ja_trabalho)
+    } else if (filtro === 'novos') {
+      itensComFlag = itensComFlag.filter(i => !i.ja_trabalho)
+    }
+
+    // Deduplicar itens para catálogos não vinculados ou filtros todos/novos (podem ter itens duplicados entre empresas)
+    // Deduplicar itens (podem ter duplicados entre empresas no mesmo catálogo)
+    if (itensComFlag.length > 0) {
+      const seen = new Map<string, typeof itensComFlag[0]>()
+      for (const item of itensComFlag) {
         const key = item.codigo || item.nome || String(item.id)
         if (!seen.has(key)) {
           seen.set(key, item)
         } else {
           const existing = seen.get(key)!
-          if (item.preco_base && (!existing.preco_base || item.preco_base > existing.preco_base)) {
+          // Preferir o item que ja_trabalho, senão o de maior preço
+          if (item.ja_trabalho && !existing.ja_trabalho) {
+            seen.set(key, item)
+          } else if (item.preco_base && (!existing.preco_base || item.preco_base > existing.preco_base)) {
             seen.set(key, item)
           }
         }
       }
-      itensComPreco = Array.from(seen.values())
+      itensComFlag = Array.from(seen.values())
     }
 
     return NextResponse.json({
-      itens: itensComPreco,
+      itens: itensComFlag,
       total: count || 0,
       page,
       limit,

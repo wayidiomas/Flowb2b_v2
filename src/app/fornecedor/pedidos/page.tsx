@@ -77,7 +77,6 @@ export default function FornecedorPedidosPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [apenasFlowB2B, setApenasFlowB2B] = useState(true)
   const [viewMode, setViewMode] = useState<'tabela' | 'kanban'>('tabela')
 
   // Debounce da busca
@@ -96,7 +95,7 @@ export default function FornecedorPedidosPage() {
       const params = new URLSearchParams()
       if (statusFilter) params.set('status', statusFilter)
       if (debouncedSearch) params.set('search', debouncedSearch)
-      params.set('origem', apenasFlowB2B ? 'flowb2b' : 'todos')
+      params.set('origem', 'plataforma')
 
       const res = await fetch(`/api/fornecedor/pedidos?${params}`)
       if (res.ok) {
@@ -108,7 +107,7 @@ export default function FornecedorPedidosPage() {
     } finally {
       setLoading(false)
     }
-  }, [user, statusFilter, debouncedSearch, apenasFlowB2B])
+  }, [user, statusFilter, debouncedSearch])
 
   useEffect(() => {
     fetchPedidos()
@@ -195,21 +194,6 @@ export default function FornecedorPedidosPage() {
             </button>
           ))}
 
-          <div className="ml-auto">
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={apenasFlowB2B}
-                  onChange={(e) => setApenasFlowB2B(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
-                <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
-              </div>
-              Apenas pedidos FlowB2B
-            </label>
-          </div>
         </div>
 
         {/* Lista de pedidos */}

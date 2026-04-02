@@ -162,18 +162,18 @@ const bottomTabItems: TabItem[] = [
     isActive: (pathname) => pathname.startsWith('/compras/pedidos'),
   },
   {
+    href: '/compras/catalogo',
+    label: 'Catalogo',
+    icon: CatalogoIcon,
+    permission: 'pedidos',
+    isActive: (pathname) => pathname.startsWith('/compras/catalogo'),
+  },
+  {
     href: '/estoque/produtos',
     label: 'Estoque',
     icon: EstoqueIcon,
     permission: 'estoque',
     isActive: (pathname) => pathname.startsWith('/estoque/produtos'),
-  },
-  {
-    href: '/fiscal/notas',
-    label: 'Notas',
-    icon: NotasIcon,
-    permission: 'financeiro',
-    isActive: (pathname) => pathname.startsWith('/fiscal'),
   },
 ]
 
@@ -181,7 +181,7 @@ const moreMenuItemsDef: MoreMenuItem[] = [
   { href: '/cadastros/fornecedores', label: 'Cadastros', icon: CadastrosIcon, permission: 'cadastros' },
   { href: '/compras/curva', label: 'Compras por Curva', icon: CurvaIcon, permission: 'pedidos' },
   { href: '/compras/tabelas-preco', label: 'Tabelas de Preco', icon: TabelaPrecoIcon, permission: 'pedidos' },
-  { href: '/compras/catalogo', label: 'Catalogos', icon: CatalogoIcon, permission: 'pedidos' },
+  { href: '/fiscal/notas', label: 'Notas Fiscais', icon: NotasIcon, permission: 'financeiro' },
   { href: '/estoque/sugestoes', label: 'Sugestoes Estoque', icon: SugestoesIcon, permission: 'estoque' },
   { href: '/suprimentos/politica-compra', label: 'Politica de Compra', icon: PoliticaIcon, permission: 'cadastros' },
   { href: '/configuracoes', label: 'Configuracoes', icon: ConfiguracoesIcon, permission: 'configuracoes' },

@@ -36,8 +36,7 @@ export async function GET(request: NextRequest) {
         valor_de_compra, precocusto,
         produtos!inner(
           id, codigo, nome, gtin, gtin_embalagem,
-          estoque_atual, estoque_minimo, unidade,
-          itens_por_caixa, marca, curva
+          unidade, itens_por_caixa, marca
         )
       `)
       .eq('fornecedor_id', fornecedor.id)
@@ -54,12 +53,9 @@ export async function GET(request: NextRequest) {
       nome: item.produtos.nome,
       gtin: item.produtos.gtin,
       gtin_embalagem: item.produtos.gtin_embalagem,
-      estoque_atual: item.produtos.estoque_atual,
-      estoque_minimo: item.produtos.estoque_minimo,
       unidade: item.produtos.unidade,
       itens_por_caixa: item.produtos.itens_por_caixa,
       marca: item.produtos.marca,
-      curva: item.produtos.curva,
       valor_de_compra: item.valor_de_compra,
       precocusto: item.precocusto,
     }))

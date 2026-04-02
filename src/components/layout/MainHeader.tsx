@@ -81,7 +81,6 @@ const navigation: NavItem[] = [
       { label: 'Pedido de compras', href: '/compras/pedidos', permission: 'pedidos' },
       { label: 'Compras por Curva', href: '/compras/curva', permission: 'pedidos' },
       { label: 'Tabelas de Preco', href: '/compras/tabelas-preco', permission: 'pedidos' },
-      { label: 'Catalogos', href: '/compras/catalogo', permission: 'pedidos' },
       { label: 'Controle de estoque', href: '/estoque/produtos', permission: 'estoque' },
       { label: 'Sugestoes de Estoque', href: '/estoque/sugestoes', permission: 'estoque' },
       { label: 'Notas de entrada', href: '/fiscal/notas', permission: 'financeiro' },
@@ -89,6 +88,7 @@ const navigation: NavItem[] = [
       { label: 'Relatorios', href: '/relatorios', permission: 'relatorios', comingSoon: true },
     ],
   },
+  { label: 'Catalogo', href: '/compras/catalogo', permission: 'pedidos' },
   { label: 'Suporte', href: '/suporte' },
 ]
 

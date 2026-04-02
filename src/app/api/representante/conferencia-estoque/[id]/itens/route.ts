@@ -182,7 +182,6 @@ export async function POST(
         codigo: produto.codigo,
         nome: produto.nome,
         gtin: produto.gtin,
-        estoque_atual: produto.estoque_atual,
       },
       ja_existia: !!existente,
     }, { status: existente ? 200 : 201 })

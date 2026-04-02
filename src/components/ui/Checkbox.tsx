@@ -1,4 +1,4 @@
-import { forwardRef, InputHTMLAttributes, ReactNode } from 'react'
+import { forwardRef, InputHTMLAttributes, ReactNode, useId } from 'react'
 
 interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   label?: ReactNode
@@ -7,7 +7,8 @@ interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'typ
 
 const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
   ({ label, error, className = '', id, ...props }, ref) => {
-    const inputId = id || props.name || Math.random().toString(36).substr(2, 9)
+    const reactId = useId()
+    const inputId = id || props.name || reactId
 
     return (
       <div className="flex items-start gap-2">

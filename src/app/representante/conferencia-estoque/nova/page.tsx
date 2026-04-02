@@ -12,7 +12,6 @@ interface ProdutoEncontrado {
   codigo: string
   nome: string
   gtin: string | null
-  estoque_atual: number
 }
 
 function NovaConferenciaEstoqueContent() {

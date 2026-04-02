@@ -126,6 +126,7 @@ interface ItemCatalogo {
   preco_tabela: number | null
   desconto_tabela: number | null
   produto_id: number | null
+  ja_trabalho?: boolean
 }
 
 interface CartItem {
@@ -178,6 +179,9 @@ export default function CatalogoPage() {
   // View mode
   const [viewMode, setViewMode] = useState<'vitrine' | 'tabela'>('vitrine')
 
+  // Filtro: meus produtos / novos
+  const [filtro, setFiltro] = useState<'todos' | 'meus' | 'novos'>('todos')
+
   // Vinculado state
   const [isVinculado, setIsVinculado] = useState(false)
   const [solicitacaoEnviada, setSolicitacaoEnviada] = useState(false)
@@ -215,7 +219,7 @@ export default function CatalogoPage() {
 
   // ─── Fetch items ──────────────────────────────────────────────────────────
 
-  const fetchItens = useCallback(async (fornecedorIdParam: number | null, catalogoIdParam: number, pageNum: number, searchText: string, marcaText: string, tabelaId: string = '') => {
+  const fetchItens = useCallback(async (fornecedorIdParam: number | null, catalogoIdParam: number, pageNum: number, searchText: string, marcaText: string, tabelaId: string = '', filtroParam: string = 'todos') => {
     setLoadingItens(true)
     try {
       const params = new URLSearchParams({
@@ -230,6 +234,7 @@ export default function CatalogoPage() {
       if (searchText) params.set('search', searchText)
       if (marcaText) params.set('marca', marcaText)
       if (tabelaId) params.set('tabela_id', tabelaId)
+      if (filtroParam && filtroParam !== 'todos') params.set('filtro', filtroParam)
 
       const res = await fetch(`/api/compras/catalogo?${params}`)
       const data = await res.json()
@@ -276,11 +281,11 @@ export default function CatalogoPage() {
     }
   }, [])
 
-  // Re-fetch when page/marca/tabela changes
+  // Re-fetch when page/marca/tabela/filtro changes
   useEffect(() => {
     if (!selectedFornecedor) return
-    fetchItens(selectedFornecedor.fornecedor_id, selectedFornecedor.catalogo_id, page, search, marcaFilter, tabelaSelecionadaId)
-  }, [selectedFornecedor, page, marcaFilter, tabelaSelecionadaId])
+    fetchItens(selectedFornecedor.fornecedor_id, selectedFornecedor.catalogo_id, page, search, marcaFilter, tabelaSelecionadaId, filtro)
+  }, [selectedFornecedor, page, marcaFilter, tabelaSelecionadaId, filtro])
 
   // Debounced search
   const handleSearchChange = (value: string) => {
@@ -289,7 +294,7 @@ export default function CatalogoPage() {
     debounceRef.current = setTimeout(() => {
       setPage(1)
       if (selectedFornecedor) {
-        fetchItens(selectedFornecedor.fornecedor_id, selectedFornecedor.catalogo_id, 1, value, marcaFilter, tabelaSelecionadaId)
+        fetchItens(selectedFornecedor.fornecedor_id, selectedFornecedor.catalogo_id, 1, value, marcaFilter, tabelaSelecionadaId, filtro)
       }
     }, 300)
   }
@@ -302,6 +307,7 @@ export default function CatalogoPage() {
     setSolicitacaoEnviada(false)
     setSearch('')
     setMarcaFilter('')
+    setFiltro('todos')
     setPage(1)
     setItens([])
     setTabelaSelecionadaId('')
@@ -577,7 +583,17 @@ export default function CatalogoPage() {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
         {itens.map((item) => (
-          <div key={item.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-200">
+          <div key={item.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-200 relative">
+            {/* Badge ja_trabalho / novo */}
+            {isVinculado && filtro === 'todos' && item.ja_trabalho !== undefined && (
+              <span className={`absolute top-2 right-2 z-10 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                item.ja_trabalho
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-amber-100 text-amber-700'
+              }`}>
+                {item.ja_trabalho ? 'Meu' : 'Novo'}
+              </span>
+            )}
             {/* Image */}
             <div className="aspect-square bg-gray-50 flex items-center justify-center p-2">
               {item.imagem_url ? (
@@ -1030,6 +1046,29 @@ export default function CatalogoPage() {
                 className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
               />
             </div>
+
+            {/* Filtro: Todos / Meus / Novos */}
+            {isVinculado && (
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+                {([
+                  { value: 'todos', label: 'Todos' },
+                  { value: 'meus', label: 'Meus Produtos' },
+                  { value: 'novos', label: 'Novos' },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => { setFiltro(opt.value); setPage(1) }}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
+                      filtro === opt.value
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Marca filter */}
             {marcas.length > 0 && (

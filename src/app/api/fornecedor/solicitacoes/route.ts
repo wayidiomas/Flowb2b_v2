@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     // Verificar que a solicitacao pertence a este fornecedor e esta pendente
     const { data: solicitacao, error: fetchError } = await supabase
       .from('solicitacoes_atendimento')
-      .select('id, status')
+      .select('id, status, empresa_id, catalogo_fornecedor_id')
       .eq('id', solicitacao_id)
       .eq('fornecedor_cnpj', cnpjLimpo)
       .eq('status', 'pendente')
@@ -74,6 +74,53 @@ export async function POST(request: NextRequest) {
     if (updateError) {
       console.error('Erro ao atualizar solicitacao:', updateError)
       return NextResponse.json({ error: 'Erro ao processar solicitacao' }, { status: 500 })
+    }
+
+    // Ao aceitar: vincular fornecedor ao lojista automaticamente
+    if (action === 'aceitar' && solicitacao.empresa_id) {
+      // Verificar se ja existe vinculo
+      const { data: existingLink } = await supabase
+        .from('fornecedores')
+        .select('id')
+        .eq('cnpj', cnpjLimpo)
+        .eq('empresa_id', solicitacao.empresa_id)
+        .single()
+
+      if (!existingLink) {
+        // Buscar dados do fornecedor de outra empresa para copiar nome/razao_social
+        const { data: fornecedorRef } = await supabase
+          .from('fornecedores')
+          .select('nome, nome_fantasia, razao_social, tipo_pessoa, email, telefone, celular')
+          .eq('cnpj', cnpjLimpo)
+          .limit(1)
+          .single()
+
+        // Buscar nome do catalogo como fallback
+        const { data: catalogo } = await supabase
+          .from('catalogo_fornecedor')
+          .select('nome')
+          .eq('id', solicitacao.catalogo_fornecedor_id)
+          .single()
+
+        const { error: insertError } = await supabase
+          .from('fornecedores')
+          .insert({
+            cnpj: cnpjLimpo,
+            empresa_id: solicitacao.empresa_id,
+            nome: fornecedorRef?.nome || catalogo?.nome || 'Fornecedor',
+            nome_fantasia: fornecedorRef?.nome_fantasia || null,
+            razao_social: fornecedorRef?.razao_social || null,
+            tipo_pessoa: fornecedorRef?.tipo_pessoa || 'J',
+            email: fornecedorRef?.email || null,
+            telefone: fornecedorRef?.telefone || null,
+            celular: fornecedorRef?.celular || null,
+          })
+
+        if (insertError) {
+          console.error('Erro ao vincular fornecedor ao lojista:', insertError)
+          // Nao falha a solicitacao por isso, apenas loga
+        }
+      }
     }
 
     return NextResponse.json({

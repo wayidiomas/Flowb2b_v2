@@ -6,13 +6,14 @@ import { LojistaBottomTabBar } from './LojistaBottomTabBar'
 import { useAuth } from '@/contexts/AuthContext'
 import { TrialExpiredModal } from '@/components/trial'
 import { BlingRevokeModal } from '@/components/bling'
+import OnboardingModal from '@/components/onboarding/OnboardingModal'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { trialStatus, logout, empresa } = useAuth()
+  const { trialStatus, logout, empresa, user, loading: authLoading, refreshUser } = useAuth()
   const [blingRevoked, setBlingRevoked] = useState(false)
 
   // Checar status do Bling quando empresa muda
@@ -32,6 +33,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     checkBlingStatus()
   }, [empresa?.id])
 
+  // Mostrar onboarding se usuario logado mas sem empresa
+  const showOnboarding = !authLoading && user && !empresa
+
   // Mostrar modal bloqueante se trial expirou e nao tem assinatura
   const showTrialModal = trialStatus?.isTrialExpired && !trialStatus?.hasActiveSubscription
 
@@ -47,11 +51,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Bottom Tab Bar - Mobile */}
       <LojistaBottomTabBar />
 
-      {/* Modal de trial expirado - bloqueante (prioridade maior) */}
-      <TrialExpiredModal isOpen={!!showTrialModal} onLogout={logout} />
+      {/* Modal de onboarding - prioridade maxima */}
+      {showOnboarding && (
+        <OnboardingModal onComplete={refreshUser} />
+      )}
 
-      {/* Modal de Bling revogado - so mostra se trial nao esta bloqueando */}
-      {!showTrialModal && (
+      {/* Modal de trial expirado - bloqueante */}
+      {!showOnboarding && (
+        <TrialExpiredModal isOpen={!!showTrialModal} onLogout={logout} />
+      )}
+
+      {/* Modal de Bling revogado - so mostra se nao tem onboarding/trial bloqueando */}
+      {!showOnboarding && !showTrialModal && (
         <BlingRevokeModal isOpen={blingRevoked} empresaId={empresa?.id ?? null} />
       )}
     </div>
