@@ -2223,7 +2223,7 @@ export default function FornecedorCatalogoPage() {
         </div>
 
         {/* Content */}
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-x-auto">
           {loading ? (
             <div className="p-6 space-y-3">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -2255,16 +2255,16 @@ export default function FornecedorCatalogoPage() {
                       <th className="px-2 py-4 w-10 text-center">
                         <svg className="w-4 h-4 text-amber-500 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
                       </th>
-                      <th className="px-6 py-4 w-12">Ativo</th>
-                      <th className="px-4 py-4 w-16">Foto</th>
-                      <th className="px-6 py-4">Codigo</th>
-                      <th className="px-6 py-4">Nome</th>
-                      <th className="px-4 py-4">Categoria</th>
-                      <th className="px-6 py-4">Marca</th>
-                      <th className="px-6 py-4 text-center">UN / Cx</th>
-                      <th className="px-6 py-4 text-right">Preco Base</th>
-                      {lojistaFilter && <th className="px-6 py-4 text-right">Preco Lojista</th>}
-                      <th className="px-6 py-4 text-center">Acoes</th>
+                      <th className="px-3 py-4 w-12">Ativo</th>
+                      <th className="px-2 py-4 w-16">Foto</th>
+                      <th className="px-3 py-4">Codigo</th>
+                      <th className="px-3 py-4">Nome</th>
+                      <th className="px-3 py-4">Categoria</th>
+                      <th className="px-3 py-4">Marca</th>
+                      <th className="px-3 py-4 text-center">UN / Cx</th>
+                      <th className="px-3 py-4 text-right">Preco Base</th>
+                      {lojistaFilter && <th className="px-3 py-4 text-right">Preco Lojista</th>}
+                      <th className="px-3 py-4 text-center">Acoes</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -2304,24 +2304,24 @@ export default function FornecedorCatalogoPage() {
                               </svg>
                             </button>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-3 py-4">
                             <ToggleSwitch
                               checked={item.ativo}
                               onChange={(val) => handleToggleAtivo(item.id, val)}
                             />
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-2 py-2">
                             <ProductImageUpload item={item} onUploaded={handleImageUploaded} />
                           </td>
-                          <td className="px-6 py-4 text-sm font-mono text-gray-700">{item.codigo || '-'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 font-medium max-w-xs truncate">
+                          <td className="px-3 py-4 text-sm font-mono text-gray-700">{item.codigo || '-'}</td>
+                          <td className="px-3 py-4 text-sm text-gray-900 font-medium max-w-[200px] truncate">
                             {item.nome}
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-3 py-2">
                             <select
                               value={item.categoria || ''}
                               onChange={(e) => handleCategoriaChange(item.id, e.target.value || null)}
-                              className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white w-full"
+                              className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white w-full max-w-[140px]"
                             >
                               <option value="">Sem categoria</option>
                               {CATEGORIAS_PET.map(cat => (
@@ -2329,12 +2329,12 @@ export default function FornecedorCatalogoPage() {
                               ))}
                             </select>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{item.marca || '-'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-500 text-center">
+                          <td className="px-3 py-4 text-sm text-gray-500">{item.marca || '-'}</td>
+                          <td className="px-3 py-4 text-sm text-gray-500 text-center">
                             {item.unidade || '-'}
                             {item.itens_por_caixa ? ` / ${item.itens_por_caixa} un` : ''}
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-3 py-4 text-right">
                             <InlinePriceEditor
                               value={item.preco_base}
                               onSave={(val) => handleUpdatePreco(item.id, val)}
@@ -2342,7 +2342,7 @@ export default function FornecedorCatalogoPage() {
                             />
                           </td>
                           {lojistaFilter && (
-                            <td className="px-6 py-4 text-right">
+                            <td className="px-3 py-4 text-right">
                               {hasCustomPrice ? (
                                 <span className="text-sm font-semibold text-[#336FB6]">
                                   {formatCurrency(item.preco_customizado)}
@@ -2357,10 +2357,10 @@ export default function FornecedorCatalogoPage() {
                               )}
                             </td>
                           )}
-                          <td className="px-6 py-4 text-center">
+                          <td className="px-3 py-4 text-center">
                             <button
                               onClick={() => setModalItem(item)}
-                              className="inline-flex items-center gap-1.5 text-xs text-[#336FB6] hover:text-[#2660a5] font-medium px-3 py-1.5 border border-[#336FB6]/20 rounded-lg hover:bg-[#336FB6]/5 transition-colors"
+                              className="inline-flex items-center gap-1.5 text-xs text-[#336FB6] hover:text-[#2660a5] font-medium px-2.5 py-1.5 border border-[#336FB6]/20 rounded-lg hover:bg-[#336FB6]/5 transition-colors whitespace-nowrap"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
