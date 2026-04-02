@@ -96,6 +96,7 @@ function PedidosContent() {
   const [fornecedorFilter, setFornecedorFilter] = useState(searchParams.get('fornecedor_id') || '')
   const [lojistaFilter, setLojistaFilter] = useState('')
   const [apenasFlowB2B, setApenasFlowB2B] = useState(true)
+  const [viewMode, setViewMode] = useState<'tabela' | 'kanban'>('tabela')
   const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
   const [total, setTotal] = useState(0)
@@ -237,18 +238,50 @@ function PedidosContent() {
             </p>
           </div>
 
-          {/* Search */}
-          <div className="relative w-full sm:w-80">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <SearchIcon />
+          <div className="flex items-center gap-3">
+            {/* View toggle */}
+            <div className="flex bg-gray-100 rounded-xl p-0.5">
+              <button
+                onClick={() => setViewMode('tabela')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  viewMode === 'tabela'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <svg className="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v1.5c0 .621-.504 1.125-1.125 1.125" />
+                </svg>
+                Tabela
+              </button>
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  viewMode === 'kanban'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <svg className="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
+                </svg>
+                Kanban
+              </button>
             </div>
-            <input
-              type="text"
-              placeholder="Buscar por numero, fornecedor, lojista..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-colors"
-            />
+
+            {/* Search */}
+            <div className="relative w-full sm:w-80">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <SearchIcon />
+              </div>
+              <input
+                type="text"
+                placeholder="Buscar por numero, fornecedor, lojista..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-colors"
+              />
+            </div>
           </div>
         </div>
 
@@ -352,7 +385,79 @@ function PedidosContent() {
               <p className="text-sm text-gray-400 mt-1">Tente buscar com outros termos</p>
             )}
           </div>
+        ) : viewMode === 'kanban' ? (
+          /* ── KANBAN VIEW ── */
+          <div className="overflow-x-auto pb-4">
+            <div className="flex gap-4 min-w-max">
+              {[
+                { status: 'enviado_fornecedor', label: 'Aguardando', bg: 'bg-amber-50', dot: 'bg-amber-400', badge: 'bg-amber-100 text-amber-700' },
+                { status: 'sugestao_enviada', label: 'Sugestao Enviada', bg: 'bg-blue-50', dot: 'bg-blue-400', badge: 'bg-blue-100 text-blue-700' },
+                { status: 'contra_proposta', label: 'Contra-proposta', bg: 'bg-purple-50', dot: 'bg-purple-400', badge: 'bg-purple-100 text-purple-700' },
+                { status: 'aprovado', label: 'Aprovados', bg: 'bg-emerald-50', dot: 'bg-emerald-400', badge: 'bg-emerald-100 text-emerald-700' },
+                { status: 'recusado', label: 'Recusados', bg: 'bg-red-50', dot: 'bg-red-400', badge: 'bg-red-100 text-red-700' },
+              ].map((col) => {
+                const columnPedidos = filteredPedidos.filter((p) => p.status === col.status)
+                const totalValue = columnPedidos.reduce((sum, p) => sum + (p.total || 0), 0)
+                return (
+                  <div key={col.status} className="w-[280px] shrink-0">
+                    {/* Column header */}
+                    <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl mb-3 ${col.bg}`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
+                        <span className="text-sm font-semibold text-gray-700">{col.label}</span>
+                      </div>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${col.badge}`}>
+                        {columnPedidos.length}
+                      </span>
+                    </div>
+
+                    {/* Column total */}
+                    {columnPedidos.length > 0 && (
+                      <div className="text-xs text-gray-400 px-3 mb-2">
+                        Total: <span className="font-semibold text-gray-600">{formatCurrency(totalValue)}</span>
+                      </div>
+                    )}
+
+                    {/* Cards */}
+                    <div className="space-y-2.5 max-h-[calc(100vh-350px)] overflow-y-auto pr-1">
+                      {columnPedidos.length === 0 ? (
+                        <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+                          <p className="text-xs text-gray-400">Nenhum pedido</p>
+                        </div>
+                      ) : (
+                        columnPedidos.map((pedido) => (
+                          <Link
+                            key={pedido.id}
+                            href={`/representante/pedidos/${pedido.id}`}
+                            className="block bg-white rounded-xl border border-gray-200 p-3.5 hover:border-[#336FB6]/30 hover:shadow-md transition-all group"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-bold text-gray-900">#{pedido.numero || pedido.id}</span>
+                              <svg className="w-4 h-4 text-gray-300 group-hover:text-[#336FB6] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                            </div>
+                            <p className="text-xs text-gray-500">{pedido.fornecedor_nome}</p>
+                            <p className="text-sm text-gray-700 font-medium truncate mt-0.5">{pedido.empresa_nome}</p>
+                            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-100">
+                              <span className="text-xs text-gray-400">
+                                {formatDate(pedido.data || pedido.created_at)}
+                              </span>
+                              <span className="text-sm font-bold text-gray-900">
+                                {formatCurrency(pedido.total || 0)}
+                              </span>
+                            </div>
+                          </Link>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         ) : (
+          /* ── TABLE VIEW (grouped by fornecedor) ── */
           <div className="space-y-4">
             {gruposFornecedor.map((grupo) => {
               const isCollapsed = collapsedGroups.has(grupo.fornecedor_id)
