@@ -13,8 +13,8 @@ interface ColaboradorRegister extends RegisterCredentials {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: ColaboradorRegister = await request.json()
-    const { nome, email, password, acceptedTerms, empresa_id, role, isColaborador } = body
+    const body: ColaboradorRegister & { referralCode?: string } = await request.json()
+    const { nome, email, password, acceptedTerms, empresa_id, role, isColaborador, referralCode } = body
 
     // Validar campos obrigatórios
     if (!nome || !email || !password) {
@@ -111,6 +111,33 @@ export async function POST(request: NextRequest) {
       action: 'registro',
       empresaId: empresa_id || null,
     }).catch(console.error)
+
+    // Processar referral se veio de convite de fornecedor
+    if (referralCode) {
+      try {
+        const { data: convite } = await supabase
+          .from('convites_fornecedor')
+          .select('*')
+          .eq('codigo_referral', referralCode)
+          .eq('status', 'pendente')
+          .single()
+
+        if (convite) {
+          await supabase
+            .from('convites_fornecedor')
+            .update({
+              status: 'aceito',
+              user_id: newUser.id,
+              lojista_email: email.toLowerCase(),
+              responded_at: new Date().toISOString(),
+            })
+            .eq('id', convite.id)
+        }
+      } catch {
+        // Referral processing is best-effort — don't block registration
+        console.error('Referral processing failed for code:', referralCode)
+      }
+    }
 
     // TODO: Reabilitar verificação de email quando domínio estiver verificado no Resend
     // const confirmationToken = crypto.randomUUID()
