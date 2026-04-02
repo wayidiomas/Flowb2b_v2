@@ -144,7 +144,8 @@ export async function middleware(request: NextRequest) {
       pathname.startsWith('/api/produtos') || pathname.startsWith('/api/fornecedores') ||
       pathname.startsWith('/api/representantes') || pathname.startsWith('/cadastros') ||
       pathname.startsWith('/api/dashboard') || pathname.startsWith('/api/auth/bling') ||
-      pathname.startsWith('/api/estoque') || pathname.startsWith('/api/compras')
+      pathname.startsWith('/api/estoque') || pathname.startsWith('/api/compras') ||
+      pathname.startsWith('/api/convites')
 
     // Representante tentando acessar rota de lojista
     if (userTipo === 'representante' && isLojistaRoute) {

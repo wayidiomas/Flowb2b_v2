@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDashboardData, useProdutosCurva } from '@/hooks'
@@ -62,6 +62,136 @@ function formatRelativeTime(dateStr: string): string {
 
 type CurvaType = 'A' | 'B' | 'C' | undefined
 
+interface ConvitePendente {
+  id: number
+  fornecedor_nome: string
+  fornecedor_cnpj: string
+}
+
+function ConvitesPendentes() {
+  const [convites, setConvites] = useState<ConvitePendente[]>([])
+  const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState<number | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/convites/pendentes')
+      .then(res => res.json())
+      .then(data => setConvites(data.convites || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  const handleAceitar = useCallback(async (id: number) => {
+    setActionLoading(id)
+    try {
+      const res = await fetch(`/api/convites/${id}/aceitar`, { method: 'POST' })
+      if (!res.ok) throw new Error('Erro ao aceitar convite')
+      setConvites(prev => prev.filter(c => c.id !== id))
+      setToast({ message: 'Convite aceito com sucesso!', type: 'success' })
+    } catch {
+      setToast({ message: 'Erro ao aceitar convite. Tente novamente.', type: 'error' })
+    } finally {
+      setActionLoading(null)
+    }
+  }, [])
+
+  const handleRecusar = useCallback(async (id: number) => {
+    setActionLoading(id)
+    try {
+      const res = await fetch(`/api/convites/${id}/recusar`, { method: 'POST' })
+      if (!res.ok) throw new Error('Erro ao recusar convite')
+      setConvites(prev => prev.filter(c => c.id !== id))
+    } catch {
+      setToast({ message: 'Erro ao recusar convite. Tente novamente.', type: 'error' })
+    } finally {
+      setActionLoading(null)
+    }
+  }, [])
+
+  if (loading || convites.length === 0) return null
+
+  return (
+    <>
+      <div className="space-y-3 mb-6">
+        {convites.map(convite => (
+          <div
+            key={convite.id}
+            className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3"
+          >
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <svg
+                className="w-5 h-5 text-blue-500 mt-0.5 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
+                />
+              </svg>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-blue-800">Convite de fornecedor</p>
+                <p className="text-sm text-gray-700 mt-0.5">
+                  <span className="font-semibold">{convite.fornecedor_nome}</span>{' '}
+                  <span className="text-gray-500 font-mono text-xs">(CNPJ: {convite.fornecedor_cnpj})</span>{' '}
+                  quer ser seu fornecedor no FlowB2B.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 sm:ml-4">
+              <button
+                onClick={() => handleAceitar(convite.id)}
+                disabled={actionLoading === convite.id}
+                className="bg-emerald-500 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {actionLoading === convite.id ? 'Processando...' : 'Aceitar'}
+              </button>
+              <button
+                onClick={() => handleRecusar(convite.id)}
+                disabled={actionLoading === convite.id}
+                className="text-gray-500 hover:text-red-500 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Recusar
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div
+            className={`flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium text-white ${
+              toast.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'
+            }`}
+          >
+            {toast.type === 'success' ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            )}
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function Home() {
   const { loading: authLoading } = useAuth()
   const [curvaSelecionada, setCurvaSelecionada] = useState<CurvaType>('A')
@@ -121,6 +251,8 @@ export default function Home() {
     <RequirePermission permission="relatorios" redirectTo="/compras/pedidos">
     <DashboardLayout>
       <PageHeader title="Dashboard" />
+
+      <ConvitesPendentes />
 
       {/* Principais Metricas */}
       <Card className="mb-6" padding="md">
