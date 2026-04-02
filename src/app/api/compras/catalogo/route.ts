@@ -228,7 +228,7 @@ export async function GET(request: NextRequest) {
     // Buscar itens do catálogo
     let query = supabase
       .from('catalogo_itens')
-      .select('*', { count: 'exact' })
+      .select('*')
       .eq('catalogo_id', catalogoDbId)
       .eq('ativo', true)
 
@@ -246,9 +246,8 @@ export async function GET(request: NextRequest) {
 
     query = query.order('ordem', { ascending: true, nullsFirst: false })
       .order('nome', { ascending: true })
-      .range(offset, offset + limit - 1)
 
-    const { data: itens, error: itensError, count } = await query
+    const { data: itens, error: itensError } = await query
 
     if (itensError) {
       console.error('Erro ao buscar itens do catalogo:', itensError)
@@ -402,9 +401,13 @@ export async function GET(request: NextRequest) {
       itensComFlag = Array.from(seen.values())
     }
 
+    // Paginar em memória após deduplicação
+    const totalAfterDedup = itensComFlag.length
+    const paginatedItens = itensComFlag.slice(offset, offset + limit)
+
     return NextResponse.json({
-      itens: itensComFlag,
-      total: count || 0,
+      itens: paginatedItens,
+      total: totalAfterDedup,
       page,
       limit,
       vinculado: isVinculado,
