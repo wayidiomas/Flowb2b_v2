@@ -81,6 +81,20 @@ interface ImportConfirmResponse {
   resumo: ImportResumo
 }
 
+interface ProdutoExtraido {
+  codigo_fornecedor: string | null
+  codigo_fabricante: string | null
+  nome: string
+  ean: string | null
+  marca: string | null
+  ncm: string | null
+  unidade: string | null
+  itens_por_caixa: number | null
+  preco_base: number
+  preco_com_impostos: number | null
+  bonificacao: number | null
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -1717,6 +1731,18 @@ export default function FornecedorCatalogoPage() {
   const [importStep, setImportStep] = useState<'upload' | 'preview' | 'done'>('upload')
   const [importResult, setImportResult] = useState<ImportConfirmResponse | null>(null)
 
+  // Import PDF state
+  const [showPdfImportModal, setShowPdfImportModal] = useState(false)
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [pdfImporting, setPdfImporting] = useState(false)
+  const [pdfStep, setPdfStep] = useState<'upload' | 'processing' | 'review' | 'saving' | 'done'>('upload')
+  const [pdfProdutos, setPdfProdutos] = useState<ProdutoExtraido[]>([])
+  const [pdfError, setPdfError] = useState<string | null>(null)
+  const [pdfSaving, setPdfSaving] = useState(false)
+  const [pdfJobId, setPdfJobId] = useState<number | null>(null)
+  const [pdfResult, setPdfResult] = useState<{total: number, novos: number, atualizados: number} | null>(null)
+  const [pdfProgress, setPdfProgress] = useState<{current: number, total: number, products: number}>({current: 0, total: 0, products: 0})
+
   // ------ Check if catalog exists ------
   const checkCatalogo = useCallback(async () => {
     setLoading(true)
@@ -1900,6 +1926,102 @@ export default function FornecedorCatalogoPage() {
     } finally {
       setImportando(false)
     }
+  }
+
+  // ------ Import PDF handlers ------
+  const handlePdfUpload = async () => {
+    if (!pdfFile) return
+    setPdfImporting(true)
+    setPdfError(null)
+    setPdfStep('processing')
+    setPdfProgress({ current: 0, total: 0, products: 0 })
+
+    try {
+      // Step 1: Upload PDF and create job
+      const formData = new FormData()
+      formData.append('file', pdfFile)
+      const uploadRes = await fetch('/api/fornecedor/catalogo/importar-pdf', {
+        method: 'POST',
+        body: formData,
+      })
+      const uploadData = await uploadRes.json()
+
+      if (!uploadRes.ok || !uploadData.job_id) {
+        setPdfError(uploadData.error || 'Erro ao enviar PDF')
+        setPdfStep('upload')
+        setPdfImporting(false)
+        return
+      }
+
+      const jobId = uploadData.job_id
+      setPdfJobId(jobId)
+      setPdfProgress({ current: 0, total: uploadData.total_pages || 0, products: 0 })
+
+      // Step 2: Process chunks in loop
+      let done = false
+      while (!done) {
+        const chunkRes = await fetch(`/api/fornecedor/catalogo/importar-pdf/${jobId}/processar`, {
+          method: 'POST',
+        })
+        const chunkData = await chunkRes.json()
+
+        if (!chunkRes.ok) {
+          setPdfError(chunkData.error || 'Erro ao processar chunk')
+          setPdfStep('upload')
+          setPdfImporting(false)
+          return
+        }
+
+        setPdfProgress({
+          current: chunkData.current_page || 0,
+          total: chunkData.total_pages || 0,
+          products: chunkData.products_found || 0,
+        })
+
+        if (chunkData.done) {
+          done = true
+          setPdfProdutos(chunkData.produtos || [])
+          setPdfStep('review')
+        }
+      }
+    } catch {
+      setPdfError('Erro de conexao ao processar PDF')
+      setPdfStep('upload')
+    } finally {
+      setPdfImporting(false)
+    }
+  }
+
+  const handlePdfConfirm = async () => {
+    if (!pdfJobId || pdfProdutos.length === 0) return
+    setPdfSaving(true)
+    setPdfError(null)
+    setPdfStep('saving')
+    try {
+      const res = await fetch(`/api/fornecedor/catalogo/importar-pdf/${pdfJobId}/confirmar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ produtos: pdfProdutos }),
+      })
+      const data = await res.json()
+      if (res.ok && data.total != null) {
+        setPdfResult({ total: data.total, novos: data.novos, atualizados: data.atualizados })
+        setPdfStep('done')
+        fetchItens()
+      } else {
+        setPdfError(data.error || 'Erro ao salvar produtos')
+        setPdfStep('review')
+      }
+    } catch {
+      setPdfError('Erro de conexao ao salvar produtos')
+      setPdfStep('review')
+    } finally {
+      setPdfSaving(false)
+    }
+  }
+
+  const handlePdfRemove = (index: number) => {
+    setPdfProdutos((prev) => prev.filter((_, i) => i !== index))
   }
 
   // ------ Toggle ativo ------
@@ -2140,6 +2262,14 @@ export default function FornecedorCatalogoPage() {
               leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>}
             >
               Importar Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setShowPdfImportModal(true); setPdfStep('upload'); setPdfFile(null); setPdfProdutos([]); setPdfError(null); setPdfResult(null); setPdfJobId(null) }}
+              leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>}
+            >
+              Importar PDF
             </Button>
             <Button
               variant="outline"
@@ -2705,6 +2835,220 @@ export default function FornecedorCatalogoPage() {
               {importStep === 'done' && (
                 <Button variant="primary" size="sm" onClick={() => setShowImportModal(false)}>Fechar</Button>
               )}
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal Importar PDF */}
+      <Modal isOpen={showPdfImportModal} onClose={() => !pdfImporting && !pdfSaving && setShowPdfImportModal(false)} size="lg">
+        <ModalHeader onClose={() => !pdfImporting && !pdfSaving && setShowPdfImportModal(false)}>
+          <ModalTitle>Importar Catalogo via PDF</ModalTitle>
+          <ModalDescription>Extraia produtos automaticamente do seu catalogo em PDF usando IA</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          {pdfStep === 'upload' && (
+            <div className="space-y-5">
+              {/* Format tabs */}
+              <div className="flex gap-2">
+                <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-[#336FB6] text-white">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                  PDF
+                </button>
+                <button disabled className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 text-gray-400 cursor-not-allowed">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M12 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M3.375 12H12m0 0v1.5c0 .621.504 1.125 1.125 1.125m1.125 2.625h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M12 14.625v1.5c0 .621-.504 1.125-1.125 1.125" /></svg>
+                  Excel
+                  <span className="ml-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-gray-200 text-gray-500">Em breve</span>
+                </button>
+              </div>
+
+              {/* Drag & drop zone */}
+              <div className="relative">
+                <input
+                  type="file"
+                  accept=".pdf"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  onChange={(e) => { setPdfFile(e.target.files?.[0] || null); setPdfError(null) }}
+                />
+                <div className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${pdfFile ? 'border-[#336FB6] bg-[#336FB6]/5' : 'border-gray-300 hover:border-[#336FB6]'}`}>
+                  {pdfFile ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <svg className="w-10 h-10 text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-sm font-semibold text-[#336FB6]">{pdfFile.name}</p>
+                      <p className="text-xs text-gray-500">{(pdfFile.size / (1024 * 1024)).toFixed(1)} MB</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-3 text-gray-500">
+                      <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium">Arraste o PDF aqui ou clique para selecionar</p>
+                        <p className="text-xs text-gray-400 mt-1">Aceita arquivos .pdf ate 50MB</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {pdfError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                  {pdfError}
+                </div>
+              )}
+            </div>
+          )}
+
+          {pdfStep === 'processing' && (
+            <div className="flex flex-col items-center justify-center py-12 gap-5">
+              <svg className="w-12 h-12 animate-spin text-[#336FB6]" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <div className="text-center">
+                <p className="text-base font-semibold text-gray-900">Extraindo produtos do PDF com IA...</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {pdfProgress.total > 0
+                    ? `Pagina ${pdfProgress.current} de ${pdfProgress.total} · ${pdfProgress.products} produtos encontrados`
+                    : 'Enviando PDF...'}
+                </p>
+              </div>
+              {pdfProgress.total > 0 && (
+                <div className="w-full max-w-xs">
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#336FB6] rounded-full transition-all duration-500"
+                      style={{ width: `${Math.round((pdfProgress.current / pdfProgress.total) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 text-center mt-1">
+                    {Math.round((pdfProgress.current / pdfProgress.total) * 100)}%
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {pdfStep === 'review' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-semibold text-gray-900">{pdfProdutos.length} produtos extraidos</span>
+              </div>
+
+              {pdfError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                  {pdfError}
+                </div>
+              )}
+
+              <div className="max-h-[400px] overflow-y-auto border border-gray-200 rounded-xl">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Codigo</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Nome</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">EAN</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Marca</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-600">UN</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-600">Cx</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-600">Preco</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-600 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {pdfProdutos.map((prod, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-mono text-gray-700">{prod.codigo_fornecedor || '-'}</td>
+                        <td className="px-3 py-2 text-gray-900 max-w-[200px] truncate">{prod.nome}</td>
+                        <td className="px-3 py-2 font-mono text-gray-500">{prod.ean || '-'}</td>
+                        <td className="px-3 py-2 text-gray-500">{prod.marca || '-'}</td>
+                        <td className="px-3 py-2 text-center text-gray-500">{prod.unidade || 'UN'}</td>
+                        <td className="px-3 py-2 text-center text-gray-500">{prod.itens_por_caixa || '-'}</td>
+                        <td className="px-3 py-2 text-right font-medium text-gray-900">{formatCurrency(prod.preco_base)}</td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => handlePdfRemove(idx)}
+                            className="p-1 text-gray-400 hover:text-red-500 transition-colors rounded-md hover:bg-red-50"
+                            title="Remover produto"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {pdfStep === 'saving' && (
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <svg className="w-12 h-12 animate-spin text-[#336FB6]" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <div className="text-center">
+                <p className="text-base font-semibold text-gray-900">Salvando produtos no catalogo...</p>
+              </div>
+            </div>
+          )}
+
+          {pdfStep === 'done' && pdfResult && (
+            <div className="text-center py-8">
+              <svg className="w-16 h-16 text-emerald-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">Catalogo atualizado com sucesso!</h4>
+              <p className="text-sm text-gray-600">
+                {pdfResult.total} produtos importados ({pdfResult.novos} novos, {pdfResult.atualizados} atualizados)
+              </p>
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          {pdfStep === 'upload' && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setShowPdfImportModal(false)}>Cancelar</Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={pdfImporting}
+                onClick={handlePdfUpload}
+                disabled={!pdfFile}
+              >
+                Enviar e Processar
+              </Button>
+            </>
+          )}
+          {pdfStep === 'review' && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => { setPdfStep('upload'); setPdfError(null) }}>Voltar</Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={pdfSaving}
+                onClick={handlePdfConfirm}
+                disabled={pdfProdutos.length === 0}
+              >
+                {`Confirmar e Salvar (${pdfProdutos.length} produtos)`}
+              </Button>
+            </>
+          )}
+          {pdfStep === 'done' && (
+            <Button variant="primary" size="sm" onClick={() => { setShowPdfImportModal(false); checkCatalogo() }}>Fechar</Button>
+          )}
         </ModalFooter>
       </Modal>
 
