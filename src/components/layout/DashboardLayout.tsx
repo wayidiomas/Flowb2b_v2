@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { TrialExpiredModal } from '@/components/trial'
 import { BlingRevokeModal } from '@/components/bling'
 import OnboardingModal from '@/components/onboarding/OnboardingModal'
+import CatalogoUpdateModal from '@/components/catalogo/CatalogoUpdateModal'
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -15,6 +16,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { trialStatus, logout, empresa, user, loading: authLoading, refreshUser } = useAuth()
   const [blingRevoked, setBlingRevoked] = useState(false)
+  const [catalogoUpdate, setCatalogoUpdate] = useState<{catalogoId: number, nome: string, total: number} | null>(null)
 
   // Checar status do Bling quando empresa muda
   useEffect(() => {
@@ -32,6 +34,31 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
     checkBlingStatus()
   }, [empresa?.id])
+
+  // Checar atualizações de catálogo pendentes
+  useEffect(() => {
+    if (!empresa?.id || !user) return
+
+    const checkCatalogoUpdates = async () => {
+      try {
+        const res = await fetch('/api/catalogo-atualizacoes/pendentes')
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.tem_pendentes && data.catalogos?.length > 0) {
+          const primeiro = data.catalogos[0]
+          setCatalogoUpdate({
+            catalogoId: primeiro.catalogo_id,
+            nome: primeiro.nome,
+            total: primeiro.total_pendentes,
+          })
+        }
+      } catch { /* silencioso */ }
+    }
+
+    checkCatalogoUpdates()
+    const interval = setInterval(checkCatalogoUpdates, 5 * 60 * 1000) // a cada 5 min
+    return () => clearInterval(interval)
+  }, [empresa?.id, user])
 
   // Mostrar onboarding se usuario logado mas sem empresa
   const showOnboarding = !authLoading && user && !empresa
@@ -64,6 +91,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {/* Modal de Bling revogado - so mostra se nao tem onboarding/trial bloqueando */}
       {!showOnboarding && !showTrialModal && (
         <BlingRevokeModal isOpen={blingRevoked} empresaId={empresa?.id ?? null} />
+      )}
+
+      {/* Modal de atualização de catálogo */}
+      {!showOnboarding && !showTrialModal && catalogoUpdate && (
+        <CatalogoUpdateModal
+          catalogoId={catalogoUpdate.catalogoId}
+          catalogoNome={catalogoUpdate.nome}
+          totalPendentes={catalogoUpdate.total}
+          onClose={() => setCatalogoUpdate(null)}
+          onComplete={() => setCatalogoUpdate(null)}
+        />
       )}
     </div>
   )
