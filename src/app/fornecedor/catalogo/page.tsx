@@ -1743,6 +1743,11 @@ export default function FornecedorCatalogoPage() {
   const [pdfResult, setPdfResult] = useState<{total: number, novos: number, atualizados: number} | null>(null)
   const [pdfProgress, setPdfProgress] = useState<{current: number, total: number, products: number}>({current: 0, total: 0, products: 0})
 
+  // Respostas dos Lojistas state
+  const [respostas, setRespostas] = useState<any[]>([])
+  const [showRespostasModal, setShowRespostasModal] = useState(false)
+  const [loadingRespostas, setLoadingRespostas] = useState(false)
+
   // ------ Check if catalog exists ------
   const checkCatalogo = useCallback(async () => {
     setLoading(true)
@@ -1877,6 +1882,22 @@ export default function FornecedorCatalogoPage() {
       setToast({ message: 'Erro de conexao ao sincronizar.', type: 'error' })
     } finally {
       setSyncing(false)
+    }
+  }
+
+  // ------ Fetch respostas dos lojistas ------
+  const fetchRespostas = async () => {
+    setLoadingRespostas(true)
+    try {
+      const res = await fetch('/api/fornecedor/catalogo/respostas')
+      if (res.ok) {
+        const data = await res.json()
+        setRespostas(data.respostas || [])
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setLoadingRespostas(false)
     }
   }
 
@@ -2270,6 +2291,19 @@ export default function FornecedorCatalogoPage() {
               leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>}
             >
               Importar PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setShowRespostasModal(true); fetchRespostas() }}
+              leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>}
+            >
+              Respostas
+              {respostas.reduce((acc, r) => acc + r.itens.filter((i: any) => i.status === 'rejeitado').length, 0) > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
+                  {respostas.reduce((acc: number, r: any) => acc + r.itens.filter((i: any) => i.status === 'rejeitado').length, 0)}
+                </span>
+              )}
             </Button>
             <Button
               variant="outline"
@@ -3153,6 +3187,133 @@ export default function FornecedorCatalogoPage() {
         <ModalFooter>
           <Button variant="outline" size="md" onClick={() => setShowPerfilModal(false)}>Cancelar</Button>
           <Button variant="primary" size="md" loading={salvandoPerfil} onClick={handleSalvarPerfil}>Salvar</Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal Respostas dos Lojistas */}
+      <Modal isOpen={showRespostasModal} onClose={() => setShowRespostasModal(false)} size="xl">
+        <ModalHeader>
+          <ModalTitle>Respostas dos Lojistas</ModalTitle>
+          <ModalDescription>Veja como os lojistas responderam as atualizacoes do seu catalogo</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          {loadingRespostas ? (
+            <div className="space-y-4">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          ) : respostas.length === 0 ? (
+            <div className="text-center py-12">
+              <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+              </svg>
+              <p className="text-gray-500 text-sm">Nenhuma resposta dos lojistas ainda</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {respostas.map((empresa: any) => (
+                <div key={empresa.empresa_id} className="border border-gray-200 rounded-xl overflow-hidden">
+                  {/* Empresa Header */}
+                  <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-900">{empresa.empresa_nome}</h3>
+                    {empresa.empresa_cnpj && (
+                      <p className="text-xs text-gray-500 mt-0.5">CNPJ: {empresa.empresa_cnpj}</p>
+                    )}
+                  </div>
+                  {/* Items Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50/50">
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Produto</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Status</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Detalhes</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Data</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-gray-500 uppercase"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {empresa.itens.map((item: any) => {
+                          const tipoLabel: Record<string, string> = {
+                            preco: 'Preco',
+                            novo: 'Novo produto',
+                            removido: 'Removido',
+                            dados: 'Dados',
+                          }
+                          const precoAntigo = item.dados_antigos?.preco_base ?? item.dados_antigos?.valor_de_compra
+                          const precoNovo = item.dados_novos?.preco_base ?? item.dados_novos?.valor_de_compra
+
+                          return (
+                            <tr key={item.id} className="hover:bg-gray-50/50">
+                              <td className="px-4 py-2.5">
+                                <p className="font-medium text-gray-900 truncate max-w-[200px]">{item.item_nome || '-'}</p>
+                                {item.item_codigo && (
+                                  <p className="text-xs text-gray-400">{item.item_codigo}</p>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-700">
+                                  {tipoLabel[item.tipo] || item.tipo}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {item.status === 'aceito' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                    </svg>
+                                    Aceito
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 text-red-700">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Rejeitado
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-gray-500">
+                                {item.tipo === 'preco' && precoAntigo != null && precoNovo != null ? (
+                                  <span>
+                                    {formatCurrency(precoAntigo)} <span className="mx-1 text-gray-400">&rarr;</span> {formatCurrency(precoNovo)}
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">
+                                {item.respondido_em
+                                  ? new Date(item.respondido_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                  : '-'}
+                              </td>
+                              <td className="px-4 py-2.5 text-right">
+                                {item.status === 'rejeitado' && (
+                                  <button
+                                    className="text-xs font-medium text-[#336FB6] hover:text-[#2a5a94] transition-colors"
+                                    onClick={() => {
+                                      // Placeholder - future reenviar functionality
+                                      setToast({ message: 'Funcionalidade de reenvio em breve!', type: 'warning' })
+                                    }}
+                                  >
+                                    Reenviar
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" size="md" onClick={() => setShowRespostasModal(false)}>Fechar</Button>
         </ModalFooter>
       </Modal>
     </FornecedorLayout>
