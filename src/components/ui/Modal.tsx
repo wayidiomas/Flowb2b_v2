@@ -7,25 +7,29 @@ interface ModalProps {
   isOpen: boolean
   onClose: () => void
   children: ReactNode
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full'
   /** Se true, modal fica fullscreen no mobile (padrao: true) */
   mobileFullScreen?: boolean
 }
 
 // Desktop: modal centrado com max-width por tamanho
-const sizeStyles = {
+const sizeStyles: Record<string, string> = {
   sm: 'max-w-sm',
   md: 'max-w-md',
   lg: 'max-w-lg',
   xl: 'max-w-xl',
+  '2xl': 'max-w-5xl',
+  full: 'max-w-[95vw] max-h-[90vh]',
 }
 
 // Mobile fullscreen: no mobile sem max-width, no desktop aplica max-width
-const sizeStylesResponsive = {
+const sizeStylesResponsive: Record<string, string> = {
   sm: 'max-w-none md:max-w-sm',
   md: 'max-w-none md:max-w-md',
   lg: 'max-w-none md:max-w-lg',
   xl: 'max-w-none md:max-w-xl',
+  '2xl': 'max-w-none md:max-w-5xl',
+  full: 'max-w-none md:max-w-[95vw] md:max-h-[90vh]',
 }
 
 function Modal({ isOpen, onClose, children, size = 'md', mobileFullScreen = true }: ModalProps) {

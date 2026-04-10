@@ -42,6 +42,7 @@ export async function GET(
     }
 
     const response: Record<string, unknown> = {
+      catalogo_id: job.catalogo_id,
       status: job.status,
       progress: {
         current_page: job.current_page ?? null,

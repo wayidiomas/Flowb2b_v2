@@ -1734,14 +1734,16 @@ export default function FornecedorCatalogoPage() {
   // Import PDF state
   const [showPdfImportModal, setShowPdfImportModal] = useState(false)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const pdfInputRef = useRef<HTMLInputElement>(null)
   const [pdfImporting, setPdfImporting] = useState(false)
-  const [pdfStep, setPdfStep] = useState<'upload' | 'processing' | 'review' | 'saving' | 'done'>('upload')
+  const [pdfStep, setPdfStep] = useState<'upload' | 'processing' | 'review' | 'saving' | 'scraping' | 'done'>('upload')
   const [pdfProdutos, setPdfProdutos] = useState<ProdutoExtraido[]>([])
   const [pdfError, setPdfError] = useState<string | null>(null)
   const [pdfSaving, setPdfSaving] = useState(false)
   const [pdfJobId, setPdfJobId] = useState<number | null>(null)
   const [pdfResult, setPdfResult] = useState<{total: number, novos: number, atualizados: number} | null>(null)
   const [pdfProgress, setPdfProgress] = useState<{current: number, total: number, products: number}>({current: 0, total: 0, products: 0})
+  const [imgProgress, setImgProgress] = useState<{processed: number, total: number, found: number}>({processed: 0, total: 0, found: 0})
 
   // Respostas dos Lojistas state
   const [respostas, setRespostas] = useState<any[]>([])
@@ -2027,8 +2029,47 @@ export default function FornecedorCatalogoPage() {
       const data = await res.json()
       if (res.ok && data.total != null) {
         setPdfResult({ total: data.total, novos: data.novos, atualizados: data.atualizados })
-        setPdfStep('done')
         fetchItens()
+
+        // Get catalogo_id from job to start image scraping
+        const jobRes = await fetch(`/api/fornecedor/catalogo/importar-pdf/${pdfJobId}`)
+        const jobData = await jobRes.json()
+        const catalogoId = jobData?.catalogo_id
+
+        if (catalogoId) {
+          setPdfStep('scraping')
+          setImgProgress({ processed: 0, total: 0, found: 0 })
+
+          let done = false
+          let totalProcessed = 0
+          let totalFound = 0
+
+          while (!done) {
+            try {
+              const imgRes = await fetch('/api/fornecedor/catalogo/processar-imagens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ catalogo_id: catalogoId }),
+              })
+              const imgData = await imgRes.json()
+
+              totalProcessed += imgData.processed || 0
+              totalFound += imgData.com_imagem || 0
+
+              setImgProgress({
+                processed: totalProcessed,
+                total: imgData.total_sem_imagem || totalProcessed,
+                found: totalFound,
+              })
+
+              done = imgData.done || imgData.remaining === 0
+            } catch {
+              done = true
+            }
+          }
+        }
+
+        setPdfStep('done')
       } else {
         setPdfError(data.error || 'Erro ao salvar produtos')
         setPdfStep('review')
@@ -2872,8 +2913,17 @@ export default function FornecedorCatalogoPage() {
         </ModalFooter>
       </Modal>
 
+      {/* Input file fora do modal (createPortal bloqueia file picker dentro de portals) */}
+      <input
+        ref={pdfInputRef}
+        type="file"
+        accept=".pdf"
+        style={{ display: 'none' }}
+        onChange={(e) => { setPdfFile(e.target.files?.[0] || null); setPdfError(null); if (e.target) e.target.value = '' }}
+      />
+
       {/* Modal Importar PDF */}
-      <Modal isOpen={showPdfImportModal} onClose={() => !pdfImporting && !pdfSaving && setShowPdfImportModal(false)} size="lg">
+      <Modal isOpen={showPdfImportModal} onClose={() => !pdfImporting && !pdfSaving && setShowPdfImportModal(false)} size="full">
         <ModalHeader onClose={() => !pdfImporting && !pdfSaving && setShowPdfImportModal(false)}>
           <ModalTitle>Importar Catalogo via PDF</ModalTitle>
           <ModalDescription>Extraia produtos automaticamente do seu catalogo em PDF usando IA</ModalDescription>
@@ -2895,14 +2945,12 @@ export default function FornecedorCatalogoPage() {
               </div>
 
               {/* Drag & drop zone */}
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".pdf"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                  onChange={(e) => { setPdfFile(e.target.files?.[0] || null); setPdfError(null) }}
-                />
-                <div className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${pdfFile ? 'border-[#336FB6] bg-[#336FB6]/5' : 'border-gray-300 hover:border-[#336FB6]'}`}>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => pdfInputRef.current?.click()}
+                  className={`w-full border-2 border-dashed rounded-2xl p-8 text-center transition-colors cursor-pointer ${pdfFile ? 'border-[#336FB6] bg-[#336FB6]/5' : 'border-gray-300 hover:border-[#336FB6] hover:bg-gray-50'}`}
+                >
                   {pdfFile ? (
                     <div className="flex flex-col items-center gap-2">
                       <svg className="w-10 h-10 text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -2922,7 +2970,7 @@ export default function FornecedorCatalogoPage() {
                       </div>
                     </div>
                   )}
-                </div>
+                </button>
               </div>
 
               {pdfError && (
@@ -3039,6 +3087,48 @@ export default function FornecedorCatalogoPage() {
             </div>
           )}
 
+          {pdfStep === 'scraping' && (
+            <div className="flex flex-col items-center justify-center py-12 gap-5">
+              <svg className="w-12 h-12 animate-spin text-[#FFAA11]" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <div className="text-center">
+                <p className="text-base font-semibold text-gray-900">Buscando imagens dos produtos...</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {imgProgress.total > 0
+                    ? `${imgProgress.processed} de ${imgProgress.total} produtos · ${imgProgress.found} imagens encontradas`
+                    : 'Iniciando busca em Cobasi, Petlove, Amazon, ML, Magalu, Petz...'}
+                </p>
+              </div>
+              {imgProgress.total > 0 && (
+                <div className="w-full max-w-xs">
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#FFAA11] rounded-full transition-all duration-500"
+                      style={{ width: `${Math.round((imgProgress.processed / imgProgress.total) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1 text-xs text-gray-400">
+                    <span>{Math.round((imgProgress.processed / imgProgress.total) * 100)}%</span>
+                    <span>{imgProgress.found} imagens</span>
+                  </div>
+                </div>
+              )}
+              {pdfResult && (
+                <div className="mt-2 px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+                  {pdfResult.total} produtos salvos ({pdfResult.novos} novos, {pdfResult.atualizados} atualizados)
+                </div>
+              )}
+              <button
+                onClick={() => setPdfStep('done')}
+                className="text-xs text-gray-400 hover:text-gray-600 underline mt-2"
+              >
+                Pular busca de imagens
+              </button>
+            </div>
+          )}
+
           {pdfStep === 'done' && pdfResult && (
             <div className="text-center py-8">
               <svg className="w-16 h-16 text-emerald-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -3048,6 +3138,11 @@ export default function FornecedorCatalogoPage() {
               <p className="text-sm text-gray-600">
                 {pdfResult.total} produtos importados ({pdfResult.novos} novos, {pdfResult.atualizados} atualizados)
               </p>
+              {imgProgress.found > 0 && (
+                <p className="text-sm text-[#FFAA11] mt-1">
+                  {imgProgress.found} imagens encontradas automaticamente
+                </p>
+              )}
             </div>
           )}
         </ModalBody>
