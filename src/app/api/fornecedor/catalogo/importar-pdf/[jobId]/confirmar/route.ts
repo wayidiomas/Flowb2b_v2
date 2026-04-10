@@ -80,10 +80,19 @@ export async function POST(
       }
     }
 
+    // Dedup: se IA extraiu mesmo produto 2x (split entre páginas), manter apenas 1
+    const seenKeys = new Set<string>()
+    const produtosDedup = produtos.filter(p => {
+      const key = p.ean || p.codigo_fornecedor || p.nome
+      if (!key || seenKeys.has(key)) return false
+      seenKeys.add(key)
+      return true
+    })
+
     const toInsert: Array<Record<string, unknown>> = []
     const toUpdate: Array<{ id: number; data: Record<string, unknown> }> = []
 
-    for (const produto of produtos) {
+    for (const produto of produtosDedup) {
       let existingId: number | null = null
 
       if (produto.ean && existingByEan.has(produto.ean)) {
@@ -101,6 +110,7 @@ export async function POST(
         unidade: produto.unidade || 'UN',
         itens_por_caixa: produto.itens_por_caixa ?? 1,
         preco_base: produto.preco_base ?? 0,
+        categoria: produto.categoria || null,
         ativo: true,
       }
 
@@ -145,9 +155,10 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      total: produtos.length,
+      total: produtosDedup.length,
       novos,
       atualizados,
+      duplicados_removidos: produtos.length - produtosDedup.length,
     })
   } catch (error) {
     console.error('Erro ao confirmar importacao:', error)

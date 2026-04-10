@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
+import sharp from 'sharp'
 
 const SCRAPER_API = process.env.VALIDACAO_EAN_URL || 'https://validacao-ean-cwrd.onrender.com'
 const BATCH_SIZE = 5
@@ -73,27 +74,40 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({ ean: item.ean, nome: item.nome || '' }),
         })
 
-        if (!res.ok) continue
+        if (!res.ok) { console.log(`[IMG] ${item.ean} scraper HTTP ${res.status}`); continue }
 
         const data = await res.json()
-        if (!data.success || !data.image_url) continue
+        if (!data.success || !data.image_url) { console.log(`[IMG] ${item.ean} not found (source: ${data.source || 'none'})`); continue }
+
+        console.log(`[IMG] ${item.ean} found on ${data.source}: ${data.image_url.substring(0, 80)}`)
+
+        // Skip SVGs and non-image URLs
+        const imgUrl: string = data.image_url
+        if (imgUrl.includes('.svg') || imgUrl.includes('icon_') || imgUrl.includes('/uploads/icon')) {
+          console.log(`[IMG] ${item.ean} skipped SVG/icon: ${imgUrl.substring(0, 60)}`)
+          continue
+        }
 
         // Download image
-        const imgRes = await fetch(data.image_url)
-        if (!imgRes.ok) continue
+        const imgRes = await fetch(imgUrl)
+        if (!imgRes.ok) { console.log(`[IMG] ${item.ean} download failed: ${imgRes.status}`); continue }
 
-        const imgBuffer = Buffer.from(await imgRes.arrayBuffer())
-        if (imgBuffer.length < 5000) continue
+        const rawBuffer = Buffer.from(await imgRes.arrayBuffer())
+        if (rawBuffer.length < 5000) { console.log(`[IMG] ${item.ean} too small: ${rawBuffer.length} bytes`); continue }
 
-        const contentType = imgRes.headers.get('content-type') || 'image/jpeg'
-        const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
-        const storagePath = `${catalogo_id}/${item.ean}.${ext}`
+        // Resize to max 800x800 and convert to JPEG
+        const imgBuffer = await sharp(rawBuffer)
+          .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 85 })
+          .toBuffer()
+
+        const storagePath = `${catalogo_id}/${item.ean}.jpg`
 
         const { error: uploadError } = await supabase.storage
           .from('catalogo-imagens')
-          .upload(storagePath, imgBuffer, { contentType, upsert: true })
+          .upload(storagePath, imgBuffer, { contentType: 'image/jpeg', upsert: true })
 
-        if (uploadError) continue
+        if (uploadError) { console.log(`[IMG] ${item.ean} upload error:`, uploadError.message); continue }
 
         const { data: publicUrl } = supabase.storage
           .from('catalogo-imagens')

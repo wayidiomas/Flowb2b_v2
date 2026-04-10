@@ -65,7 +65,8 @@ export async function POST(
       .download(job.pdf_url)
 
     if (downloadError || !fileData) {
-      return NextResponse.json({ error: 'Erro ao baixar PDF' }, { status: 500 })
+      console.error('Erro download PDF:', downloadError?.message, 'path:', job.pdf_url)
+      return NextResponse.json({ error: `Erro ao baixar PDF: ${downloadError?.message || 'arquivo vazio'}` }, { status: 500 })
     }
 
     const pdfBuffer = Buffer.from(await fileData.arrayBuffer())

@@ -93,6 +93,7 @@ interface ProdutoExtraido {
   preco_base: number
   preco_com_impostos: number | null
   bonificacao: number | null
+  categoria: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -2461,16 +2462,7 @@ export default function FornecedorCatalogoPage() {
             <span className="text-sm text-gray-600">Inativos</span>
           </label>
 
-          {/* Sync Bling toggle */}
-          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-500">
-            <input
-              type="checkbox"
-              checked={syncBling}
-              onChange={(e) => setSyncBling(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20"
-            />
-            Sincronizar precos com Bling
-          </label>
+          {/* Sync Bling toggle - oculto para fornecedor (interno) */}
         </div>
 
         {/* Content */}
@@ -3086,6 +3078,7 @@ export default function FornecedorCatalogoPage() {
                       <th className="px-3 py-2 text-left font-semibold text-gray-600">Nome</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-600">EAN</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-600">Marca</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Categoria</th>
                       <th className="px-3 py-2 text-center font-semibold text-gray-600">UN</th>
                       <th className="px-3 py-2 text-center font-semibold text-gray-600">Cx</th>
                       <th className="px-3 py-2 text-right font-semibold text-gray-600">Preco</th>
@@ -3099,6 +3092,7 @@ export default function FornecedorCatalogoPage() {
                         <td className="px-3 py-2 text-gray-900 max-w-[200px] truncate">{prod.nome}</td>
                         <td className="px-3 py-2 font-mono text-gray-500">{prod.ean || '-'}</td>
                         <td className="px-3 py-2 text-gray-500">{prod.marca || '-'}</td>
+                        <td className="px-3 py-2 text-gray-500">{prod.categoria || '-'}</td>
                         <td className="px-3 py-2 text-center text-gray-500">{prod.unidade || 'UN'}</td>
                         <td className="px-3 py-2 text-center text-gray-500">{prod.itens_por_caixa || '-'}</td>
                         <td className="px-3 py-2 text-right font-medium text-gray-900">{formatCurrency(prod.preco_base)}</td>

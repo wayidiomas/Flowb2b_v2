@@ -17,6 +17,7 @@ export interface ProdutoExtraido {
   preco_base: number
   preco_com_impostos: number | null
   bonificacao: number | null
+  categoria: string | null
 }
 
 export interface ExtractionResult {
@@ -59,7 +60,7 @@ async function extrairChunkPdf(pdfBuffer: Buffer, startPage: number, endPage: nu
 // ---------------------------------------------------------------------------
 
 const PROMPT = `Voce e um OCR especializado em catalogos e cotacoes B2B de fornecedores pet.
-O sistema armazena produtos com estes campos: codigo_fornecedor, codigo_fabricante, nome, ean (13 digitos), marca, ncm, unidade, itens_por_caixa, preco_base, preco_com_impostos, bonificacao.
+O sistema armazena produtos com estes campos: codigo_fornecedor, codigo_fabricante, nome, ean (13 digitos), marca, ncm, unidade, itens_por_caixa, preco_base, preco_com_impostos, bonificacao, categoria.
 
 Extraia TODOS os produtos de TODAS as paginas deste trecho de PDF.
 
@@ -72,6 +73,17 @@ Mapeamento de campos (o PDF pode usar nomes diferentes):
 - "Emb" tipo "UN C/ 4" = unidade "UN", itens_por_caixa 4
 - "Bonif" = bonificacao
 - "(P)PREMIER PET" = marca "PREMIER PET"
+
+Para o campo "categoria", classifique cada produto em UMA destas categorias baseado no nome/tipo:
+- "Racoes Caes" (racao, formula, form, golden form, premier caes)
+- "Racoes Gatos" (racao gato, golden gato, premier gato)
+- "Petiscos e Snacks" (cookie, biscoito, snack, petisco, sachê)
+- "Acessorios e Brinquedos" (brinquedo, pelucia, osso vinil, corda, bola)
+- "Ossos e Mordedores" (osso natural, orelha bovina, palito, mordedor)
+- "Medicamentos e Saude" (nutricao clinica, nutr clin)
+- "Suplementos e Vitaminas" (suplemento, vitamina)
+- "Higiene e Banho" (shampoo, condicionador, banho)
+- "Outros" (se nao se encaixar em nenhuma)
 
 IMPORTANTE:
 - Extraia TODOS os itens, nao pule nenhum
