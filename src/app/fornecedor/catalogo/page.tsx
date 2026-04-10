@@ -2333,6 +2333,52 @@ export default function FornecedorCatalogoPage() {
             >
               Importar PDF
             </Button>
+            {totalItens > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  if (!catalogo?.id) return
+                  const catalogoId = catalogo.id
+                  setPdfStep('scraping')
+                  setImgProgress({ processed: 0, total: 0, found: 0 })
+                  setShowPdfImportModal(true)
+                  setPdfResult(null)
+                  setPdfError(null)
+
+                  let done = false
+                  let totalProcessed = 0
+                  let totalFound = 0
+
+                  while (!done) {
+                    try {
+                      const imgRes = await fetch('/api/fornecedor/catalogo/processar-imagens', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ catalogo_id: catalogoId }),
+                      })
+                      const imgData = await imgRes.json()
+                      totalProcessed += imgData.processed || 0
+                      totalFound += imgData.com_imagem || 0
+                      setImgProgress({
+                        processed: totalProcessed,
+                        total: imgData.total_sem_imagem || totalProcessed,
+                        found: totalFound,
+                      })
+                      done = imgData.done || imgData.remaining === 0
+                    } catch {
+                      done = true
+                    }
+                  }
+                  setPdfResult({ total: totalProcessed, novos: 0, atualizados: 0 })
+                  setPdfStep('done')
+                  fetchItens()
+                }}
+                leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>}
+              >
+                Buscar Imagens
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
