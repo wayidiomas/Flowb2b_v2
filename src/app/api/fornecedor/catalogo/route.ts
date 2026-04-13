@@ -31,16 +31,23 @@ export async function GET() {
       return NextResponse.json({ catalogo: null, exists: false })
     }
 
-    // Contar itens
-    const { count } = await supabase
+    // Contar itens COM dedup (mesma logica do endpoint /itens)
+    const { data: allItens } = await supabase
       .from('catalogo_itens')
-      .select('id', { count: 'exact', head: true })
+      .select('id, codigo, nome')
       .eq('catalogo_id', catalogo.id)
+      .limit(5000)
+
+    const seen = new Set<string>()
+    for (const item of allItens || []) {
+      const key = item.codigo || item.nome || String(item.id)
+      seen.add(key)
+    }
 
     return NextResponse.json({
       catalogo,
       exists: true,
-      total_itens: count || 0,
+      total_itens: seen.size,
     })
   } catch (error) {
     console.error('Erro ao buscar catalogo:', error)

@@ -112,11 +112,22 @@ export async function PUT(
       return NextResponse.json({ error: 'Item nao encontrado no seu catalogo' }, { status: 404 })
     }
 
-    // 3. Atualizar catalogo_itens.preco_base (e outros campos simples)
+    // 3. Atualizar catalogo_itens (campos permitidos)
     const updateFields: Record<string, unknown> = {}
     if (body.preco_base !== undefined) updateFields.preco_base = body.preco_base
     if (body.ativo !== undefined) updateFields.ativo = body.ativo
     if (body.ordem !== undefined) updateFields.ordem = body.ordem
+    if (body.nome !== undefined) updateFields.nome = body.nome
+    if (body.codigo !== undefined) updateFields.codigo = body.codigo || null
+    if (body.ean !== undefined) updateFields.ean = body.ean || null
+    if (body.marca !== undefined) updateFields.marca = body.marca || null
+    if (body.ncm !== undefined) updateFields.ncm = body.ncm || null
+    if (body.unidade !== undefined) updateFields.unidade = body.unidade || null
+    if (body.itens_por_caixa !== undefined) updateFields.itens_por_caixa = body.itens_por_caixa
+    if (body.bonificacao !== undefined) updateFields.bonificacao = body.bonificacao
+    if (body.categoria !== undefined) updateFields.categoria = body.categoria || null
+    if (body.descricao_produto !== undefined) updateFields.descricao_produto = body.descricao_produto || null
+    if (body.destaque !== undefined) updateFields.destaque = body.destaque
 
     if (Object.keys(updateFields).length === 0) {
       return NextResponse.json({ error: 'Nenhum campo para atualizar' }, { status: 400 })
@@ -379,6 +390,74 @@ export async function PUT(
     })
   } catch (error) {
     console.error('Erro ao atualizar item do catalogo:', error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getCurrentUser()
+    if (!user || user.tipo !== 'fornecedor' || !user.cnpj) {
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const itemId = Number(id)
+    if (!itemId || isNaN(itemId)) {
+      return NextResponse.json({ error: 'ID invalido' }, { status: 400 })
+    }
+
+    const supabase = createServerSupabaseClient()
+    const cnpjLimpo = cleanCnpj(user.cnpj)
+
+    // Verificar ownership via catalogo_fornecedor
+    const { data: catalogo } = await supabase
+      .from('catalogo_fornecedor')
+      .select('id')
+      .eq('cnpj', cnpjLimpo)
+      .single()
+
+    if (!catalogo) {
+      return NextResponse.json({ error: 'Catalogo nao encontrado' }, { status: 404 })
+    }
+
+    // Deletar apenas se pertence a esse catalogo (todas as linhas com mesmo codigo OU mesmo nome,
+    // pra pegar os clones antigos que foram criados com empresa_id de lojistas)
+    const { data: alvo } = await supabase
+      .from('catalogo_itens')
+      .select('id, codigo, nome, catalogo_id')
+      .eq('id', itemId)
+      .eq('catalogo_id', catalogo.id)
+      .single()
+
+    if (!alvo) {
+      return NextResponse.json({ error: 'Item nao encontrado' }, { status: 404 })
+    }
+
+    let query = supabase
+      .from('catalogo_itens')
+      .delete({ count: 'exact' })
+      .eq('catalogo_id', catalogo.id)
+
+    if (alvo.codigo) {
+      query = query.eq('codigo', alvo.codigo)
+    } else {
+      query = query.eq('nome', alvo.nome)
+    }
+
+    const { error: deleteError, count } = await query
+
+    if (deleteError) {
+      console.error('Erro ao deletar item:', deleteError)
+      return NextResponse.json({ error: 'Erro ao deletar item' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, deleted: count || 0 })
+  } catch (error) {
+    console.error('Erro no DELETE item:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

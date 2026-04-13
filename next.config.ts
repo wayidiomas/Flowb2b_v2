@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['pdf-lib'],
+  serverExternalPackages: ['pdf-lib', 'pdf-parse', 'pdfjs-dist'],
   experimental: {
     serverActions: {
       bodySizeLimit: '60mb',

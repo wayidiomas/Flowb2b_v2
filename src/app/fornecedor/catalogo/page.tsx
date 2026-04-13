@@ -94,6 +94,7 @@ interface ProdutoExtraido {
   preco_com_impostos: number | null
   bonificacao: number | null
   categoria: string | null
+  _curacao?: 'corrigido' | 'nao_encontrado' | null
 }
 
 // ---------------------------------------------------------------------------
@@ -1744,7 +1745,213 @@ export default function FornecedorCatalogoPage() {
   const [pdfJobId, setPdfJobId] = useState<number | null>(null)
   const [pdfResult, setPdfResult] = useState<{total: number, novos: number, atualizados: number} | null>(null)
   const [pdfProgress, setPdfProgress] = useState<{current: number, total: number, products: number}>({current: 0, total: 0, products: 0})
+  const [pdfCuracao, setPdfCuracao] = useState<{ flagados: number; corrigidos: number; naoCorrigidos: number } | null>(null)
   const [imgProgress, setImgProgress] = useState<{processed: number, total: number, found: number}>({processed: 0, total: 0, found: 0})
+  const [showImgSyncModal, setShowImgSyncModal] = useState(false)
+  const [imgSyncStartedAt, setImgSyncStartedAt] = useState<number | null>(null)
+  const [imgSyncElapsed, setImgSyncElapsed] = useState(0)
+  const [imgSyncDone, setImgSyncDone] = useState(false)
+  const [imgSyncRunning, setImgSyncRunning] = useState(false)
+  const imgSyncAbortRef = useRef<AbortController | null>(null)
+  const imgSyncCancelRef = useRef(false)
+
+  const cancelarSyncImagens = () => {
+    imgSyncCancelRef.current = true
+    if (imgSyncAbortRef.current) {
+      imgSyncAbortRef.current.abort()
+    }
+  }
+
+  // CRUD modal de item
+  const [showItemModal, setShowItemModal] = useState(false)
+  const [itemFormMode, setItemFormMode] = useState<'create' | 'edit'>('create')
+  const [itemFormSaving, setItemFormSaving] = useState(false)
+  const [itemFormError, setItemFormError] = useState<string | null>(null)
+  const [itemFormImageFile, setItemFormImageFile] = useState<File | null>(null)
+  const [itemFormImageUrl, setItemFormImageUrl] = useState('')
+  const [itemFormCurrentImage, setItemFormCurrentImage] = useState<string | null>(null)
+  const itemImageInputRef = useRef<HTMLInputElement>(null)
+  const [itemFormData, setItemFormData] = useState<{
+    id?: number
+    nome: string
+    codigo: string
+    ean: string
+    marca: string
+    ncm: string
+    unidade: string
+    itens_por_caixa: number
+    preco_base: number
+    bonificacao: number | null
+    categoria: string
+    descricao_produto: string
+  }>({
+    nome: '',
+    codigo: '',
+    ean: '',
+    marca: '',
+    ncm: '',
+    unidade: 'UN',
+    itens_por_caixa: 1,
+    preco_base: 0,
+    bonificacao: null,
+    categoria: '',
+    descricao_produto: '',
+  })
+
+  const openItemForm = (item?: CatalogoItem) => {
+    setItemFormError(null)
+    setItemFormImageFile(null)
+    setItemFormImageUrl('')
+    if (item) {
+      setItemFormMode('edit')
+      setItemFormData({
+        id: item.id,
+        nome: item.nome || '',
+        codigo: item.codigo || '',
+        ean: (item as CatalogoItem & { ean?: string }).ean || '',
+        marca: item.marca || '',
+        ncm: (item as CatalogoItem & { ncm?: string }).ncm || '',
+        unidade: item.unidade || 'UN',
+        itens_por_caixa: item.itens_por_caixa || 1,
+        preco_base: item.preco_base || 0,
+        bonificacao: (item as CatalogoItem & { bonificacao?: number | null }).bonificacao ?? null,
+        categoria: item.categoria || '',
+        descricao_produto: item.descricao_produto || '',
+      })
+      setItemFormCurrentImage(item.imagem_url || null)
+    } else {
+      setItemFormMode('create')
+      setItemFormData({
+        nome: '',
+        codigo: '',
+        ean: '',
+        marca: '',
+        ncm: '',
+        unidade: 'UN',
+        itens_por_caixa: 1,
+        preco_base: 0,
+        bonificacao: null,
+        categoria: '',
+        descricao_produto: '',
+      })
+      setItemFormCurrentImage(null)
+    }
+    setShowItemModal(true)
+  }
+
+  const uploadItemImage = async (itemId: number) => {
+    if (itemFormImageFile) {
+      const fd = new FormData()
+      fd.append('file', itemFormImageFile)
+      await fetch(`/api/fornecedor/catalogo/itens/${itemId}/imagem`, {
+        method: 'POST',
+        body: fd,
+      })
+    } else if (itemFormImageUrl.trim()) {
+      await fetch(`/api/fornecedor/catalogo/itens/${itemId}/imagem`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imagem_url: itemFormImageUrl.trim() }),
+      })
+    }
+  }
+
+  const removeItemImage = async () => {
+    if (itemFormMode !== 'edit' || !itemFormData.id) {
+      setItemFormCurrentImage(null)
+      return
+    }
+    if (!confirm('Remover a imagem deste produto?')) return
+    try {
+      await fetch(`/api/fornecedor/catalogo/itens/${itemFormData.id}/imagem`, { method: 'DELETE' })
+      setItemFormCurrentImage(null)
+    } catch {
+      alert('Erro ao remover imagem')
+    }
+  }
+
+  const handleItemSave = async () => {
+    if (!itemFormData.nome.trim()) {
+      setItemFormError('Nome eh obrigatorio')
+      return
+    }
+    setItemFormSaving(true)
+    setItemFormError(null)
+    try {
+      const payload = {
+        nome: itemFormData.nome.trim(),
+        codigo: itemFormData.codigo.trim() || null,
+        ean: itemFormData.ean.trim() || null,
+        marca: itemFormData.marca.trim() || null,
+        ncm: itemFormData.ncm.trim() || null,
+        unidade: itemFormData.unidade.trim() || 'UN',
+        itens_por_caixa: itemFormData.itens_por_caixa,
+        preco_base: itemFormData.preco_base,
+        bonificacao: itemFormData.bonificacao,
+        categoria: itemFormData.categoria || null,
+        descricao_produto: itemFormData.descricao_produto.trim() || null,
+      }
+
+      const url = itemFormMode === 'edit' && itemFormData.id
+        ? `/api/fornecedor/catalogo/itens/${itemFormData.id}`
+        : '/api/fornecedor/catalogo/itens'
+      const method = itemFormMode === 'edit' ? 'PUT' : 'POST'
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setItemFormError(data.error || 'Erro ao salvar')
+        return
+      }
+
+      // Upload de imagem (se houver) - usa o id retornado em create, ou o existente em edit
+      const targetId = itemFormMode === 'edit' ? itemFormData.id : data.item?.id
+      if (targetId && (itemFormImageFile || itemFormImageUrl.trim())) {
+        try {
+          await uploadItemImage(targetId)
+        } catch (err) {
+          console.error('Erro upload imagem:', err)
+        }
+      }
+
+      setShowItemModal(false)
+      fetchItens()
+      checkCatalogo()
+    } catch {
+      setItemFormError('Erro de conexao')
+    } finally {
+      setItemFormSaving(false)
+    }
+  }
+
+  const handleItemDelete = async (item: CatalogoItem) => {
+    if (!confirm(`Apagar "${item.nome}" do catalogo? Essa acao nao pode ser desfeita.`)) return
+    try {
+      const res = await fetch(`/api/fornecedor/catalogo/itens/${item.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Erro ao deletar')
+        return
+      }
+      fetchItens()
+      checkCatalogo()
+    } catch {
+      alert('Erro de conexao ao deletar')
+    }
+  }
+
+  // Timer do sync de imagens (continua rodando mesmo com modal fechado)
+  useEffect(() => {
+    if (imgSyncDone || !imgSyncStartedAt || !imgSyncRunning) return
+    const id = setInterval(() => {
+      setImgSyncElapsed(Math.floor((Date.now() - imgSyncStartedAt) / 1000))
+    }, 1000)
+    return () => clearInterval(id)
+  }, [imgSyncDone, imgSyncStartedAt, imgSyncRunning])
 
   // Respostas dos Lojistas state
   const [respostas, setRespostas] = useState<any[]>([])
@@ -2005,6 +2212,7 @@ export default function FornecedorCatalogoPage() {
         if (chunkData.done) {
           done = true
           setPdfProdutos(chunkData.produtos || [])
+          setPdfCuracao(chunkData.curacao || null)
           setPdfStep('review')
         }
       }
@@ -2028,53 +2236,72 @@ export default function FornecedorCatalogoPage() {
         body: JSON.stringify({ produtos: pdfProdutos }),
       })
       const data = await res.json()
-      if (res.ok && data.total != null) {
-        setPdfResult({ total: data.total, novos: data.novos, atualizados: data.atualizados })
-        fetchItens()
-
-        // Get catalogo_id from job to start image scraping
-        const jobRes = await fetch(`/api/fornecedor/catalogo/importar-pdf/${pdfJobId}`)
-        const jobData = await jobRes.json()
-        const catalogoId = jobData?.catalogo_id
-
-        if (catalogoId) {
-          setPdfStep('scraping')
-          setImgProgress({ processed: 0, total: 0, found: 0 })
-
-          let done = false
-          let totalProcessed = 0
-          let totalFound = 0
-
-          while (!done) {
-            try {
-              const imgRes = await fetch('/api/fornecedor/catalogo/processar-imagens', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ catalogo_id: catalogoId }),
-              })
-              const imgData = await imgRes.json()
-
-              totalProcessed += imgData.processed || 0
-              totalFound += imgData.com_imagem || 0
-
-              setImgProgress({
-                processed: totalProcessed,
-                total: imgData.total_sem_imagem || totalProcessed,
-                found: totalFound,
-              })
-
-              done = imgData.done || imgData.remaining === 0
-            } catch {
-              done = true
-            }
-          }
-        }
-
-        setPdfStep('done')
-      } else {
+      if (!res.ok || data.total == null) {
         setPdfError(data.error || 'Erro ao salvar produtos')
         setPdfStep('review')
+        return
       }
+
+      setPdfResult({ total: data.total, novos: data.novos, atualizados: data.atualizados })
+      fetchItens()
+
+      // Fecha modal de importacao e abre modal dedicado de sync de imagens
+      setShowPdfImportModal(false)
+      setImgProgress({ processed: 0, total: 0, found: 0 })
+      setImgSyncDone(false)
+      setImgSyncStartedAt(Date.now())
+      setImgSyncElapsed(0)
+      setImgSyncRunning(true)
+      imgSyncCancelRef.current = false
+      setShowImgSyncModal(true)
+
+      const jobRes = await fetch(`/api/fornecedor/catalogo/importar-pdf/${pdfJobId}`)
+      const jobData = await jobRes.json()
+      const catalogoId = jobData?.catalogo_id
+
+      if (!catalogoId) {
+        setImgSyncDone(true)
+        setImgSyncRunning(false)
+        return
+      }
+
+      let done = false
+      let totalProcessed = 0
+      let totalFound = 0
+      let currentOffset = 0
+
+      while (!done && !imgSyncCancelRef.current) {
+        try {
+          const ctrl = new AbortController()
+          imgSyncAbortRef.current = ctrl
+          const imgRes = await fetch('/api/fornecedor/catalogo/processar-imagens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ catalogo_id: catalogoId, offset: currentOffset }),
+            signal: ctrl.signal,
+          })
+          const imgData = await imgRes.json()
+
+          totalProcessed += imgData.processed || 0
+          totalFound += imgData.com_imagem || 0
+          currentOffset = imgData.next_offset ?? (currentOffset + (imgData.processed || 0))
+
+          setImgProgress({
+            processed: totalProcessed,
+            total: imgData.total_sem_imagem || totalProcessed,
+            found: totalFound,
+          })
+
+          done = imgData.done || imgData.remaining === 0 || imgData.processed === 0
+        } catch {
+          done = true
+        }
+      }
+
+      imgSyncAbortRef.current = null
+      setImgSyncDone(true)
+      setImgSyncRunning(false)
+      fetchItens()
     } catch {
       setPdfError('Erro de conexao ao salvar produtos')
       setPdfStep('review')
@@ -2329,7 +2556,7 @@ export default function FornecedorCatalogoPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setShowPdfImportModal(true); setPdfStep('upload'); setPdfFile(null); setPdfProdutos([]); setPdfError(null); setPdfResult(null); setPdfJobId(null) }}
+              onClick={() => { setShowPdfImportModal(true); setPdfStep('upload'); setPdfFile(null); setPdfProdutos([]); setPdfCuracao(null); setPdfError(null); setPdfResult(null); setPdfJobId(null) }}
               leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>}
             >
               Importar PDF
@@ -2340,39 +2567,52 @@ export default function FornecedorCatalogoPage() {
                 size="sm"
                 onClick={async () => {
                   if (!catalogo?.id) return
+                  // Se ja esta rodando, so reabre o modal pra mostrar progresso
+                  if (imgSyncRunning) {
+                    setShowImgSyncModal(true)
+                    return
+                  }
                   const catalogoId = catalogo.id
-                  setPdfStep('scraping')
                   setImgProgress({ processed: 0, total: 0, found: 0 })
-                  setShowPdfImportModal(true)
-                  setPdfResult(null)
-                  setPdfError(null)
+                  setImgSyncDone(false)
+                  setImgSyncStartedAt(Date.now())
+                  setImgSyncElapsed(0)
+                  setImgSyncRunning(true)
+                  imgSyncCancelRef.current = false
+                  setShowImgSyncModal(true)
 
                   let done = false
                   let totalProcessed = 0
                   let totalFound = 0
+                  let currentOffset = 0
 
-                  while (!done) {
+                  while (!done && !imgSyncCancelRef.current) {
                     try {
+                      const ctrl = new AbortController()
+                      imgSyncAbortRef.current = ctrl
                       const imgRes = await fetch('/api/fornecedor/catalogo/processar-imagens', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ catalogo_id: catalogoId }),
+                        body: JSON.stringify({ catalogo_id: catalogoId, offset: currentOffset }),
+                        signal: ctrl.signal,
                       })
                       const imgData = await imgRes.json()
                       totalProcessed += imgData.processed || 0
                       totalFound += imgData.com_imagem || 0
+                      currentOffset = imgData.next_offset ?? (currentOffset + (imgData.processed || 0))
                       setImgProgress({
                         processed: totalProcessed,
                         total: imgData.total_sem_imagem || totalProcessed,
                         found: totalFound,
                       })
-                      done = imgData.done || imgData.remaining === 0
+                      done = imgData.done || imgData.remaining === 0 || imgData.processed === 0
                     } catch {
                       done = true
                     }
                   }
-                  setPdfResult({ total: totalProcessed, novos: 0, atualizados: 0 })
-                  setPdfStep('done')
+                  imgSyncAbortRef.current = null
+                  setImgSyncDone(true)
+                  setImgSyncRunning(false)
                   fetchItens()
                 }}
                 leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>}
@@ -2400,6 +2640,14 @@ export default function FornecedorCatalogoPage() {
               leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" /></svg>}
             >
               Personalizar
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => openItemForm()}
+              leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>}
+            >
+              Novo produto
             </Button>
             <span className="px-3 py-1.5 bg-[#336FB6]/10 text-[#336FB6] text-sm font-semibold rounded-lg">
               {totalItens} produtos
@@ -2601,15 +2849,35 @@ export default function FornecedorCatalogoPage() {
                             </td>
                           )}
                           <td className="px-3 py-4 text-center">
-                            <button
-                              onClick={() => setModalItem(item)}
-                              className="inline-flex items-center gap-1.5 text-xs text-[#336FB6] hover:text-[#2660a5] font-medium px-2.5 py-1.5 border border-[#336FB6]/20 rounded-lg hover:bg-[#336FB6]/5 transition-colors whitespace-nowrap"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              Personalizar
-                            </button>
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                onClick={() => openItemForm(item)}
+                                className="p-1.5 text-gray-500 hover:text-[#336FB6] hover:bg-[#336FB6]/10 rounded-lg transition-colors"
+                                title="Editar produto"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => setModalItem(item)}
+                                className="p-1.5 text-gray-500 hover:text-[#336FB6] hover:bg-[#336FB6]/10 rounded-lg transition-colors"
+                                title="Personalizar / Lojistas"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleItemDelete(item)}
+                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Apagar produto"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                </svg>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )
@@ -3070,10 +3338,26 @@ export default function FornecedorCatalogoPage() {
                 </div>
               )}
 
+              {pdfCuracao && pdfCuracao.flagados > 0 && (
+                <div className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-sm text-indigo-900">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+                  </svg>
+                  <span>
+                    IA curadora revisou <strong>{pdfCuracao.flagados}</strong> produtos com preço suspeito —
+                    <strong className="text-emerald-700"> {pdfCuracao.corrigidos} corrigidos</strong>
+                    {pdfCuracao.naoCorrigidos > 0 && (
+                      <>, <strong className="text-amber-700">{pdfCuracao.naoCorrigidos} precisam revisão manual</strong></>
+                    )}
+                  </span>
+                </div>
+              )}
+
               <div className="max-h-[400px] overflow-y-auto border border-gray-200 rounded-xl">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600 w-24">Status</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-600">Codigo</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-600">Nome</th>
                       <th className="px-3 py-2 text-left font-semibold text-gray-600">EAN</th>
@@ -3082,12 +3366,40 @@ export default function FornecedorCatalogoPage() {
                       <th className="px-3 py-2 text-center font-semibold text-gray-600">UN</th>
                       <th className="px-3 py-2 text-center font-semibold text-gray-600">Cx</th>
                       <th className="px-3 py-2 text-right font-semibold text-gray-600">Preco</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-600">Bonif</th>
                       <th className="px-3 py-2 text-center font-semibold text-gray-600 w-10"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {pdfProdutos.map((prod, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
+                    {pdfProdutos.map((prod, idx) => {
+                      const naoEncontrado = prod._curacao === 'nao_encontrado'
+                      const corrigido = prod._curacao === 'corrigido'
+                      const rowClass = naoEncontrado
+                        ? 'bg-amber-50 hover:bg-amber-100 border-l-4 border-amber-400'
+                        : corrigido
+                        ? 'bg-emerald-50 hover:bg-emerald-100 border-l-4 border-emerald-400'
+                        : 'hover:bg-gray-50'
+                      return (
+                      <tr key={idx} className={rowClass}>
+                        <td className="px-3 py-2">
+                          {corrigido && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-semibold whitespace-nowrap" title="Preço corrigido pela IA curadora">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                              </svg>
+                              IA corrigiu
+                            </span>
+                          )}
+                          {naoEncontrado && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold whitespace-nowrap" title="Preço não recuperado — revisar manualmente">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                              </svg>
+                              Revisar
+                            </span>
+                          )}
+                          {!corrigido && !naoEncontrado && <span className="text-[10px] text-gray-400">—</span>}
+                        </td>
                         <td className="px-3 py-2 font-mono text-gray-700">{prod.codigo_fornecedor || '-'}</td>
                         <td className="px-3 py-2 text-gray-900 max-w-[200px] truncate">{prod.nome}</td>
                         <td className="px-3 py-2 font-mono text-gray-500">{prod.ean || '-'}</td>
@@ -3095,7 +3407,12 @@ export default function FornecedorCatalogoPage() {
                         <td className="px-3 py-2 text-gray-500">{prod.categoria || '-'}</td>
                         <td className="px-3 py-2 text-center text-gray-500">{prod.unidade || 'UN'}</td>
                         <td className="px-3 py-2 text-center text-gray-500">{prod.itens_por_caixa || '-'}</td>
-                        <td className="px-3 py-2 text-right font-medium text-gray-900">{formatCurrency(prod.preco_base)}</td>
+                        <td className="px-3 py-2 text-right font-medium">
+                          <span className={corrigido ? 'text-emerald-700 font-bold' : naoEncontrado ? 'text-amber-700 font-bold' : 'text-gray-900'}>
+                            {formatCurrency(prod.preco_base)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-500">{prod.bonificacao ?? '-'}</td>
                         <td className="px-3 py-2 text-center">
                           <button
                             onClick={() => handlePdfRemove(idx)}
@@ -3108,7 +3425,8 @@ export default function FornecedorCatalogoPage() {
                           </button>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -3218,6 +3536,332 @@ export default function FornecedorCatalogoPage() {
           {pdfStep === 'done' && (
             <Button variant="primary" size="sm" onClick={() => { setShowPdfImportModal(false); checkCatalogo() }}>Fechar</Button>
           )}
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal Sync de Imagens */}
+      <Modal isOpen={showImgSyncModal} onClose={() => setShowImgSyncModal(false)} size="lg">
+        <ModalHeader onClose={() => setShowImgSyncModal(false)}>
+          <ModalTitle>Sincronizando imagens dos produtos</ModalTitle>
+          <ModalDescription>
+            Buscando em Cobasi, Petlove, Amazon, Mercado Livre, Magalu e Petz
+          </ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          <div className="flex flex-col items-center justify-center py-8 gap-6">
+            {!imgSyncDone ? (
+              <>
+                <div className="relative">
+                  <svg className="w-20 h-20 animate-spin text-[#FFAA11]" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xs font-mono font-bold text-[#FFAA11]">
+                      {String(Math.floor(imgSyncElapsed / 60)).padStart(2, '0')}:{String(imgSyncElapsed % 60).padStart(2, '0')}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-semibold text-gray-900">
+                    {imgProgress.total > 0
+                      ? `Processando ${imgProgress.processed} de ${imgProgress.total} produtos`
+                      : 'Iniciando busca...'}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {imgProgress.found} imagens encontradas
+                  </p>
+                </div>
+                {imgProgress.total > 0 && (
+                  <div className="w-full max-w-md">
+                    <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-[#FFAA11] to-[#FFCC55] rounded-full transition-all duration-500"
+                        style={{ width: `${Math.round((imgProgress.processed / imgProgress.total) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-2 text-xs text-gray-500">
+                      <span>{Math.round((imgProgress.processed / imgProgress.total) * 100)}% concluido</span>
+                      <span>{imgProgress.found} imagens · {imgProgress.total - imgProgress.processed} restantes</span>
+                    </div>
+                  </div>
+                )}
+                {pdfResult && (
+                  <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+                    ✓ {pdfResult.total} produtos salvos ({pdfResult.novos} novos, {pdfResult.atualizados} atualizados)
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <svg className="w-20 h-20 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="text-center">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">Sincronizacao concluida!</h4>
+                  <p className="text-sm text-gray-600">
+                    {imgProgress.found} de {imgProgress.total || imgProgress.processed} produtos com imagens
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Tempo total: {String(Math.floor(imgSyncElapsed / 60)).padStart(2, '0')}:{String(imgSyncElapsed % 60).padStart(2, '0')}
+                  </p>
+                </div>
+                {pdfResult && (
+                  <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700 text-center">
+                    {pdfResult.total} produtos importados ({pdfResult.novos} novos, {pdfResult.atualizados} atualizados)
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          {!imgSyncDone ? (
+            <>
+              <Button variant="outline" size="sm" onClick={cancelarSyncImagens}>
+                Cancelar
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => setShowImgSyncModal(false)}>
+                Continuar em segundo plano
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" size="sm" onClick={() => { setShowImgSyncModal(false); checkCatalogo() }}>
+              Fechar
+            </Button>
+          )}
+        </ModalFooter>
+      </Modal>
+
+      {/* Pill flutuante quando sync rodando em segundo plano */}
+      {imgSyncRunning && !showImgSyncModal && (
+        <button
+          onClick={() => setShowImgSyncModal(true)}
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-white border-2 border-[#FFAA11] rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all cursor-pointer"
+          title="Clique para ver progresso"
+        >
+          <svg className="w-5 h-5 animate-spin text-[#FFAA11]" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          <div className="flex flex-col items-start">
+            <span className="text-xs font-semibold text-gray-900">
+              Buscando imagens · {imgProgress.processed}/{imgProgress.total || '?'}
+            </span>
+            <span className="text-[10px] text-gray-500">
+              {imgProgress.found} encontradas · {String(Math.floor(imgSyncElapsed / 60)).padStart(2, '0')}:{String(imgSyncElapsed % 60).padStart(2, '0')}
+            </span>
+          </div>
+        </button>
+      )}
+
+      {/* Modal Novo / Editar Item */}
+      <Modal isOpen={showItemModal} onClose={() => !itemFormSaving && setShowItemModal(false)} size="2xl">
+        <ModalHeader onClose={() => !itemFormSaving && setShowItemModal(false)}>
+          <ModalTitle>{itemFormMode === 'edit' ? 'Editar produto' : 'Novo produto'}</ModalTitle>
+          <ModalDescription>
+            {itemFormMode === 'edit' ? 'Atualize as informacoes do produto no seu catalogo' : 'Cadastre um produto manualmente no seu catalogo'}
+          </ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Imagem do produto */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Imagem do produto</label>
+              <div className="flex items-start gap-4">
+                <div className="w-24 h-24 shrink-0 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
+                  {itemFormImageFile ? (
+                    <img src={URL.createObjectURL(itemFormImageFile)} alt="preview" className="w-full h-full object-cover" />
+                  ) : itemFormImageUrl ? (
+                    <img src={itemFormImageUrl} alt="preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  ) : itemFormCurrentImage ? (
+                    <img src={itemFormCurrentImage} alt="atual" className="w-full h-full object-cover" />
+                  ) : (
+                    <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1 space-y-2">
+                  <input
+                    ref={itemImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { setItemFormImageFile(e.target.files?.[0] || null); setItemFormImageUrl('') }}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => itemImageInputRef.current?.click()}
+                      className="text-xs px-3 py-1.5 bg-[#336FB6] text-white rounded-lg hover:bg-[#2660a5] transition-colors"
+                    >
+                      Escolher arquivo
+                    </button>
+                    {(itemFormImageFile || itemFormImageUrl || itemFormCurrentImage) && (
+                      <button
+                        type="button"
+                        onClick={() => { setItemFormImageFile(null); setItemFormImageUrl(''); if (itemFormCurrentImage) removeItemImage() }}
+                        className="text-xs px-3 py-1.5 text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={itemFormImageUrl}
+                    onChange={(e) => { setItemFormImageUrl(e.target.value); setItemFormImageFile(null) }}
+                    placeholder="ou cole uma URL de imagem"
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                  />
+                  {itemFormImageFile && (
+                    <p className="text-xs text-gray-500 truncate">📎 {itemFormImageFile.name}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Nome do produto *</label>
+              <input
+                type="text"
+                value={itemFormData.nome}
+                onChange={(e) => setItemFormData({ ...itemFormData, nome: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="Ex: Premier Pet Selecao Natural Frango 1kg"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Codigo / SKU</label>
+              <input
+                type="text"
+                value={itemFormData.codigo}
+                onChange={(e) => setItemFormData({ ...itemFormData, codigo: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="4028084"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">EAN / GTIN</label>
+              <input
+                type="text"
+                value={itemFormData.ean}
+                onChange={(e) => setItemFormData({ ...itemFormData, ean: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="7897348206422"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Marca</label>
+              <input
+                type="text"
+                value={itemFormData.marca}
+                onChange={(e) => setItemFormData({ ...itemFormData, marca: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="Premier Pet"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Categoria</label>
+              <select
+                value={itemFormData.categoria}
+                onChange={(e) => setItemFormData({ ...itemFormData, categoria: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              >
+                <option value="">Sem categoria</option>
+                {CATEGORIAS_PET.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">NCM</label>
+              <input
+                type="text"
+                value={itemFormData.ncm}
+                onChange={(e) => setItemFormData({ ...itemFormData, ncm: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="2309.90.30"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Unidade</label>
+              <input
+                type="text"
+                value={itemFormData.unidade}
+                onChange={(e) => setItemFormData({ ...itemFormData, unidade: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="UN"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Itens por caixa</label>
+              <input
+                type="number"
+                min="1"
+                value={itemFormData.itens_por_caixa}
+                onChange={(e) => setItemFormData({ ...itemFormData, itens_por_caixa: Number(e.target.value) || 1 })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Preco base (R$) *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={itemFormData.preco_base}
+                onChange={(e) => setItemFormData({ ...itemFormData, preco_base: Number(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Bonificacao</label>
+              <input
+                type="number"
+                min="0"
+                value={itemFormData.bonificacao ?? ''}
+                onChange={(e) => setItemFormData({ ...itemFormData, bonificacao: e.target.value === '' ? null : Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="0"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Descricao</label>
+              <textarea
+                value={itemFormData.descricao_produto}
+                onChange={(e) => setItemFormData({ ...itemFormData, descricao_produto: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] resize-none"
+                placeholder="Detalhes adicionais sobre o produto..."
+              />
+            </div>
+          </div>
+
+          {itemFormError && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+              {itemFormError}
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" size="sm" onClick={() => setShowItemModal(false)} disabled={itemFormSaving}>
+            Cancelar
+          </Button>
+          <Button variant="primary" size="sm" onClick={handleItemSave} loading={itemFormSaving}>
+            {itemFormMode === 'edit' ? 'Salvar alteracoes' : 'Criar produto'}
+          </Button>
         </ModalFooter>
       </Modal>
 

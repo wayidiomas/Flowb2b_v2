@@ -200,3 +200,63 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const user = await getCurrentUser()
+    if (!user || user.tipo !== 'fornecedor' || !user.cnpj) {
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    }
+
+    const supabase = createServerSupabaseClient()
+    const cnpjLimpo = cleanCnpj(user.cnpj)
+    const body = await request.json()
+
+    if (!body.nome || typeof body.nome !== 'string') {
+      return NextResponse.json({ error: 'Nome obrigatorio' }, { status: 400 })
+    }
+
+    const { data: catalogo, error: catError } = await supabase
+      .from('catalogo_fornecedor')
+      .select('id')
+      .eq('cnpj', cnpjLimpo)
+      .single()
+
+    if (catError || !catalogo) {
+      return NextResponse.json({ error: 'Catalogo nao encontrado' }, { status: 404 })
+    }
+
+    const itemData: Record<string, unknown> = {
+      catalogo_id: catalogo.id,
+      nome: body.nome.trim(),
+      codigo: body.codigo || null,
+      ean: body.ean || null,
+      marca: body.marca || null,
+      ncm: body.ncm || null,
+      unidade: body.unidade || 'UN',
+      itens_por_caixa: body.itens_por_caixa ?? 1,
+      preco_base: body.preco_base ?? 0,
+      bonificacao: body.bonificacao ?? null,
+      categoria: body.categoria || null,
+      descricao_produto: body.descricao_produto || null,
+      destaque: body.destaque ?? false,
+      ativo: true,
+    }
+
+    const { data: novo, error: insertError } = await supabase
+      .from('catalogo_itens')
+      .insert(itemData)
+      .select()
+      .single()
+
+    if (insertError) {
+      console.error('Erro ao criar item:', insertError)
+      return NextResponse.json({ error: 'Erro ao criar item' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, item: novo }, { status: 201 })
+  } catch (error) {
+    console.error('Erro no POST item:', error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}

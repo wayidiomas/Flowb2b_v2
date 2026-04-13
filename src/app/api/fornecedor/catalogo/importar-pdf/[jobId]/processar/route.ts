@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
-import { extrairProdutosDeChunk } from '@/lib/catalogo-pdf-extractor'
+import { extrairProdutosDeChunk, curarProdutos, type ProdutoExtraido } from '@/lib/catalogo-pdf-extractor'
 
 const PAGES_PER_CHUNK = 20
 
-export const maxDuration = 120
+export const maxDuration = 300
 
 export async function POST(
   request: NextRequest,
@@ -85,10 +85,26 @@ export async function POST(
     const result = await extrairProdutosDeChunk(pdfBuffer, startPage, endPage)
 
     // Accumulate products
-    const existingProducts = (job.produtos_json as any[]) || []
-    const allProducts = [...existingProducts, ...(result.produtos || [])]
+    const existingProducts = (job.produtos_json as ProdutoExtraido[]) || []
+    let allProducts: ProdutoExtraido[] = [...existingProducts, ...(result.produtos || [])]
     const nextPage = endPage + 1
     const isLastChunk = nextPage >= job.total_pages
+
+    // Reflexive self-correction: no ultimo chunk, roda o curador pra recuperar precos null/0
+    let curacao: { flagados: number; corrigidos: number; naoCorrigidos: number } | null = null
+    if (isLastChunk && allProducts.length > 0) {
+      try {
+        const resultado = await curarProdutos(pdfBuffer, allProducts)
+        allProducts = resultado.produtos
+        curacao = {
+          flagados: resultado.flagados,
+          corrigidos: resultado.corrigidos,
+          naoCorrigidos: resultado.naoCorrigidos,
+        }
+      } catch (err) {
+        console.error('Erro curador:', err)
+      }
+    }
 
     // Update job
     await supabase
@@ -111,6 +127,7 @@ export async function POST(
       chunk_products: result.produtos?.length || 0,
       done: isLastChunk,
       produtos: isLastChunk ? allProducts : undefined,
+      curacao,
     })
   } catch (error) {
     console.error('Erro ao processar chunk:', error)

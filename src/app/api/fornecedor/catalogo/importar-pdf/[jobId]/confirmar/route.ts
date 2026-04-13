@@ -110,6 +110,7 @@ export async function POST(
         unidade: produto.unidade || 'UN',
         itens_por_caixa: produto.itens_por_caixa ?? 1,
         preco_base: produto.preco_base ?? 0,
+        bonificacao: produto.bonificacao ?? null,
         categoria: produto.categoria || null,
         ativo: true,
       }

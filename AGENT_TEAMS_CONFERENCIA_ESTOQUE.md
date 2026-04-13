@@ -2,7 +2,7 @@
 
 ## Instrução para iniciar
 
-
+ore
 ---
 
 Crie um agent team com 4 teammates para implementar a feature de **Conferência de Estoque do Fornecedor**. Leia o arquivo `AGENT_TEAMS_CONFERENCIA_ESTOQUE.md` na raiz do projeto para o contexto completo. Divida o trabalho assim:

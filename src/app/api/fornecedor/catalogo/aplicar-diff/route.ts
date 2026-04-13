@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
         const notificacoes: Array<Record<string, any>> = []
 
         // Fetch newly inserted item IDs for "novo" notifications
-        let novosItemIds: number[] = []
+        const novosItemMap = new Map<string, number>()
         if (diff.novos.length > 0) {
           const novosEans = diff.novos.map(p => p.ean).filter(Boolean) as string[]
           const novosCodigos = diff.novos.map(p => p.codigo_fornecedor).filter(Boolean) as string[]
@@ -162,18 +162,18 @@ export async function POST(request: NextRequest) {
             }
 
             const { data: novosItens } = await query
-            novosItemIds = (novosItens || []).map(i => i.id)
+            for (const item of novosItens || []) {
+              if (item.ean) novosItemMap.set(`ean:${item.ean}`, item.id)
+              if (item.codigo) novosItemMap.set(`codigo:${item.codigo}`, item.id)
+            }
           }
         }
 
         for (const empresaId of empresaIds) {
           for (const novo of diff.novos) {
-            const matchedId = novosItemIds.length > 0
-              ? novosItemIds.find((_, idx) => {
-                  const n = diff.novos[idx]
-                  return n === novo
-                }) || null
-              : null
+            const matchedId = (novo.ean && novosItemMap.get(`ean:${novo.ean}`))
+              || (novo.codigo_fornecedor && novosItemMap.get(`codigo:${novo.codigo_fornecedor}`))
+              || null
 
             notificacoes.push({
               catalogo_id,

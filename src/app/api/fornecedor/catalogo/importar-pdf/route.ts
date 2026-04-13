@@ -2,6 +2,36 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { contarPaginasPdf } from '@/lib/catalogo-pdf-extractor'
+import https from 'node:https'
+import { URL } from 'node:url'
+
+function putBufferHttps(urlStr: string, buffer: Buffer, contentType: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlStr)
+    const req = https.request(
+      {
+        protocol: u.protocol,
+        hostname: u.hostname,
+        port: u.port || 443,
+        path: u.pathname + u.search,
+        method: 'PUT',
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': buffer.byteLength,
+          'x-upsert': 'false',
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (c) => chunks.push(c as Buffer))
+        res.on('end', () => resolve({ status: res.statusCode || 0, body: Buffer.concat(chunks).toString('utf8') }))
+      },
+    )
+    req.on('error', reject)
+    req.write(buffer)
+    req.end()
+  })
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,9 +116,21 @@ export async function POST(request: NextRequest) {
     const filename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const storagePath = `${catalogoId}/${Date.now()}_${filename}`
 
-    await supabase.storage
+    const { data: signed, error: signErr } = await supabase.storage
       .from('catalogo-pdfs')
-      .upload(storagePath, buffer, { contentType: 'application/pdf', upsert: false })
+      .createSignedUploadUrl(storagePath)
+
+    if (signErr || !signed) {
+      console.error('Erro criar signed URL:', signErr)
+      return NextResponse.json({ error: `Erro ao preparar upload: ${signErr?.message || 'sem url'}` }, { status: 500 })
+    }
+
+    const putRes = await putBufferHttps(signed.signedUrl, buffer, 'application/pdf')
+
+    if (putRes.status < 200 || putRes.status >= 300) {
+      console.error('Erro PUT storage:', putRes.status, putRes.body)
+      return NextResponse.json({ error: `Erro ao subir PDF: HTTP ${putRes.status} ${putRes.body.slice(0, 200)}` }, { status: 500 })
+    }
 
     // Create job — retorna imediato, processamento via /processar
     const { data: job, error: jobError } = await supabase
