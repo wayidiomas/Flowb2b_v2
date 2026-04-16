@@ -126,9 +126,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Total via RPC (sem limite PostgREST de 1000 rows)
+    let totalDedup = count || 0
+    if (!empresaId) {
+      const { data: rpcCount } = await supabase.rpc('count_catalogo_itens_dedup', {
+        p_catalogo_id: catalogo.id,
+      })
+      totalDedup = rpcCount ?? ((itensDedup as any)._totalDedup || itensDedup.length)
+    }
+
     return NextResponse.json({
       itens: itensComPreco,
-      total: !empresaId ? ((itensDedup as any)._totalDedup || itensDedup.length) : (count || 0),
+      total: totalDedup,
       page,
       limit,
     })

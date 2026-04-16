@@ -2012,7 +2012,8 @@ export default function FornecedorCatalogoPage() {
       if (res.ok) {
         const data = await res.json()
         setItens(data.itens || [])
-        setTotalItens(data.total || 0)
+        // totalItens vem do checkCatalogo (RPC, sem limite PostgREST)
+        // data.total aqui eh paginacao (pode estar capped em 1000), usar so pra pages
         setTotalPages(Math.max(1, Math.ceil((data.total || 0) / LIMIT)))
       }
     } catch (err) {
