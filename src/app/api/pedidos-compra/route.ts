@@ -271,11 +271,11 @@ function buildBlingPayload(data: PedidoCompraRequest) {
     payload.observacoesInternas = data.observacoesInternas
   }
 
-  // Desconto
+  // Desconto (frontend envia como percentual)
   if (data.desconto && data.desconto > 0) {
     payload.desconto = {
       valor: data.desconto,
-      unidade: 'REAL',
+      unidade: 'PERCENTUAL',
     }
   }
 

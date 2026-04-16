@@ -61,44 +61,67 @@ async function extrairChunkPdf(pdfBuffer: Buffer, startPage: number, endPage: nu
 // Core: extract products from a chunk of PDF pages
 // ---------------------------------------------------------------------------
 
-const PROMPT = `Voce e um OCR especializado em catalogos e cotacoes B2B de fornecedores pet.
+const PROMPT = `Voce e um OCR especializado em catalogos e cotacoes B2B de fornecedores pet e veterinarios.
 O sistema armazena produtos com estes campos: codigo_fornecedor, codigo_fabricante, nome, ean (13 digitos), marca, ncm, unidade, itens_por_caixa, preco_base, preco_com_impostos, bonificacao, categoria.
 
 Extraia TODOS os produtos de TODAS as paginas deste trecho de PDF.
 
 Mapeamento de campos (o PDF pode usar nomes diferentes):
+- "Cod", "Codigo", numero no inicio da linha = codigo_fornecedor
 - "Cod. Barras" ou "EAN" = ean (13 digitos)
-- Codigo entre parenteses no titulo ex "(4035002)" = codigo_fornecedor
 - "Cod. Prod. Fabric." = codigo_fabricante
-- "Vl Liq" ou "Preco" ou "Preco Unit" = preco_base (decimal com ponto, ex: 12.97)
+- "Vl Liq" ou "Preco" ou "Preco Unit" ou "R$" = preco_base (decimal com ponto, ex: 12.97)
 - "Vl Liq + Imp" ou "Preco + Imp" = preco_com_impostos
 - "Emb" tipo "UN C/ 4" = unidade "UN", itens_por_caixa 4
 - "Bonif" ou "Bonificacao" = bonificacao (quantidade bonificada, geralmente 0)
-- "(P)PREMIER PET" = marca "PREMIER PET"
+- "(P)PREMIER PET" ou coluna "Marca" = marca
 
 ATENCAO CRITICA com precos:
 - O layout do PDF pode ter labels de colunas misturados com valores. Procure sempre o VALOR MONETARIO associado ao produto.
 - "Bonif" NUNCA e preco — e quantidade bonificada, geralmente 0
 - "Qtde" NUNCA e preco — e quantidade pedida, geralmente 1
-- Se ver um produto com multiplos valores (35.58, 35.58, 35.58), o "preco_base" deve ser o MAIOR valor nao-zero, NAO o zero ou 1
-- Se voce estiver em duvida entre varios valores, pegue o que aparece repetido (em cotacoes, Vl Liq, Vl Liq + Imp e Vl Liq Tot costumam ser iguais)
+- Se ver um produto com multiplos valores (35.58, 35.58, 35.58), o "preco_base" deve ser o MAIOR valor nao-zero
 - preco_base NUNCA deve ser 0 se o produto tem um valor visivel no PDF. Se nao achar valor claro, use null (nao 0)
+
+ATENCAO CRITICA com itens_por_caixa:
+- itens_por_caixa e SEMPRE um numero INTEIRO >= 1 representando quantas unidades vem na embalagem
+- SOMENTE estes padroes no nome indicam itens_por_caixa:
+  "C/ 10", "C/100", "DISPLAY C/ 12", "CAIXA C/ 10", "10 UNIDADES", "14 COMPRIMIDOS", "14CP", "10 CAPSULAS"
+- NUNCA confunda medidas/dosagens com itens_por_caixa:
+  ML, MG, G, GR, KG, L, CM, MM sao unidades de MEDIDA (ex: "0.5ML" = volume, NAO caixa)
+  Padroes "25x6,0" ou "13x0,38" sao dimensoes de agulha, NAO caixa
+  "4G", "75G", "300GR", "1KG", "100ML", "50MG" sao peso/volume do PRODUTO
+- Se o PDF nao tem coluna "Emb" ou "Embalagem", itens_por_caixa deve ser null
+- Na duvida, use null (NUNCA use um valor decimal como 0.5 ou 2.5)
 
 Para o campo "categoria", classifique cada produto em UMA destas categorias baseado no nome/tipo:
 - "Racoes Caes" (racao, formula, form, golden form, premier caes)
 - "Racoes Gatos" (racao gato, golden gato, premier gato)
-- "Petiscos e Snacks" (cookie, biscoito, snack, petisco, sachê)
+- "Racoes Outros Animais" (racao passaro, racao peixe, racao jabuti, alcon)
+- "Petiscos e Snacks" (cookie, biscoito, snack, petisco, sache)
 - "Acessorios e Brinquedos" (brinquedo, pelucia, osso vinil, corda, bola)
 - "Ossos e Mordedores" (osso natural, orelha bovina, palito, mordedor)
-- "Medicamentos e Saude" (nutricao clinica, nutr clin)
-- "Suplementos e Vitaminas" (suplemento, vitamina)
-- "Higiene e Banho" (shampoo, condicionador, banho)
+- "Medicamentos e Saude" (nutricao clinica, nutr clin, antibiotico, anti-inflamatorio, enrofloxacino, metronidazol, dipirona, meloxicam, doxiciclina)
+- "Antipulgas e Carrapaticidas" (antipulga, carrapaticida, fipronil, nexgard, bravecto, simparic)
+- "Suplementos e Vitaminas" (suplemento, vitamina, omega, condroitina, nuxcell)
+- "Higiene e Banho" (shampoo, condicionador, banho, colonia, perfume)
+- "Camas e Casinhas" (cama, casinha, colchao, caminha)
+- "Coleiras e Guias" (coleira, guia, peitoral, enforcador)
+- "Comedouros e Bebedouros" (comedouro, bebedouro, fonte)
+- "Areia e Granulado Higienico" (areia, granulado, silica)
+- "Tapetes e Fraldas" (tapete higienico, fralda)
+- "Transporte e Passeio" (caixa transporte, bolsa transporte)
+- "Aquarismo" (aquario, filtro aquario, alcon, alimento peixe)
+- "Aves e Roedores" (passaro, calopsita, hamster, roedor, papa filhote)
+- "Material Veterinario" (seringa, agulha, scalp, atadura, tubo coleta, equipo, cateter, luva, bisturi)
+- "Inseticidas e Raticidas" (inseticida, raticida, k-othrine, racumin, rodilon)
 - "Outros" (se nao se encaixar em nenhuma)
 
 IMPORTANTE:
 - Extraia TODOS os itens, nao pule nenhum
 - Valores monetarios no formato brasileiro (1.234,56) devem ser convertidos para decimal (1234.56)
-- Se um campo nao e visivel, use null
+- Se um campo nao e visivel no PDF, use null
+- itens_por_caixa deve ser INTEIRO ou null, NUNCA decimal
 - Retorne APENAS um JSON array, sem markdown, sem explicacoes`
 
 export async function extrairProdutosDeChunk(

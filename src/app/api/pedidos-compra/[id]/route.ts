@@ -147,11 +147,11 @@ function buildBlingPayload(data: PedidoCompraEditRequest) {
     payload.observacoesInternas = data.observacoesInternas
   }
 
-  // Desconto
+  // Desconto (frontend envia como percentual)
   if (data.desconto && data.desconto > 0) {
     payload.desconto = {
       valor: data.desconto,
-      unidade: 'REAL',
+      unidade: 'PERCENTUAL',
     }
   }
 
@@ -269,6 +269,48 @@ export async function PUT(
 
     // 3. Montar payload do Bling
     const blingPayload = buildBlingPayload(body)
+
+    // 3.1 Validar e ajustar parcelas para bater com total dos itens (evita erro 220 do Bling)
+    if (blingPayload.parcelas && blingPayload.parcelas.length > 0) {
+      // Calcular total que o Bling vera (itens + IPI - desconto + frete)
+      let blingTotal = blingPayload.itens.reduce((acc: number, item: { quantidade: number; valor: number; aliquotaIPI?: number }) => {
+        const subtotal = item.quantidade * item.valor
+        const ipi = subtotal * ((item.aliquotaIPI || 0) / 100)
+        return acc + subtotal + ipi
+      }, 0)
+
+      if (blingPayload.desconto) {
+        if (blingPayload.desconto.unidade === 'PERCENTUAL') {
+          blingTotal -= blingTotal * (blingPayload.desconto.valor / 100)
+        } else {
+          blingTotal -= blingPayload.desconto.valor
+        }
+      }
+
+      if (blingPayload.transporte?.frete) {
+        blingTotal += blingPayload.transporte.frete
+      }
+
+      blingTotal = Math.round(blingTotal * 100) / 100
+
+      const somaParcelas = blingPayload.parcelas.reduce((acc: number, p: { valor: number }) => acc + p.valor, 0)
+      const somaParcelasRound = Math.round(somaParcelas * 100) / 100
+      const diff = Math.round((blingTotal - somaParcelasRound) * 100) / 100
+
+      if (Math.abs(diff) > 0 && Math.abs(diff) <= 0.05) {
+        // Diferenca pequena (arredondamento): ajustar ultima parcela
+        const lastIdx = blingPayload.parcelas.length - 1
+        blingPayload.parcelas[lastIdx].valor = Math.round((blingPayload.parcelas[lastIdx].valor + diff) * 100) / 100
+        console.log(`Parcelas ajustadas em R$${diff.toFixed(2)} para bater com total Bling R$${blingTotal.toFixed(2)}`)
+      } else if (Math.abs(diff) > 0.05) {
+        console.error(`Parcelas (R$${somaParcelasRound.toFixed(2)}) diferem do total Bling (R$${blingTotal.toFixed(2)}) em R$${diff.toFixed(2)}`)
+        return NextResponse.json(
+          { error: `O total das parcelas (R$${somaParcelasRound.toFixed(2)}) nao bate com o total do pedido (R$${blingTotal.toFixed(2)}). Ajuste as parcelas antes de salvar.` },
+          { status: 400 }
+        )
+      }
+    }
+
     console.log('Payload Bling (PUT):', JSON.stringify(blingPayload, null, 2))
 
     // 4. PUT para Bling (com retry inteligente para rate limit e erros transientes)

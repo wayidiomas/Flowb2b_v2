@@ -101,6 +101,12 @@ export async function POST(
         existingId = existingByCodigo.get(produto.codigo_fornecedor)!
       }
 
+      // Sanitizar valores antes de inserir (IA pode retornar float em campo integer, ou medida confundida)
+      const rawIpc = produto.itens_por_caixa
+      const itensCaixa = rawIpc != null && !isNaN(Number(rawIpc)) ? Math.max(1, Math.round(Number(rawIpc))) : null
+      const precoBase = produto.preco_base != null ? Math.round(Number(produto.preco_base) * 100) / 100 : 0
+      const bonif = produto.bonificacao != null && !isNaN(Number(produto.bonificacao)) ? Math.round(Number(produto.bonificacao)) : null
+
       const itemData: Record<string, unknown> = {
         codigo: produto.codigo_fornecedor || null,
         nome: produto.nome,
@@ -108,9 +114,9 @@ export async function POST(
         ncm: produto.ncm || null,
         marca: produto.marca || null,
         unidade: produto.unidade || 'UN',
-        itens_por_caixa: produto.itens_por_caixa ?? 1,
-        preco_base: produto.preco_base ?? 0,
-        bonificacao: produto.bonificacao ?? null,
+        itens_por_caixa: itensCaixa,
+        preco_base: isNaN(precoBase) ? 0 : precoBase,
+        bonificacao: bonif,
         categoria: produto.categoria || null,
         ativo: true,
       }

@@ -374,7 +374,36 @@ export default function EditarPedidoCompraPage() {
   }, 0)
 
   const descontoValor = totalProdutos * (desconto / 100)
-  const totalPedido = totalProdutos - descontoValor + frete + totalIcms
+  const freteNaoSoma = fretePorConta === 'CIF' || fretePorConta === 'SEM_FRETE'
+  const freteEfetivo = freteNaoSoma ? 0 : frete
+  const totalPedido = totalProdutos - descontoValor + freteEfetivo + totalIcms
+
+  // Recalcular parcelas quando o total do pedido mudar
+  // Mantendo as datas de vencimento, apenas atualizando os valores
+  useEffect(() => {
+    if (parcelas.length > 0 && totalPedido > 0) {
+      const totalAtualParcelas = parcelas.reduce((acc, p) => acc + p.valor, 0)
+      const diferenca = Math.abs(totalAtualParcelas - totalPedido)
+
+      // Se a diferenca for maior que 1 centavo, recalcular
+      if (diferenca > 0.01) {
+        const quantidade = parcelas.length
+        const valorPorParcela = Number((totalPedido / quantidade).toFixed(2))
+
+        const parcelasAtualizadas = parcelas.map((parcela, i) => {
+          const valorParcela = i === quantidade - 1
+            ? Number((totalPedido - valorPorParcela * (quantidade - 1)).toFixed(2))
+            : valorPorParcela
+          return {
+            ...parcela,
+            valor: valorParcela,
+          }
+        })
+        setParcelas(parcelasAtualizadas)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalPedido])
 
   const totalItens = itens.length
   const somaQuantidades = itens.reduce((acc, item) => acc + item.quantidade, 0)
@@ -896,8 +925,19 @@ export default function EditarPedidoCompraPage() {
 
               {activeTab === 'pagamento' && (
                 <div>
-                  {/* Botao Adicionar Parcela */}
-                  <div className="flex justify-end mb-4">
+                  {/* Botao Adicionar Parcela + Resumo */}
+                  <div className="flex items-center justify-between mb-4">
+                    {parcelas.length > 0 && (() => {
+                      const somaParcelas = parcelas.reduce((acc, p) => acc + p.valor, 0)
+                      const diff = Math.abs(somaParcelas - totalPedido)
+                      const match = diff <= 0.01
+                      return (
+                        <div className={`text-sm ${match ? 'text-green-600' : 'text-orange-600'}`}>
+                          Soma parcelas: {formatCurrency(somaParcelas)}
+                          {!match && ` (Total pedido: ${formatCurrency(totalPedido)})`}
+                        </div>
+                      )
+                    })()}
                     <button
                       onClick={handleAddParcela}
                       className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
