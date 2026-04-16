@@ -1187,7 +1187,7 @@ export default function CatalogoPage() {
       )}
 
       {/* Cart modal */}
-      <Modal isOpen={showCartModal} onClose={() => setShowCartModal(false)} size="lg">
+      <Modal isOpen={showCartModal} onClose={() => setShowCartModal(false)} size="xl">
         <ModalHeader onClose={() => setShowCartModal(false)}>
           <ModalTitle>Carrinho ({cart.length} itens)</ModalTitle>
           <ModalDescription>{selectedFornecedor?.nome || ''}</ModalDescription>
@@ -1196,32 +1196,32 @@ export default function CatalogoPage() {
           {cart.length === 0 ? (
             <p className="text-center text-gray-500 py-8">Carrinho vazio</p>
           ) : (
-            <div className="space-y-3">
+            <div className="max-h-[55vh] overflow-y-auto space-y-2">
               {cart.map(item => (
-                <div key={item.catalogo_item_id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <div key={item.catalogo_item_id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl overflow-hidden">
                   {/* Thumbnail */}
-                  <div className="w-12 h-12 bg-white rounded-lg border flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 bg-white rounded-lg border flex items-center justify-center shrink-0">
                     {item.imagem_url ? (
                       <img src={item.imagem_url} alt="" className="w-full h-full object-contain rounded-lg" />
                     ) : (
-                      <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>
+                      <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>
                     )}
                   </div>
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{item.nome}</p>
-                    <p className="text-xs text-gray-500">{item.codigo} · {formatCurrency(item.preco)}/{item.unidade}</p>
+                    <p className="text-xs text-gray-500 truncate">{item.codigo} · {formatCurrency(item.preco)}/{item.unidade}</p>
                   </div>
                   {/* Qty controls */}
-                  <div className="flex items-center gap-0 bg-gray-100 rounded-lg">
-                    <button onClick={() => updateCartQty(item.catalogo_item_id, item.quantidade - 1)} className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-red-500 rounded-l-lg hover:bg-gray-200 transition-colors font-bold">−</button>
-                    <span className="w-8 text-center text-sm font-bold text-gray-900">{item.quantidade}</span>
-                    <button onClick={() => updateCartQty(item.catalogo_item_id, item.quantidade + 1)} className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-[#336FB6] rounded-r-lg hover:bg-gray-200 transition-colors font-bold">+</button>
+                  <div className="flex items-center gap-0 bg-gray-100 rounded-lg shrink-0">
+                    <button onClick={() => updateCartQty(item.catalogo_item_id, item.quantidade - 1)} className="w-7 h-7 flex items-center justify-center text-gray-600 hover:text-red-500 rounded-l-lg hover:bg-gray-200 transition-colors font-bold text-sm">−</button>
+                    <span className="w-7 text-center text-xs font-bold text-gray-900">{item.quantidade}</span>
+                    <button onClick={() => updateCartQty(item.catalogo_item_id, item.quantidade + 1)} className="w-7 h-7 flex items-center justify-center text-gray-600 hover:text-[#336FB6] rounded-r-lg hover:bg-gray-200 transition-colors font-bold text-sm">+</button>
                   </div>
                   {/* Subtotal */}
-                  <p className="text-sm font-bold text-gray-900 w-24 text-right">{formatCurrency(item.quantidade * item.preco)}</p>
+                  <p className="text-sm font-bold text-gray-900 w-20 text-right shrink-0 whitespace-nowrap">{formatCurrency(item.quantidade * item.preco)}</p>
                   {/* Remove */}
-                  <button onClick={() => removeFromCart(item.catalogo_item_id)} className="p-1 text-red-400 hover:text-red-600">
+                  <button onClick={() => removeFromCart(item.catalogo_item_id)} className="p-1 text-red-400 hover:text-red-600 shrink-0">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
                 </div>
