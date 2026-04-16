@@ -31,23 +31,18 @@ export async function GET() {
       return NextResponse.json({ catalogo: null, exists: false })
     }
 
-    // Contar itens COM dedup (mesma logica do endpoint /itens)
-    const { data: allItens } = await supabase
-      .from('catalogo_itens')
-      .select('id, codigo, nome')
-      .eq('catalogo_id', catalogo.id)
-      .limit(5000)
+    // Contar itens COM dedup via SQL (PostgREST tem limite de 1000 rows por default)
+    const { data: countResult } = await supabase.rpc('count_catalogo_itens_dedup', {
+      p_catalogo_id: catalogo.id,
+    })
 
-    const seen = new Set<string>()
-    for (const item of allItens || []) {
-      const key = item.codigo || item.nome || String(item.id)
-      seen.add(key)
-    }
+    // Fallback se RPC nao existe: conta bruto
+    const totalItens = countResult ?? 0
 
     return NextResponse.json({
       catalogo,
       exists: true,
-      total_itens: seen.size,
+      total_itens: totalItens,
     })
   } catch (error) {
     console.error('Erro ao buscar catalogo:', error)
