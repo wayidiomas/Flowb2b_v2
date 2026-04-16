@@ -2269,6 +2269,7 @@ export default function FornecedorCatalogoPage() {
       let totalProcessed = 0
       let totalFound = 0
       let currentOffset = 0
+      let initialTotal = 0  // travado na primeira resposta
 
       while (!done && !imgSyncCancelRef.current) {
         try {
@@ -2286,9 +2287,14 @@ export default function FornecedorCatalogoPage() {
           totalFound += imgData.com_imagem || 0
           currentOffset = imgData.next_offset ?? (currentOffset + (imgData.processed || 0))
 
+          // Total inicial = total_sem_imagem + quantos ja foram achados (reconstrucao fiel)
+          if (initialTotal === 0 && imgData.total_sem_imagem != null) {
+            initialTotal = (imgData.total_sem_imagem || 0) + totalFound
+          }
+
           setImgProgress({
             processed: totalProcessed,
-            total: imgData.total_sem_imagem || totalProcessed,
+            total: initialTotal || totalProcessed,
             found: totalFound,
           })
 
@@ -2585,6 +2591,7 @@ export default function FornecedorCatalogoPage() {
                   let totalProcessed = 0
                   let totalFound = 0
                   let currentOffset = 0
+                  let initialTotal = 0
 
                   while (!done && !imgSyncCancelRef.current) {
                     try {
@@ -2600,9 +2607,12 @@ export default function FornecedorCatalogoPage() {
                       totalProcessed += imgData.processed || 0
                       totalFound += imgData.com_imagem || 0
                       currentOffset = imgData.next_offset ?? (currentOffset + (imgData.processed || 0))
+                      if (initialTotal === 0 && imgData.total_sem_imagem != null) {
+                        initialTotal = (imgData.total_sem_imagem || 0) + totalFound
+                      }
                       setImgProgress({
                         processed: totalProcessed,
-                        total: imgData.total_sem_imagem || totalProcessed,
+                        total: initialTotal || totalProcessed,
                         found: totalFound,
                       })
                       done = imgData.done || imgData.remaining === 0 || imgData.processed === 0
@@ -3464,11 +3474,11 @@ export default function FornecedorCatalogoPage() {
                   <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-[#FFAA11] rounded-full transition-all duration-500"
-                      style={{ width: `${Math.round((imgProgress.processed / imgProgress.total) * 100)}%` }}
+                      style={{ width: `${Math.min(100, Math.round((imgProgress.processed / Math.max(imgProgress.total, 1)) * 100))}%` }}
                     />
                   </div>
                   <div className="flex justify-between mt-1 text-xs text-gray-400">
-                    <span>{Math.round((imgProgress.processed / imgProgress.total) * 100)}%</span>
+                    <span>{Math.min(100, Math.round((imgProgress.processed / Math.max(imgProgress.total, 1)) * 100))}%</span>
                     <span>{imgProgress.found} imagens</span>
                   </div>
                 </div>
@@ -3565,7 +3575,7 @@ export default function FornecedorCatalogoPage() {
                 <div className="text-center">
                   <p className="text-base font-semibold text-gray-900">
                     {imgProgress.total > 0
-                      ? `Processando ${imgProgress.processed} de ${imgProgress.total} produtos`
+                      ? `Processando ${Math.min(imgProgress.processed, imgProgress.total)} de ${imgProgress.total} produtos`
                       : 'Iniciando busca...'}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
@@ -3577,12 +3587,12 @@ export default function FornecedorCatalogoPage() {
                     <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-[#FFAA11] to-[#FFCC55] rounded-full transition-all duration-500"
-                        style={{ width: `${Math.round((imgProgress.processed / imgProgress.total) * 100)}%` }}
+                        style={{ width: `${Math.min(100, Math.round((imgProgress.processed / Math.max(imgProgress.total, 1)) * 100))}%` }}
                       />
                     </div>
                     <div className="flex justify-between mt-2 text-xs text-gray-500">
-                      <span>{Math.round((imgProgress.processed / imgProgress.total) * 100)}% concluido</span>
-                      <span>{imgProgress.found} imagens · {imgProgress.total - imgProgress.processed} restantes</span>
+                      <span>{Math.min(100, Math.round((imgProgress.processed / Math.max(imgProgress.total, 1)) * 100))}% concluido</span>
+                      <span>{imgProgress.found} imagens · {Math.max(0, imgProgress.total - imgProgress.processed)} restantes</span>
                     </div>
                   </div>
                 )}

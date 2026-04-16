@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { extrairProdutosDeChunk, curarProdutos, type ProdutoExtraido } from '@/lib/catalogo-pdf-extractor'
 
-const PAGES_PER_CHUNK = 20
+const PAGES_PER_CHUNK = 3
 
 export const maxDuration = 300
 
