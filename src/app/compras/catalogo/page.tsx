@@ -186,9 +186,26 @@ export default function CatalogoPage() {
   const [isVinculado, setIsVinculado] = useState(false)
   const [solicitacaoEnviada, setSolicitacaoEnviada] = useState(false)
 
-  // Cart state
-  const [cart, setCart] = useState<CartItem[]>([])
+  // Cart state (persiste em localStorage pra nao perder ao fechar pagina)
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const saved = localStorage.getItem('flowb2b_cart')
+      return saved ? JSON.parse(saved) : []
+    } catch { return [] }
+  })
   const [showCartModal, setShowCartModal] = useState(false)
+
+  // Persistir cart no localStorage
+  useEffect(() => {
+    try {
+      if (cart.length > 0) {
+        localStorage.setItem('flowb2b_cart', JSON.stringify(cart))
+      } else {
+        localStorage.removeItem('flowb2b_cart')
+      }
+    } catch { /* ignore */ }
+  }, [cart])
   const [showCheckoutModal, setShowCheckoutModal] = useState(false)
   const [criandoPedido, setCriandoPedido] = useState(false)
   const [checkoutObs, setCheckoutObs] = useState('')
@@ -1234,26 +1251,26 @@ export default function CatalogoPage() {
         </ModalHeader>
         <ModalBody>
           {/* Items table */}
-          <div className="overflow-x-auto border border-gray-200 rounded-lg mb-4">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto border border-gray-200 rounded-lg mb-4 max-h-[50vh] overflow-y-auto">
+            <table className="w-full text-sm table-fixed">
+              <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Produto</th>
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600">Qtd</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Preco</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Total</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 w-[50%]">Produto</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 w-[15%]">Qtd</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 w-[15%]">Preco</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 w-[20%]">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {cart.map(item => (
                   <tr key={item.catalogo_item_id}>
                     <td className="px-3 py-2">
-                      <p className="font-medium text-gray-900">{item.nome}</p>
-                      <p className="text-xs text-gray-400">{item.codigo}</p>
+                      <p className="font-medium text-gray-900 truncate">{item.nome}</p>
+                      <p className="text-xs text-gray-400 truncate">{item.codigo}</p>
                     </td>
-                    <td className="px-3 py-2 text-center">{item.quantidade} {item.unidade}</td>
-                    <td className="px-3 py-2 text-right">{formatCurrency(item.preco)}</td>
-                    <td className="px-3 py-2 text-right font-semibold">{formatCurrency(item.quantidade * item.preco)}</td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap">{item.quantidade} {item.unidade}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">{formatCurrency(item.preco)}</td>
+                    <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{formatCurrency(item.quantidade * item.preco)}</td>
                   </tr>
                 ))}
               </tbody>
