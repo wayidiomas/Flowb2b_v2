@@ -62,15 +62,30 @@ export async function GET(request: NextRequest) {
     query = query.order('ordem', { ascending: true, nullsFirst: false })
       .order('nome', { ascending: true })
 
-    // Se nao filtra por empresa, buscar tudo para deduplicar corretamente
-    // (a dedup acontece client-side, paginacao vem depois)
-    if (!empresaId) {
-      query = query.limit(5000) // buscar todos para deduplicar
-    } else {
-      query = query.range(offset, offset + limit - 1)
-    }
+    // Se filtra por empresa, paginacao direto no DB
+    // Se nao, buscar TUDO em pages de 1000 pra deduplicar corretamente (PostgREST max 1000 default)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let itens: any[] = []
+    let itensError: any = null
+    let count: number | null = null
 
-    const { data: itens, error: itensError, count } = await query
+    if (empresaId) {
+      const result = await query.range(offset, offset + limit - 1)
+      itens = result.data || []
+      itensError = result.error
+      count = result.count
+    } else {
+      let fetchOffset = 0
+      const PAGE_SIZE = 1000
+      while (true) {
+        const { data: batch, error: batchErr } = await query.range(fetchOffset, fetchOffset + PAGE_SIZE - 1)
+        if (batchErr) { itensError = batchErr; break }
+        if (!batch || batch.length === 0) break
+        itens = (itens as any[]).concat(batch)
+        if (batch.length < PAGE_SIZE) break
+        fetchOffset += PAGE_SIZE
+      }
+    }
 
     if (itensError) {
       console.error('Erro ao buscar itens do catalogo:', itensError)

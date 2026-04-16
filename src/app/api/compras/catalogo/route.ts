@@ -225,29 +225,47 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Catalogo nao encontrado' }, { status: 404 })
     }
 
-    // Buscar itens do catálogo
-    let query = supabase
-      .from('catalogo_itens')
-      .select('*')
-      .eq('catalogo_id', catalogoDbId)
-      .eq('ativo', true)
+    // Buscar TODOS os itens do catálogo (PostgREST limita a 1000 por default, buscar em pages)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let allItens: any[] = []
+    let fetchOffset = 0
+    const PAGE_SIZE = 1000
 
-    // Não filtra por empresa_id: itens do catálogo são do fornecedor e visíveis para todos os lojistas
+    while (true) {
+      let query = supabase
+        .from('catalogo_itens')
+        .select('*')
+        .eq('catalogo_id', catalogoDbId)
+        .eq('ativo', true)
 
-    if (search) {
-      const sanitized = search.replace(/[,%()\.]/g, '')
-      if (sanitized) {
-        query = query.or(`nome.ilike.%${sanitized}%,codigo.ilike.%${sanitized}%`)
+      if (search) {
+        const sanitized = search.replace(/[,%()\.]/g, '')
+        if (sanitized) {
+          query = query.or(`nome.ilike.%${sanitized}%,codigo.ilike.%${sanitized}%`)
+        }
       }
-    }
-    if (marca) {
-      query = query.ilike('marca', `%${marca}%`)
+      if (marca) {
+        query = query.ilike('marca', `%${marca}%`)
+      }
+
+      query = query.order('ordem', { ascending: true, nullsFirst: false })
+        .order('nome', { ascending: true })
+        .range(fetchOffset, fetchOffset + PAGE_SIZE - 1)
+
+      const { data: batch, error: batchError } = await query
+      if (batchError) {
+        console.error('Erro ao buscar itens do catalogo:', batchError)
+        return NextResponse.json({ error: 'Erro ao buscar itens' }, { status: 500 })
+      }
+
+      if (!batch || batch.length === 0) break
+      allItens = allItens.concat(batch)
+      if (batch.length < PAGE_SIZE) break
+      fetchOffset += PAGE_SIZE
     }
 
-    query = query.order('ordem', { ascending: true, nullsFirst: false })
-      .order('nome', { ascending: true })
-
-    const { data: itens, error: itensError } = await query
+    const itens = allItens
+    const itensError = null
 
     if (itensError) {
       console.error('Erro ao buscar itens do catalogo:', itensError)

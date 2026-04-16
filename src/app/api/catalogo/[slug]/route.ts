@@ -93,7 +93,7 @@ export async function GET(
       },
       itens: itensDedup,
       categorias,
-      total: count || 0,
+      total: count || 0, // paginacao usa count bruto (PostgREST count:exact)
       page,
       limit,
     })
