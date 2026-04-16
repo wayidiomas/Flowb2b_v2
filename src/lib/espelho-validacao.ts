@@ -43,6 +43,40 @@ export interface ValidacaoResult {
 }
 
 // ---------------------------------------------------------------------------
+// Internal types
+// ---------------------------------------------------------------------------
+
+interface ItemPedidoInterno {
+  idx: number
+  codigo_fornecedor: string | null
+  codigo_produto: string | null
+  descricao: string | null
+  quantidade: number
+  valor: number | null
+  gtin: string | null
+  itens_por_caixa: number | null
+  unidade: string | null
+}
+
+interface ItemEspelhoInterno {
+  idx: number
+  codigo_fornecedor: string | null
+  codigo_barras: string | null
+  nome: string | null
+  quantidade: number | null
+  preco_unitario: number | null
+  total: number | null
+  unidade: string | null
+  embalagem: string | null
+}
+
+interface MatchedPair {
+  pedido: ItemPedidoInterno
+  espelho: ItemEspelhoInterno
+  matchType: 'codigo_fornecedor' | 'gtin_ean' | 'codigo_produto' | 'fuzzy_ia'
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -58,20 +92,341 @@ function getMimeType(filename: string): string {
   return mimeTypes[ext || ''] || 'application/octet-stream'
 }
 
+function normalizeCode(code: string | null | undefined): string {
+  if (!code || code === 'N/A' || code === '-') return ''
+  return code.trim().replace(/^0+/, '') || code.trim()
+}
+
+function looksLikeEan(code: string): boolean {
+  const clean = normalizeCode(code)
+  return clean.length >= 8 && /^\d+$/.test(clean) && /^[789]/.test(clean)
+}
+
+function approxEqual(a: number, b: number, tolerance = 0.02): boolean {
+  if (a === 0 && b === 0) return true
+  if (a === 0 || b === 0) return false
+  return Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b)) <= tolerance
+}
+
+// ---------------------------------------------------------------------------
+// STEP 2: Deterministic matching (no AI)
+// ---------------------------------------------------------------------------
+
+function matchDeterministico(
+  pedido: ItemPedidoInterno[],
+  espelho: ItemEspelhoInterno[],
+): { matched: MatchedPair[]; unmatchedPedido: ItemPedidoInterno[]; unmatchedEspelho: ItemEspelhoInterno[] } {
+  const matched: MatchedPair[] = []
+  const usedPedido = new Set<number>()
+  const usedEspelho = new Set<number>()
+
+  // Build espelho lookup maps
+  const espByCodForn = new Map<string, ItemEspelhoInterno[]>()
+  const espByEan = new Map<string, ItemEspelhoInterno[]>()
+  for (const e of espelho) {
+    const cf = normalizeCode(e.codigo_fornecedor)
+    if (cf && !looksLikeEan(cf)) {
+      if (!espByCodForn.has(cf)) espByCodForn.set(cf, [])
+      espByCodForn.get(cf)!.push(e)
+    }
+    const ean = normalizeCode(e.codigo_barras)
+    if (ean) {
+      if (!espByEan.has(ean)) espByEan.set(ean, [])
+      espByEan.get(ean)!.push(e)
+    }
+    // Also index codigo_fornecedor as EAN if it looks like one
+    if (cf && looksLikeEan(cf)) {
+      if (!espByEan.has(cf)) espByEan.set(cf, [])
+      espByEan.get(cf)!.push(e)
+    }
+  }
+
+  function tryMatch(p: ItemPedidoInterno, e: ItemEspelhoInterno, matchType: MatchedPair['matchType']): boolean {
+    if (usedPedido.has(p.idx) || usedEspelho.has(e.idx)) return false
+    matched.push({ pedido: p, espelho: e, matchType })
+    usedPedido.add(p.idx)
+    usedEspelho.add(e.idx)
+    return true
+  }
+
+  // --- ROUND 1: codigo_fornecedor exato (excluindo EANs) ---
+  for (const p of pedido) {
+    if (usedPedido.has(p.idx)) continue
+    const cf = normalizeCode(p.codigo_fornecedor)
+    if (!cf || looksLikeEan(cf)) continue
+    const candidates = espByCodForn.get(cf)
+    if (candidates) {
+      for (const e of candidates) {
+        if (tryMatch(p, e, 'codigo_fornecedor')) break
+      }
+    }
+  }
+  console.log(`[ESPELHO] Round 1 (codigo_fornecedor): ${matched.length} matched`)
+
+  // --- ROUND 2: GTIN/EAN ---
+  const matchedAfterR1 = matched.length
+  for (const p of pedido) {
+    if (usedPedido.has(p.idx)) continue
+    // Collect all possible EANs from pedido item
+    const eans = new Set<string>()
+    if (p.gtin) eans.add(normalizeCode(p.gtin))
+    if (p.codigo_produto && looksLikeEan(p.codigo_produto)) eans.add(normalizeCode(p.codigo_produto))
+    if (p.codigo_fornecedor && looksLikeEan(p.codigo_fornecedor)) eans.add(normalizeCode(p.codigo_fornecedor))
+
+    for (const ean of eans) {
+      if (!ean || usedPedido.has(p.idx)) continue
+      const candidates = espByEan.get(ean)
+      if (candidates) {
+        for (const e of candidates) {
+          if (tryMatch(p, e, 'gtin_ean')) break
+        }
+      }
+    }
+  }
+  console.log(`[ESPELHO] Round 2 (GTIN/EAN): ${matched.length - matchedAfterR1} matched`)
+
+  // --- ROUND 3: codigo_produto against any espelho code ---
+  const matchedAfterR2 = matched.length
+  for (const p of pedido) {
+    if (usedPedido.has(p.idx)) continue
+    const cp = normalizeCode(p.codigo_produto)
+    if (!cp) continue
+    // Try against espelho codigo_fornecedor
+    const candidates = espByCodForn.get(cp)
+    if (candidates) {
+      for (const e of candidates) {
+        if (tryMatch(p, e, 'codigo_produto')) break
+      }
+    }
+  }
+  console.log(`[ESPELHO] Round 3 (codigo_produto): ${matched.length - matchedAfterR2} matched`)
+
+  const unmatchedPedido = pedido.filter(p => !usedPedido.has(p.idx))
+  const unmatchedEspelho = espelho.filter(e => !usedEspelho.has(e.idx))
+  console.log(`[ESPELHO] Deterministic total: ${matched.length}/${pedido.length} pedido, ${espelho.length - unmatchedEspelho.length}/${espelho.length} espelho`)
+  console.log(`[ESPELHO] Unmatched: ${unmatchedPedido.length} pedido, ${unmatchedEspelho.length} espelho`)
+
+  return { matched, unmatchedPedido, unmatchedEspelho }
+}
+
+// ---------------------------------------------------------------------------
+// STEP 3: Fuzzy matching by AI (only unmatched items)
+// ---------------------------------------------------------------------------
+
+async function matchFuzzyIA(
+  openai: OpenAI,
+  unmatchedPedido: ItemPedidoInterno[],
+  unmatchedEspelho: ItemEspelhoInterno[],
+): Promise<MatchedPair[]> {
+  if (unmatchedPedido.length === 0 || unmatchedEspelho.length === 0) return []
+
+  const pedidoTexto = unmatchedPedido.map((p, i) =>
+    `${i}. CodForn:${p.codigo_fornecedor || 'N/A'} | CodProd:${p.codigo_produto || 'N/A'} | GTIN:${p.gtin || 'N/A'} | "${p.descricao || ''}" | Qtd:${p.quantidade}`
+  ).join('\n')
+
+  const espelhoTexto = unmatchedEspelho.map((e, i) =>
+    `${i}. CodForn:${e.codigo_fornecedor || 'N/A'} | EAN:${e.codigo_barras || 'N/A'} | "${e.nome || ''}" | Qtd:${e.quantidade ?? 'N/A'}`
+  ).join('\n')
+
+  const prompt = `Voce recebe itens de um pedido de compra que NAO foram encontrados por codigo no espelho do fornecedor, e itens do espelho que NAO foram associados a nenhum pedido.
+
+Tente associar por NOME do produto, entendendo abreviacoes comuns do setor pet/veterinario:
+AD=adulto, FIL=filhote, MB=mini bits, PEQ=pequeno, RÇ=racas, COMP=comprimidos, CP=comprimidos, CAES=cães, ELIZAB=elizabetano, FRALDA=fralda absorvente, SHAMP=shampoo
+
+Retorne APENAS os pares que voce tem CERTEZA que sao o MESMO produto.
+Na duvida, NAO faca match. Cada indice so pode ser usado UMA vez.
+
+PEDIDO sem match (${unmatchedPedido.length} itens):
+${pedidoTexto}
+
+ESPELHO sem match (${unmatchedEspelho.length} itens):
+${espelhoTexto}
+
+Retorne APENAS JSON array, sem markdown:
+[{"pedido_idx": 0, "espelho_idx": 2}]
+Se nenhum par encontrado, retorne []`
+
+  try {
+    const resp = await openai.responses.create({
+      model: 'gpt-5.4-mini',
+      reasoning: { effort: 'medium' },
+      input: [{ role: 'user', content: prompt }],
+    })
+
+    const text = (resp.output_text || '').trim()
+    if (!text) return []
+
+    let json = text
+    const cb = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+    if (cb) json = cb[1].trim()
+    else {
+      const am = text.match(/\[[\s\S]*\]/)
+      if (am) json = am[0]
+    }
+
+    const pairs: Array<{ pedido_idx: number; espelho_idx: number }> = JSON.parse(json)
+    if (!Array.isArray(pairs)) return []
+
+    // Convert to MatchedPair, deduplicating
+    const result: MatchedPair[] = []
+    const usedP = new Set<number>()
+    const usedE = new Set<number>()
+
+    for (const { pedido_idx, espelho_idx } of pairs) {
+      if (usedP.has(pedido_idx) || usedE.has(espelho_idx)) continue
+      if (pedido_idx < 0 || pedido_idx >= unmatchedPedido.length) continue
+      if (espelho_idx < 0 || espelho_idx >= unmatchedEspelho.length) continue
+      result.push({
+        pedido: unmatchedPedido[pedido_idx],
+        espelho: unmatchedEspelho[espelho_idx],
+        matchType: 'fuzzy_ia',
+      })
+      usedP.add(pedido_idx)
+      usedE.add(espelho_idx)
+    }
+
+    console.log(`[ESPELHO] Fuzzy IA: ${result.length} matched from ${unmatchedPedido.length}p × ${unmatchedEspelho.length}e`)
+    return result
+  } catch (err) {
+    console.error('[ESPELHO] Fuzzy IA error:', err)
+    return []
+  }
+}
+
+// ---------------------------------------------------------------------------
+// STEP 4: Classification (no AI)
+// ---------------------------------------------------------------------------
+
+function classificarItens(
+  allMatched: MatchedPair[],
+  unmatchedPedido: ItemPedidoInterno[],
+  unmatchedEspelho: ItemEspelhoInterno[],
+): { resumo: ValidacaoResumo; itens: ValidacaoItem[] } {
+  const itens: ValidacaoItem[] = []
+  let ok = 0, divergencias = 0
+
+  for (const { pedido: p, espelho: e } of allMatched) {
+    const diffs: string[] = []
+    const qtyP = Number(p.quantidade) || 0
+    const qtyE = Number(e.quantidade) || 0
+    const precoP = Number(p.valor) || 0
+    const precoE = Number(e.preco_unitario) || 0
+    const totalE = Number(e.total) || 0
+    const totalP = precoP * qtyP
+    const ipc = p.itens_por_caixa || 1
+
+    // Master check: se o TOTAL DA LINHA bate (2%), considerar OK
+    // Isso pega: conversão de embalagem, IA confundindo unit price com total, arredondamentos
+    const totalEReal = totalE > 0 ? totalE : precoE * qtyE
+    if (totalP > 0 && totalEReal > 0 && approxEqual(totalP, totalEReal)) {
+      // Total bate — tudo OK, diferenças são só de representação
+      const status = 'ok' as const
+      ok++
+      itens.push({
+        status,
+        item_pedido: {
+          codigo: p.codigo_fornecedor, descricao: p.descricao,
+          quantidade: qtyP, valor: precoP, gtin: p.gtin,
+        },
+        item_espelho: {
+          codigo: e.codigo_fornecedor, nome: e.nome,
+          quantidade: qtyE, preco_unitario: precoE, total: totalEReal,
+        },
+        diferencas: [],
+      })
+      continue
+    }
+
+    // Check quantity (with embalagem conversion)
+    let qtyOk = qtyP === qtyE
+    if (!qtyOk && ipc > 1 && (qtyP === qtyE * ipc || qtyE === qtyP * ipc)) {
+      qtyOk = true
+    }
+    if (!qtyOk) {
+      diffs.push(`Quantidade: pedido=${qtyP}, espelho=${qtyE}`)
+    }
+
+    // Check price
+    let precoOk = approxEqual(precoP, precoE)
+    // Also check if espelho "unit price" is actually the line total
+    if (!precoOk && qtyP > 0 && approxEqual(precoP * qtyP, precoE)) {
+      precoOk = true // espelho tem total no campo de preco unitario
+    }
+    if (!precoOk && precoE > 0) {
+      diffs.push(`Preço unitário: pedido=${precoP.toFixed(2)}, espelho=${precoE.toFixed(2)}`)
+    }
+
+    const status = diffs.length === 0 ? 'ok' : 'divergencia'
+    if (status === 'ok') ok++
+    else divergencias++
+
+    itens.push({
+      status,
+      item_pedido: {
+        codigo: p.codigo_fornecedor,
+        descricao: p.descricao,
+        quantidade: qtyP,
+        valor: precoP,
+        gtin: p.gtin,
+      },
+      item_espelho: {
+        codigo: e.codigo_fornecedor,
+        nome: e.nome,
+        quantidade: qtyE,
+        preco_unitario: precoE,
+        total: totalE,
+      },
+      diferencas: diffs,
+    })
+  }
+
+  // Faltando (pedido items not found in espelho)
+  for (const p of unmatchedPedido) {
+    itens.push({
+      status: 'faltando',
+      item_pedido: {
+        codigo: p.codigo_fornecedor,
+        descricao: p.descricao,
+        quantidade: Number(p.quantidade) || 0,
+        valor: Number(p.valor) || 0,
+        gtin: p.gtin,
+      },
+      diferencas: [],
+    })
+  }
+
+  // Extra (espelho items not found in pedido)
+  for (const e of unmatchedEspelho) {
+    itens.push({
+      status: 'extra',
+      item_espelho: {
+        codigo: e.codigo_fornecedor,
+        nome: e.nome,
+        quantidade: Number(e.quantidade) || 0,
+        preco_unitario: Number(e.preco_unitario) || 0,
+        total: Number(e.total) || 0,
+      },
+      diferencas: [],
+    })
+  }
+
+  const resumo: ValidacaoResumo = {
+    total_pedido: allMatched.length + unmatchedPedido.length,
+    total_espelho: allMatched.length + unmatchedEspelho.length,
+    ok,
+    divergencias,
+    faltando: unmatchedPedido.length,
+    extras: unmatchedEspelho.length,
+  }
+
+  return { resumo, itens }
+}
+
 // ---------------------------------------------------------------------------
 // Core validation function
 // ---------------------------------------------------------------------------
 
-/**
- * Validates an espelho (mirror document) for a given pedido using AI.
- *
- * IMPORTANT: The caller is responsible for authorizing access to the pedido.
- * This function trusts that the pedidoId has already been validated.
- *
- * @param pedidoId - The confirmed pedido ID (caller already validated access)
- */
 export async function validarEspelho(pedidoId: number): Promise<ValidacaoResult> {
-  // Check OpenAI key
   if (!process.env.OPENAI_API_KEY) {
     return { success: false, error: 'Servico de validacao nao configurado.', status: 500 }
   }
@@ -79,7 +434,7 @@ export async function validarEspelho(pedidoId: number): Promise<ValidacaoResult>
   const supabase = createServerSupabaseClient()
 
   // =========================================================================
-  // Fetch pedido (without empresa_id filter - caller already authorized)
+  // Fetch pedido
   // =========================================================================
   const { data: pedido, error: pedidoError } = await supabase
     .from('pedidos_compra')
@@ -97,7 +452,7 @@ export async function validarEspelho(pedidoId: number): Promise<ValidacaoResult>
   }
 
   // =========================================================================
-  // Fetch order items + GTIN
+  // Fetch order items + GTIN + itens_por_caixa
   // =========================================================================
   const { data: itensPedidoRaw, error: itensError } = await supabase
     .from('itens_pedido_compra')
@@ -114,20 +469,31 @@ export async function validarEspelho(pedidoId: number): Promise<ValidacaoResult>
 
   const gtinMap = new Map<number, string>()
   const itensPorCaixaMap = new Map<number, number | null>()
-  const unidadeProdutoMap = new Map<number, string | null>()
   if (produtoIds.length > 0) {
     const { data: produtos } = await supabase
       .from('produtos')
-      .select('id, gtin, itens_por_caixa, unidade')
+      .select('id, gtin, itens_por_caixa')
       .in('id', produtoIds)
       .eq('empresa_id', pedido.empresa_id)
 
     for (const p of produtos || []) {
       if (p.gtin) gtinMap.set(p.id, p.gtin)
       itensPorCaixaMap.set(p.id, p.itens_por_caixa)
-      unidadeProdutoMap.set(p.id, p.unidade)
     }
   }
+
+  // Build internal pedido items
+  const itensPedido: ItemPedidoInterno[] = itensPedidoRaw.map((item, idx) => ({
+    idx,
+    codigo_fornecedor: item.codigo_fornecedor || null,
+    codigo_produto: item.codigo_produto || null,
+    descricao: item.descricao || null,
+    quantidade: Number(item.quantidade) || 0,
+    valor: Number(item.valor) || 0,
+    gtin: item.produto_id ? gtinMap.get(item.produto_id) || null : null,
+    itens_por_caixa: item.produto_id ? itensPorCaixaMap.get(item.produto_id) ?? null : null,
+    unidade: item.unidade || null,
+  }))
 
   // =========================================================================
   // Download espelho from storage
@@ -152,41 +518,33 @@ export async function validarEspelho(pedidoId: number): Promise<ValidacaoResult>
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
   // =========================================================================
-  // STEP 1: AI Extraction - reads the espelho and extracts items as JSON
+  // STEP 1: AI Extraction (kept as-is)
   // =========================================================================
 
-  const promptExtracao = `Voce e um OCR especializado em documentos comerciais B2B (espelhos de pedido, cotacoes, orcamentos de fornecedores).
+  const promptExtracao = `Voce e um OCR especializado em documentos comerciais B2B (espelhos de pedido, cotacoes, orcamentos de fornecedores pet/veterinarios).
 
 Extraia TODOS os itens/produtos listados neste documento.
 
 Para cada item, extraia:
-- codigo_fornecedor: o codigo principal do produto (geralmente aparece entre parenteses no inicio, ex: "(4006089)" → "4006089")
-- codigo_barras: o codigo de barras/EAN/GTIN (13 digitos, ex: "7897348205258")
+- codigo_fornecedor: codigo interno do fornecedor (geralmente entre parenteses, ex: "(4006089)" → "4006089", ou coluna "Cod")
+- codigo_barras: codigo de barras/EAN/GTIN (13 digitos, ex: "7897348205258")
 - nome: nome/descricao do produto
-- quantidade: quantidade (numero)
-- preco_unitario: preco unitario (numero decimal, ex: 121.15)
+- quantidade: quantidade (numero inteiro)
+- preco_unitario: preco unitario (numero decimal com ponto, ex: 121.15)
 - total: valor total da linha (numero decimal)
 - unidade: unidade de medida (UN, CX, FD, PCT, etc.)
-- embalagem: informacao de embalagem (ex: "UN C/ 4", "FD C/ 12", "CX C/ 6")
+- embalagem: informacao de embalagem (ex: "UN C/ 4", "FD C/ 12")
 
 IMPORTANTE:
-- O codigo_fornecedor geralmente aparece entre parenteses antes do nome do produto
-- O codigo_barras/EAN geralmente aparece no campo "Cod. Barras" com 13 digitos
-- Valores monetarios como numeros decimais com ponto (ex: 1234.56, NAO "R$ 1.234,56")
-- Se o documento tem formato brasileiro (1.234,56), converta para 1234.56
+- Valores monetarios brasileiros (1.234,56) devem ser convertidos para decimal (1234.56)
 - Extraia TODOS os itens, mesmo que sejam muitos
 - Se um campo nao esta visivel, use null
+- codigo_fornecedor e codigo_barras sao campos DIFERENTES — nao confunda
 
 Retorne APENAS um JSON array, sem markdown:
 [{"codigo_fornecedor":"4006089","codigo_barras":"7897348205258","nome":"GOLDEN FORM CAES AD CARNE MB 1KG","quantidade":8,"preco_unitario":15.44,"total":123.52,"unidade":"UN","embalagem":"FD C/ 4"}]`
 
-  let itensEspelho: Array<{
-    codigo: string | null
-    nome: string | null
-    quantidade: number | null
-    preco_unitario: number | null
-    total: number | null
-  }>
+  let itensEspelhoRaw: Array<Record<string, unknown>>
 
   try {
     const resp1 = await openai.responses.create({
@@ -206,7 +564,6 @@ Retorne APENAS um JSON array, sem markdown:
     const text1 = (resp1.output_text || '').trim()
     if (!text1) throw new Error('IA de extracao retornou vazio')
 
-    // Parse JSON
     let json1 = text1
     const cb = text1.match(/```(?:json)?\s*([\s\S]*?)```/)
     if (cb) json1 = cb[1].trim()
@@ -215,115 +572,52 @@ Retorne APENAS um JSON array, sem markdown:
       if (am) json1 = am[0]
     }
 
-    itensEspelho = JSON.parse(json1)
-    if (!Array.isArray(itensEspelho)) throw new Error('Resposta nao e array')
+    itensEspelhoRaw = JSON.parse(json1)
+    if (!Array.isArray(itensEspelhoRaw)) throw new Error('Resposta nao e array')
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('Erro IA Extracao:', err)
     return { success: false, error: 'Erro ao extrair itens do espelho.', detalhes: msg, status: 500 }
   }
 
+  console.log(`[ESPELHO] Extração: ${itensEspelhoRaw.length} itens do espelho, ${itensPedido.length} itens do pedido`)
+
+  // Build internal espelho items
+  const itensEspelho: ItemEspelhoInterno[] = itensEspelhoRaw.map((item, idx) => ({
+    idx,
+    codigo_fornecedor: String(item.codigo_fornecedor || item.codigo || '') || null,
+    codigo_barras: String(item.codigo_barras || '') || null,
+    nome: String(item.nome || '') || null,
+    quantidade: item.quantidade != null ? Number(item.quantidade) : null,
+    preco_unitario: item.preco_unitario != null ? Number(item.preco_unitario) : null,
+    total: item.total != null ? Number(item.total) : null,
+    unidade: String(item.unidade || '') || null,
+    embalagem: String(item.embalagem || '') || null,
+  }))
+
   // =========================================================================
-  // STEP 2: AI Comparison - compares the two sets and matches items
+  // STEP 2: Deterministic matching (TypeScript, no AI)
   // =========================================================================
+  const det = matchDeterministico(itensPedido, itensEspelho)
 
-  // Build text for pedido items
-  const pedidoTexto = itensPedidoRaw.map((item, i) => {
-    const gtin = item.produto_id ? gtinMap.get(item.produto_id) || '' : ''
-    const unidade = item.produto_id ? unidadeProdutoMap.get(item.produto_id) || item.unidade || '' : item.unidade || ''
-    const itens_por_caixa = item.produto_id ? itensPorCaixaMap.get(item.produto_id) : null
-    return `${i + 1}. GTIN:${gtin || 'N/A'} | CodForn:${item.codigo_fornecedor || 'N/A'} | CodProd:${item.codigo_produto || 'N/A'} | "${item.descricao || ''}" | Qtd:${item.quantidade} | UN:${unidade || 'N/A'} | CxCom:${itens_por_caixa || 'N/A'} | R$${(item.valor || 0).toFixed(2)}`
-  }).join('\n')
+  // =========================================================================
+  // STEP 3: Fuzzy matching by AI (only unmatched items)
+  // =========================================================================
+  const fuzzyMatches = await matchFuzzyIA(openai, det.unmatchedPedido, det.unmatchedEspelho)
 
-  // Build text for espelho items
-  const espelhoTexto = itensEspelho.map((item, i) => {
-    const cf = (item as Record<string, unknown>).codigo_fornecedor || (item as Record<string, unknown>).codigo || 'N/A'
-    const cb = (item as Record<string, unknown>).codigo_barras || 'N/A'
-    const un = (item as Record<string, unknown>).unidade || 'N/A'
-    const emb = (item as Record<string, unknown>).embalagem || 'N/A'
-    return `${i + 1}. CodForn:${cf} | EAN:${cb} | "${item.nome || ''}" | Qtd:${item.quantidade ?? 'N/A'} | UN:${un} | Emb:${emb} | R$${item.preco_unitario?.toFixed(2) ?? 'N/A'} | Total:R$${item.total?.toFixed(2) ?? 'N/A'}`
-  }).join('\n')
+  // Remove fuzzy-matched from unmatched pools
+  const fuzzyPedidoIdxs = new Set(fuzzyMatches.map(m => m.pedido.idx))
+  const fuzzyEspelhoIdxs = new Set(fuzzyMatches.map(m => m.espelho.idx))
+  const finalUnmatchedPedido = det.unmatchedPedido.filter(p => !fuzzyPedidoIdxs.has(p.idx))
+  const finalUnmatchedEspelho = det.unmatchedEspelho.filter(e => !fuzzyEspelhoIdxs.has(e.idx))
 
-  const promptComparacao = `Voce e um validador de pedidos de compra B2B. Compare os itens do PEDIDO ORIGINAL com os itens EXTRAIDOS DO ESPELHO do fornecedor.
+  // =========================================================================
+  // STEP 4: Classification (TypeScript, no AI)
+  // =========================================================================
+  const allMatched = [...det.matched, ...fuzzyMatches]
+  const { resumo, itens } = classificarItens(allMatched, finalUnmatchedPedido, finalUnmatchedEspelho)
 
-ITENS DO PEDIDO ORIGINAL (${itensPedidoRaw.length} itens):
-${pedidoTexto}
+  console.log(`[ESPELHO] Final: ${resumo.ok} ok, ${resumo.divergencias} diverg, ${resumo.faltando} faltando, ${resumo.extras} extras`)
 
-ITENS DO ESPELHO DO FORNECEDOR (${itensEspelho.length} itens):
-${espelhoTexto}
-
-REGRA FUNDAMENTAL: Cada item do pedido deve aparecer EXATAMENTE UMA VEZ no resultado. Cada item do espelho deve ser usado EXATAMENTE UMA VEZ. NAO DUPLIQUE itens. O total de itens no resultado deve ser: total_pedido + extras do espelho.
-
-INSTRUCOES DE CRUZAMENTO (PRIORIDADE RIGOROSA):
-1. PRIMEIRO: Cruze por CodForn do pedido com CodForn do espelho (match EXATO de codigo do fornecedor). Ex: CodForn:4008009 no pedido = CodForn:4008009 no espelho = MATCH. Cada codigo so pode ser usado UMA VEZ.
-2. SEGUNDO: Se nao encontrou por CodForn, cruze por GTIN/EAN (match exato de codigo de barras). Cada EAN so pode ser usado UMA VEZ.
-3. TERCEIRO: Somente se nao encontrou por codigo, tente por nome do produto (entenda abreviacoes: "AD"=adulto, "FIL"=filhote, "MB"=mini bits, "PEQ"=pequeno, "RÇ ESP"=racas especificas). Cada nome so pode ser usado UMA VEZ.
-4. NAO faca match por nome se os codigos sao diferentes! Codigos diferentes = produtos diferentes.
-5. Para cada match encontrado: compare quantidade e preco (tolerancia de 2% no preco)
-6. Classifique: "ok" (tudo bate), "divergencia" (encontrou mas qtd ou preco diferem), "faltando" (nao achou no espelho)
-7. Itens do espelho que SOBRARAM sem correspondencia no pedido: "extra"
-8. NUNCA liste o mesmo item duas vezes. Se ja fez match, NAO use esse item novamente.
-
-REGRAS DE EMBALAGEM (MUITO IMPORTANTE):
-- Se a quantidade difere mas o VALOR TOTAL DA LINHA eh igual (tolerancia 2%), considere OK. Isso significa conversao de embalagem (ex: 4 UN = 1 fardo de 4).
-- Se o pedido tem Qtd=4 e CxCom=4, e o espelho tem Qtd=1 com embalagem tipo fardo/caixa, eh a mesma coisa: 1 cx de 4 = 4 unidades.
-- Priorize SEMPRE comparar o VALOR TOTAL da linha. Se o total bate, a diferenca de quantidade eh apenas conversao de embalagem e NAO eh divergencia.
-- Se Qtd_pedido = Qtd_espelho × itens_por_caixa (ou vice-versa), considere OK.
-
-Retorne APENAS JSON valido, sem markdown:
-{
-  "resumo": {
-    "total_pedido": ${itensPedidoRaw.length},
-    "total_espelho": ${itensEspelho.length},
-    "ok": <numero>,
-    "divergencias": <numero>,
-    "faltando": <numero>,
-    "extras": <numero>
-  },
-  "itens": [
-    {
-      "status": "ok"|"divergencia"|"faltando"|"extra",
-      "item_pedido": {"codigo":"...","descricao":"...","quantidade":0,"valor":0.00,"gtin":"..."},
-      "item_espelho": {"codigo":"...","nome":"...","quantidade":0,"preco_unitario":0.00,"total":0.00},
-      "diferencas": ["Quantidade: pedido=4, espelho=3"]
-    }
-  ]
-}
-
-item_pedido = null para "extra". item_espelho = null para "faltando". diferencas = [] para "ok".
-Valores monetarios como numeros decimais (121.15).`
-
-  try {
-    const resp2 = await openai.responses.create({
-      model: 'gpt-5.4-mini',
-      input: [{ role: 'user', content: promptComparacao }],
-    })
-
-    const text2 = (resp2.output_text || '').trim()
-    if (!text2) throw new Error('IA de comparacao retornou vazio')
-
-    let json2 = text2
-    const cb2 = text2.match(/```(?:json)?\s*([\s\S]*?)```/)
-    if (cb2) json2 = cb2[1].trim()
-    else {
-      const om = text2.match(/\{[\s\S]*\}/)
-      if (om) json2 = om[0]
-    }
-
-    const result = JSON.parse(json2)
-
-    if (!result.resumo || !result.itens) {
-      throw new Error('Formato de resposta invalido')
-    }
-
-    return {
-      success: true,
-      resumo: result.resumo,
-      itens: result.itens,
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error('Erro IA Comparacao:', err)
-    return { success: false, error: 'Erro ao comparar itens.', detalhes: msg, status: 500 }
-  }
+  return { success: true, resumo, itens }
 }
