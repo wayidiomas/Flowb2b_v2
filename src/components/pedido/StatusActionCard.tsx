@@ -327,11 +327,15 @@ export function StatusActionCard({
                     <td className="px-3 py-2.5">
                       {(() => {
                         const s = item.status_item
-                        if (!s || s === 'ok') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700">OK</span>
-                        if (s === 'divergente') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700">Preco desatualizado</span>
+                        const precoAlterado = item.precoSugerido != null && item.precoSugerido !== item.valorUnitario
+                        // Status do fornecedor
                         if (s === 'ruptura') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-700">Ruptura</span>
                         if (s === 'depreciado') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">Depreciado</span>
-                        return <span className="text-gray-300">-</span>
+                        if (s === 'divergente') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700">Preco desatualizado</span>
+                        // Status do lojista: preco sugerido difere do original
+                        if (precoAlterado) return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-50 text-orange-700">Preco alterado</span>
+                        if (qtdMudou) return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700">Qtd alterada</span>
+                        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700">OK</span>
                       })()}
                       {item.is_substituicao && <span className="block text-[9px] text-blue-600 mt-0.5">Substituicao</span>}
                     </td>
