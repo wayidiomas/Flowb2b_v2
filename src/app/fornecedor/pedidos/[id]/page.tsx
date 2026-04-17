@@ -1671,43 +1671,155 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         )}
 
         {/* Step 4 (stepper): Summary cards + Observacao + Submit */}
-        {isStepper && currentStep === 4 && canSuggest && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
-              <h2 className="text-lg font-semibold text-gray-900">Resumo da Sugestao</h2>
-              <p className="text-sm text-gray-500 mt-1">Revise os status e envie sua sugestao</p>
-            </div>
-            <div className="p-4 sm:p-6">
-              {/* Summary cards */}
-              <div className="grid grid-cols-4 gap-4 mb-6">
-                <div className="bg-emerald-50 rounded-xl p-4 text-center">
-                  <p className="text-2xl font-bold text-emerald-700">{sugestoes.filter(s => s.status_item === 'ok').length}</p>
-                  <p className="text-xs text-emerald-600">OK</p>
-                </div>
-                <div className="bg-red-50 rounded-xl p-4 text-center">
-                  <p className="text-2xl font-bold text-red-700">{sugestoes.filter(s => s.status_item === 'ruptura').length}</p>
-                  <p className="text-xs text-red-600">Ruptura</p>
-                </div>
-                <div className="bg-gray-100 rounded-xl p-4 text-center">
-                  <p className="text-2xl font-bold text-gray-600">{sugestoes.filter(s => s.status_item === 'depreciado').length}</p>
-                  <p className="text-xs text-gray-500">Depreciado</p>
-                </div>
-                <div className="bg-amber-50 rounded-xl p-4 text-center">
-                  <p className="text-2xl font-bold text-amber-700">{sugestoes.filter(s => s.status_item === 'divergente').length}</p>
-                  <p className="text-xs text-amber-600">Divergente</p>
-                </div>
-              </div>
+        {isStepper && currentStep === 4 && canSuggest && (() => {
+          const totalSugerido = sugestoes.reduce((sum, sug) => {
+            const item = itens.find(i => i.id === sug.item_id)
+            const preco = sug.preco_editado ?? sug.preco_unitario ?? (item?.preco_catalogo ?? 0)
+            const desc = sug.desconto_percentual || 0
+            return sum + preco * (1 - desc / 100) * sug.quantidade_sugerida
+          }, 0)
+          const countOk = sugestoes.filter(s => s.status_item === 'ok').length
+          const countRuptura = sugestoes.filter(s => s.status_item === 'ruptura').length
+          const countDepreciado = sugestoes.filter(s => s.status_item === 'depreciado').length
+          const countDivergente = sugestoes.filter(s => s.status_item === 'divergente').length
+          const temBloqueio = countDivergente > 0
 
-              {/* Observacao */}
+          return (
+          <div className="space-y-6">
+            {/* Status cards */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
+                <h2 className="text-lg font-semibold text-gray-900">Resumo da Sugestao</h2>
+                <p className="text-sm text-gray-500 mt-1">Revise antes de enviar ao lojista</p>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                  <div className="bg-emerald-50 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-emerald-700">{countOk}</p>
+                    <p className="text-xs text-emerald-600 font-medium">OK</p>
+                  </div>
+                  <div className="bg-red-50 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-red-700">{countRuptura}</p>
+                    <p className="text-xs text-red-600 font-medium">Ruptura</p>
+                  </div>
+                  <div className="bg-gray-100 rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-gray-600">{countDepreciado}</p>
+                    <p className="text-xs text-gray-500 font-medium">Depreciado</p>
+                  </div>
+                  <div className={`rounded-xl p-4 text-center ${countDivergente > 0 ? 'bg-amber-50 ring-2 ring-amber-300' : 'bg-amber-50'}`}>
+                    <p className="text-2xl font-bold text-amber-700">{countDivergente}</p>
+                    <p className="text-xs text-amber-600 font-medium">Divergente</p>
+                  </div>
+                </div>
+
+                {temBloqueio && (
+                  <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mb-6">
+                    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                    <span>Volte ao passo 3 e ajuste o preco dos itens divergentes antes de enviar.</span>
+                  </div>
+                )}
+
+                {/* Total */}
+                <div className="flex items-center justify-between p-4 bg-[#336FB6]/5 rounded-xl mb-6">
+                  <div>
+                    <p className="text-sm text-gray-500">Total da sugestao</p>
+                    <p className="text-2xl font-bold text-[#336FB6]">R$ {totalSugerido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500">{sugestoes.length} itens</p>
+                    {condicoesComerciais.prazo_entrega_dias > 0 && (
+                      <p className="text-sm text-gray-600">Entrega: {condicoesComerciais.prazo_entrega_dias} dias</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Condicoes comerciais resumo */}
+                {(condicoesComerciais.valor_minimo_pedido > 0 || condicoesComerciais.desconto_geral > 0 || condicoesComerciais.bonificacao_quantidade_geral > 0) && (
+                  <div className="flex flex-wrap gap-4 text-sm mb-6 p-3 bg-gray-50 rounded-lg">
+                    {condicoesComerciais.valor_minimo_pedido > 0 && (
+                      <span className="text-gray-600">Minimo: <strong>R$ {condicoesComerciais.valor_minimo_pedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></span>
+                    )}
+                    {condicoesComerciais.desconto_geral > 0 && (
+                      <span className="text-emerald-600">Desconto geral: <strong>{condicoesComerciais.desconto_geral}%</strong></span>
+                    )}
+                    {condicoesComerciais.bonificacao_quantidade_geral > 0 && (
+                      <span className="text-purple-600">Bonificacao: <strong>+{condicoesComerciais.bonificacao_quantidade_geral} un</strong></span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tabela read-only de itens */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-6 py-3 border-b border-gray-100 bg-gray-50">
+                <h3 className="text-sm font-semibold text-gray-700">Itens da sugestao</h3>
+              </div>
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600 w-20">Status</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Produto</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600 w-20">Codigo</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-600">Qty</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-600">Preco</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-600">Desc%</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-600">Bonif</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-600">Subtotal</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600 min-w-[120px]">Observacao</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {sugestoes.map((sug, idx) => {
+                      const item = itens.find(i => i.id === sug.item_id)
+                      const preco = sug.preco_editado ?? sug.preco_unitario ?? (item?.preco_catalogo ?? 0)
+                      const desc = sug.desconto_percentual || 0
+                      const subtotal = preco * (1 - desc / 100) * sug.quantidade_sugerida
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="px-3 py-2">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              sug.status_item === 'ok' ? 'bg-emerald-50 text-emerald-700' :
+                              sug.status_item === 'ruptura' ? 'bg-red-50 text-red-700' :
+                              sug.status_item === 'depreciado' ? 'bg-gray-100 text-gray-600' :
+                              sug.status_item === 'divergente' ? 'bg-amber-50 text-amber-700' :
+                              'bg-gray-50 text-gray-500'
+                            }`}>
+                              {sug.status_item === 'ok' ? 'OK' : sug.status_item === 'ruptura' ? 'Ruptura' : sug.status_item === 'depreciado' ? 'Deprec.' : sug.status_item === 'divergente' ? 'Diverg.' : '-'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-gray-900 truncate max-w-[180px]" title={item?.descricao || sug.produto_nome || ''}>
+                            {item?.descricao || sug.produto_nome || '-'}
+                          </td>
+                          <td className="px-3 py-2 text-gray-500 font-mono">{sug.codigo_fornecedor || '-'}</td>
+                          <td className="px-3 py-2 text-right text-gray-900">{sug.quantidade_sugerida}</td>
+                          <td className="px-3 py-2 text-right text-gray-900">R$ {preco.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right">{desc > 0 ? <span className="text-emerald-600">{desc}%</span> : '-'}</td>
+                          <td className="px-3 py-2 text-right">{sug.bonificacao_quantidade > 0 ? <span className="text-purple-600">+{sug.bonificacao_quantidade}</span> : '-'}</td>
+                          <td className="px-3 py-2 text-right font-medium text-gray-900">R$ {subtotal.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-gray-500 text-[11px] break-words">{sug.observacao_item || '-'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Observacao + Enviar */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden p-6">
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Observacao para o lojista (opcional)
+                  Observacao geral para o lojista (opcional)
                 </label>
                 <textarea
                   value={observacao}
                   onChange={(e) => setObservacao(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-[#336FB6]/30 focus:border-[#336FB6]"
                   placeholder="Justifique suas sugestoes, informe prazos, condicoes especiais..."
                 />
               </div>
@@ -1717,14 +1829,16 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   size="lg"
                   loading={submitting}
                   onClick={handleSubmitSugestao}
+                  disabled={temBloqueio}
                   className="w-full sm:w-auto"
                 >
-                  {hasPendingSugestao ? 'Reenviar sugestao' : 'Enviar sugestao'}
+                  {hasPendingSugestao ? 'Reenviar sugestao' : 'Enviar sugestao ao lojista'}
                 </Button>
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* Itens + Formulario de sugestao (Step 3 when stepper, always when not stepper) */}
         {(!isStepper || (currentStep === 3 && !validandoEspelho)) && (
