@@ -443,6 +443,16 @@ export function StatusActionCard({
                   Manter Original
                 </button>
               )}
+              <button
+                onClick={onRejeitarSugestao}
+                disabled={processandoSugestao}
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-2.5 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl font-medium transition-all duration-200 disabled:opacity-50"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                </svg>
+                Devolver ao Fornecedor
+              </button>
             </div>
             <div className="flex items-center gap-2">
               <RecolherButton />

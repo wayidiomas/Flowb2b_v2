@@ -14,6 +14,8 @@ import { ProductSearchModal } from '@/components/pedido/ProductSearchModal'
 import type { CatalogoProduto } from '@/components/pedido/ProductSearchModal'
 import { TipoDestinatarioModal } from '@/components/representante/TipoDestinatarioModal'
 import { RepresentanteSelectModal } from '@/components/representante/RepresentanteSelectModal'
+import { Modal, ModalHeader, ModalTitle, ModalDescription, ModalBody, ModalFooter } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import type { PedidoCompraDetalhes, FornecedorOption, SugestaoFornecedor, SugestaoItem, StatusInterno } from '@/types/pedido-compra'
@@ -125,6 +127,11 @@ export default function VisualizarPedidoPage() {
   const [numeroPedidoEnvio, setNumeroPedidoEnvio] = useState('')
   const [telefoneEnvioInput, setTelefoneEnvioInput] = useState('')
   const [salvandoTelefoneEnvio, setSalvandoTelefoneEnvio] = useState(false)
+
+  // Rejeicao com motivo
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [motivoRejeicao, setMotivoRejeicao] = useState('')
+  const [rejeitando, setRejeitando] = useState(false)
 
   // Adicionar produto ao pedido
   const [modalAdicionarAberto, setModalAdicionarAberto] = useState(false)
@@ -1118,7 +1125,7 @@ export default function VisualizarPedidoPage() {
               itens={pedido.itens.filter(i => i.id !== undefined).map(i => ({ id: i.id as number, descricao: i.descricao, quantidade: i.quantidade, valor: i.valor }))}
               onEnviarFornecedor={handleEnviarClick}
               onAceitarSugestao={() => handleProcessarSugestao('aceitar')}
-              onRejeitarSugestao={() => handleProcessarSugestao('rejeitar')}
+              onRejeitarSugestao={() => setShowRejectModal(true)}
               onManterOriginal={() => handleProcessarSugestao('manter_original')}
               onCancelar={() => setShowCancelamentoModal(true)}
               onRecolher={handleRecolher}
@@ -1641,6 +1648,65 @@ export default function VisualizarPedidoPage() {
           </div>
         </div>
       )}
+
+      {/* Modal Rejeicao com Motivo */}
+      <Modal isOpen={showRejectModal} onClose={() => !rejeitando && setShowRejectModal(false)} size="lg">
+        <ModalHeader onClose={() => !rejeitando && setShowRejectModal(false)}>
+          <ModalTitle>Devolver ao Fornecedor</ModalTitle>
+          <ModalDescription>O pedido sera devolvido para o fornecedor ajustar. Informe o motivo.</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Motivo da devolucao *</label>
+            <textarea
+              value={motivoRejeicao}
+              onChange={(e) => setMotivoRejeicao(e.target.value)}
+              rows={3}
+              placeholder="Ex: Preco do colar acima do combinado, quantidade do shampoo incorreta..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+            />
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" onClick={() => setShowRejectModal(false)} disabled={rejeitando}>Cancelar</Button>
+          <Button
+            variant="primary"
+            loading={rejeitando}
+            onClick={async () => {
+              if (!motivoRejeicao.trim()) return
+              const pendente = sugestoes.find(s => s.status === 'pendente')
+              if (!pendente || !pedido) return
+              setRejeitando(true)
+              try {
+                const res = await fetch(`/api/pedidos-compra/${pedido.id}/sugestoes`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    action: 'rejeitar',
+                    sugestao_id: pendente.id,
+                    motivo_rejeicao: motivoRejeicao.trim(),
+                  }),
+                })
+                if (res.ok) {
+                  setShowRejectModal(false)
+                  setMotivoRejeicao('')
+                  window.location.reload()
+                } else {
+                  const errData = await res.json()
+                  alert(errData.error || 'Erro ao devolver pedido')
+                }
+              } catch {
+                alert('Erro ao devolver pedido ao fornecedor')
+              } finally {
+                setRejeitando(false)
+              }
+            }}
+            disabled={!motivoRejeicao.trim()}
+          >
+            Devolver ao Fornecedor
+          </Button>
+        </ModalFooter>
+      </Modal>
 
       {/* Modal de Cancelamento */}
       <CancelamentoModal
