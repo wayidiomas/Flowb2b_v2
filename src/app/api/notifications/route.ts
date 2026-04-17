@@ -14,6 +14,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Fornecedor users have integer IDs, notificacoes.user_id is UUID — skip DB query
+    if (sessionUser.tipo === 'fornecedor') {
+      return NextResponse.json({ success: true, notificacoes: [], naoLidas: 0 })
+    }
+
     const supabase = createServerSupabaseClient()
 
     // Buscar notificacoes do usuario
@@ -63,6 +68,11 @@ export async function PATCH(request: NextRequest) {
         { success: false, error: 'Nao autenticado' },
         { status: 401 }
       )
+    }
+
+    // Fornecedor users have integer IDs, notificacoes.user_id is UUID — skip DB query
+    if (sessionUser.tipo === 'fornecedor') {
+      return NextResponse.json({ success: true })
     }
 
     const body = await request.json()

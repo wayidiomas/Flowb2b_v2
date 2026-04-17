@@ -2137,6 +2137,11 @@ function GerarAutomaticoContent() {
         itens={itensJaPedidos}
         loading={pedidoAbertoLoading}
         onContinuar={handleContinuarComDesconto}
+        onContinuarSemDesconto={() => {
+          setPedidoAbertoModalOpen(false)
+          setDescontarPedidos(false)
+          executarCalculo(false)
+        }}
       />
     </DashboardLayout>
     </RequirePermission>

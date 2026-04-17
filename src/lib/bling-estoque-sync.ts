@@ -135,10 +135,10 @@ export async function syncEstoqueFornecedor(
         const produtoLocal = produtosMap.get(String(item.produto.id))
         if (!produtoLocal) continue
 
-        if (produtoLocal.estoque_atual !== saldoTotal) {
+        if (produtoLocal.estoque_atual !== Math.round(saldoTotal)) {
           const { error: updateError } = await supabase
             .from('produtos')
-            .update({ estoque_atual: saldoTotal })
+            .update({ estoque_atual: Math.round(saldoTotal) })
             .eq('id', produtoLocal.id)
             .eq('empresa_id', empresaId)
 
@@ -278,10 +278,10 @@ export async function syncEstoqueEmpresa(
         const produtoLocal = produtosMap.get(String(item.produto.id))
         if (!produtoLocal) continue
 
-        if (produtoLocal.estoque_atual !== saldoTotal) {
+        if (produtoLocal.estoque_atual !== Math.round(saldoTotal)) {
           const { error: updateError } = await supabase
             .from('produtos')
-            .update({ estoque_atual: saldoTotal })
+            .update({ estoque_atual: Math.round(saldoTotal) })
             .eq('id', produtoLocal.id)
             .eq('empresa_id', empresaId)
 
