@@ -379,6 +379,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               desconto_percentual: existingSugestao?.desconto_percentual ?? 0,
               bonificacao_quantidade: existingSugestao?.bonificacao_quantidade ?? 0,
               validade: existingSugestao?.validade || '',
+              codigo_fornecedor: (existingSugestao as any)?.codigo_fornecedor || item.codigo_fornecedor || null,
+              gtin: (existingSugestao as any)?.gtin || item.ean || null,
               status_item: (existingSugestao as any)?.status_item || 'ok',
               observacao_item: (existingSugestao as any)?.observacao_item || '',
               preco_catalogo: item.preco_catalogo ?? null,
