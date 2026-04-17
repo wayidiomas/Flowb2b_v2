@@ -17,6 +17,8 @@ interface SugestaoItemRequest {
   is_novo?: boolean
   produto_nome?: string | null
   preco_unitario?: number | null
+  status_item?: 'ok' | 'depreciado' | 'ruptura' | 'divergente'
+  observacao_item?: string | null
 }
 
 interface CondicoesComerciais {
@@ -112,6 +114,25 @@ export async function POST(
       )
     }
 
+    // Validações ANTES de inserir (evita criar sugestao orfã se falhar)
+    const divergenteSemPreco = itens.filter((i: SugestaoItemRequest) =>
+      i.status_item === 'divergente' && !i.preco_unitario
+    )
+    if (divergenteSemPreco.length > 0) {
+      return NextResponse.json({
+        error: `${divergenteSemPreco.length} item(ns) divergente(s) precisam ter o preco ajustado antes de enviar.`
+      }, { status: 400 })
+    }
+
+    const extraSemObs = itens.filter((i: SugestaoItemRequest) =>
+      i.is_novo && !i.observacao_item?.trim()
+    )
+    if (extraSemObs.length > 0) {
+      return NextResponse.json({
+        error: `Itens extras precisam ter observacao.`
+      }, { status: 400 })
+    }
+
     // Criar sugestao com condicoes comerciais
     const { data: sugestao, error: sugestaoError } = await supabase
       .from('sugestoes_fornecedor')
@@ -122,7 +143,6 @@ export async function POST(
         status: 'pendente',
         observacao_fornecedor: observacao || null,
         autor_tipo: 'fornecedor',
-        // Condicoes comerciais
         valor_minimo_pedido: condicoes_comerciais?.valor_minimo_pedido || null,
         desconto_geral: condicoes_comerciais?.desconto_geral || 0,
         bonificacao_quantidade_geral: condicoes_comerciais?.bonificacao_quantidade_geral || 0,
@@ -152,6 +172,8 @@ export async function POST(
       is_novo: item.is_novo || false,
       produto_nome: item.produto_nome || null,
       preco_unitario: item.preco_unitario || null,
+      status_item: item.status_item || 'ok',
+      observacao_item: item.observacao_item || null,
     }))
 
     const { error: itensError } = await supabase

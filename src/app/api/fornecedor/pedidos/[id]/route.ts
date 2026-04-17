@@ -88,20 +88,44 @@ export async function GET(
       return produtos.gtin || null
     }
 
+    // Buscar catalogo do fornecedor pra preço de referência
+    const cnpjLimpo = user.cnpj.replace(/\D/g, '')
+    const { data: catalogo } = await supabase
+      .from('catalogo_fornecedor')
+      .select('id')
+      .eq('cnpj', cnpjLimpo)
+      .single()
+
+    const precoCatalogoMap = new Map<string, number>()
+    if (catalogo) {
+      const { data: catItens } = await supabase
+        .from('catalogo_itens')
+        .select('codigo, ean, preco_base')
+        .eq('catalogo_id', catalogo.id)
+        .eq('ativo', true)
+      for (const ci of catItens || []) {
+        if (ci.codigo) precoCatalogoMap.set(ci.codigo, ci.preco_base)
+        if (ci.ean) precoCatalogoMap.set(ci.ean, ci.preco_base)
+      }
+    }
+
     // Mapear itens para incluir ean e codigo_fornecedor correto
-    const itens = itensTyped.map(item => ({
-      id: item.id,
-      descricao: item.descricao,
-      codigo_produto: item.codigo_produto,
-      // Usar APENAS codigo_fornecedor de fornecedores_produtos, sem fallback
-      codigo_fornecedor: (item.produto_id && codigosFornecedor[item.produto_id]) || null,
-      unidade: item.unidade,
-      valor: item.valor,
-      quantidade: item.quantidade,
-      aliquota_ipi: item.aliquota_ipi,
-      produto_id: item.produto_id,
-      ean: getGtin(item.produtos)
-    }))
+    const itens = itensTyped.map(item => {
+      const codForn = (item.produto_id && codigosFornecedor[item.produto_id]) || null
+      const ean = getGtin(item.produtos)
+      return {
+        id: item.id,
+        descricao: item.descricao,
+        codigo_produto: item.codigo_produto,
+        codigo_fornecedor: codForn,
+        unidade: item.unidade,
+        preco_catalogo: precoCatalogoMap.get(codForn || '') || precoCatalogoMap.get(ean || '') || null,
+        quantidade: item.quantidade,
+        aliquota_ipi: item.aliquota_ipi,
+        produto_id: item.produto_id,
+        ean,
+      }
+    })
 
     // Buscar nome da empresa (lojista)
     const { data: empresa } = await supabase

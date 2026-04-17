@@ -11,6 +11,7 @@ export type ActivityAction =
   | 'contra_proposta_enviada'
   | 'sugestao_aceita'
   | 'sugestao_rejeitada'
+  | 'sugestao_devolvida'
   | 'pedido_recolhido'
   | 'sugestao_excluida'
   | 'registro'

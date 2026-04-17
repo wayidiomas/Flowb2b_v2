@@ -455,7 +455,7 @@ export async function POST(
 
     const { id: pedidoId } = await params
     const body = await request.json()
-    const { action, observacao, sugestao_id }: { action: 'aceitar' | 'rejeitar' | 'manter_original'; observacao?: string; sugestao_id: number } = body
+    const { action, observacao, sugestao_id, motivo_rejeicao }: { action: 'aceitar' | 'rejeitar' | 'manter_original'; observacao?: string; sugestao_id: number; motivo_rejeicao?: string } = body
 
     if (!action || !sugestao_id) {
       return NextResponse.json({ error: 'Acao e sugestao_id sao obrigatorios' }, { status: 400 })
@@ -819,32 +819,32 @@ export async function POST(
     }
 
     if (action === 'rejeitar') {
-      // Marcar sugestao como rejeitada
+      // Marcar sugestao como rejeitada e salvar motivo da rejeicao
       await supabase
         .from('sugestoes_fornecedor')
         .update({
           status: 'rejeitada',
           observacao_lojista: observacao || null,
+          motivo_rejeicao: motivo_rejeicao || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', sugestao_id)
 
-      // Atualizar status do pedido
+      // Devolver pedido ao fornecedor (em vez de encerrar o fluxo)
       await supabase
         .from('pedidos_compra')
-        .update({ status_interno: 'rejeitado' })
+        .update({ status_interno: 'enviado_fornecedor' })
         .eq('id', pedidoId)
         .eq('is_excluded', false)
 
-      // Timeline
+      // Timeline - registrar devolucao com motivo
+      const motivoTexto = motivo_rejeicao ? `: "${motivo_rejeicao}"` : ''
       await supabase
         .from('pedido_timeline')
         .insert({
           pedido_compra_id: parseInt(pedidoId),
-          evento: 'sugestao_rejeitada',
-          descricao: observacao
-            ? `Sugestao rejeitada: "${observacao}"`
-            : 'Sugestao do fornecedor foi rejeitada',
+          evento: 'sugestao_devolvida',
+          descricao: `Sugestao devolvida ao fornecedor${motivoTexto}`,
           autor_tipo: 'lojista',
           autor_nome: user.email,
         })
@@ -855,12 +855,12 @@ export async function POST(
         userType: 'lojista',
         userEmail: user.email,
         userNome: user.nome || user.email,
-        action: 'sugestao_rejeitada',
+        action: 'sugestao_devolvida',
         empresaId: user.empresaId,
-        metadata: { pedido_id: pedidoId, empresa_id: user.empresaId, sugestao_id },
+        metadata: { pedido_id: pedidoId, empresa_id: user.empresaId, sugestao_id, motivo_rejeicao: motivo_rejeicao || null },
       }).catch(console.error)
 
-      return NextResponse.json({ success: true, message: 'Sugestao rejeitada' })
+      return NextResponse.json({ success: true, message: 'Sugestao devolvida ao fornecedor' })
     }
 
     if (action === 'manter_original') {
