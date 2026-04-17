@@ -1761,7 +1761,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                     <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 w-24">Status</th>
                   )}
                   {canSuggest && (
-                    <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 w-32">Obs</th>
+                    <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 min-w-[160px]">Obs</th>
                   )}
                   {canSuggest && (
                     <th className="px-2 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Acao</th>
@@ -1820,7 +1820,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                         <td className="px-2 py-3 align-top">
                           <textarea
                             maxLength={100}
-                            rows={1}
+                            rows={2}
                             value={sug.observacao_item}
                             onChange={(e) => {
                               updateSugestao(item.id, 'observacao_item', e.target.value)
@@ -1828,7 +1828,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                               e.target.style.height = e.target.scrollHeight + 'px'
                             }}
                             placeholder="Obs..."
-                            className="w-full min-w-[100px] text-[11px] px-2 py-1.5 border border-gray-200 rounded-md focus:border-[#336FB6] focus:ring-1 focus:ring-[#336FB6]/20 resize-none overflow-hidden"
+                            className="w-full min-w-[140px] text-[11px] px-2 py-1.5 border border-gray-200 rounded-lg focus:border-[#336FB6] focus:ring-1 focus:ring-[#336FB6]/20 resize-none overflow-hidden leading-relaxed"
                           />
                         </td>
                       </>)}
