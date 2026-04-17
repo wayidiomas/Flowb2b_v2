@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import React, { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useFornecedorAuth } from '@/contexts/FornecedorAuthContext'
 import { FornecedorLayout } from '@/components/layout/FornecedorLayout'
@@ -16,7 +16,7 @@ interface PedidoItem {
   codigo_fornecedor: string   // SKU do fornecedor
   ean: string | null          // EAN/GTIN do produto
   unidade: string
-  valor: number
+  preco_catalogo: number | null
   quantidade: number
   aliquota_ipi: number
   produto_id: number | null
@@ -51,6 +51,7 @@ interface SugestaoInfo {
   bonificacao_quantidade_geral?: number
   prazo_entrega_dias?: number
   validade_proposta?: string
+  motivo_rejeicao?: string | null
 }
 
 interface RepresentanteInfo {
@@ -91,6 +92,8 @@ interface ItemSugestao {
   bonificacao_quantidade: number
   validade: string
   preco_editado?: number | null            // preco editado pelo fornecedor (null = usar original)
+  status_item: 'ok' | 'depreciado' | 'ruptura' | 'divergente'
+  observacao_item: string
   // Campos para busca de produtos (substituicao/adicao)
   gtin?: string | null
   codigo_fornecedor?: string | null
@@ -99,6 +102,7 @@ interface ItemSugestao {
   produto_nome?: string | null
   produto_nome_original?: string | null  // nome do item original (para mostrar riscado)
   preco_unitario?: number | null          // preco do produto (novo ou substituto)
+  preco_catalogo?: number | null          // preco do catalogo para comparacao na validacao
 }
 
 // Condicoes comerciais gerais da sugestao
@@ -161,6 +165,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const { user, loading: authLoading } = useFornecedorAuth()
   const [data, setData] = useState<PedidoDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1)
   const [sugestoes, setSugestoes] = useState<ItemSugestao[]>([])
   const [observacao, setObservacao] = useState('')
   const [condicoesComerciais, setCondicoesComerciais] = useState<CondicoesComerciais>({
@@ -175,8 +180,6 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const [showCancelamentoModal, setShowCancelamentoModal] = useState(false)
   const [showSucessoModal, setShowSucessoModal] = useState(false)
   const [cancelando, setCancelando] = useState(false)
-  const [processandoContraProposta, setProcessandoContraProposta] = useState(false)
-  const [observacaoRespostaCP, setObservacaoRespostaCP] = useState('')
   const [modalBuscaAberto, setModalBuscaAberto] = useState(false)
   const [modalBuscaMode, setModalBuscaMode] = useState<'substituir' | 'adicionar'>('adicionar')
   const [itemParaSubstituir, setItemParaSubstituir] = useState<number | null>(null)
@@ -241,6 +244,9 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               desconto_percentual: existingSugestao?.desconto_percentual ?? 0,
               bonificacao_quantidade: existingSugestao?.bonificacao_quantidade ?? 0,
               validade: existingSugestao?.validade || '',
+              status_item: (existingSugestao as any)?.status_item || 'ok',
+              observacao_item: (existingSugestao as any)?.observacao_item || '',
+              preco_catalogo: item.preco_catalogo ?? null,
             }
           })
           setSugestoes(initialSugestoes)
@@ -303,6 +309,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         desconto_percentual: 0,
         bonificacao_quantidade: 0,
         validade: '',
+        status_item: 'ok',
+        observacao_item: '',
         gtin: produto.gtin,
         codigo_fornecedor: produto.codigo_fornecedor,
         is_novo: true,
@@ -365,6 +373,50 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         setEspelhoFile(null)
         setToast({ type: 'success', msg: 'Espelho enviado com sucesso!' })
         setTimeout(() => setToast(null), 4000)
+
+        // After successful espelho upload, auto-validate
+        try {
+          setValidandoEspelho(true)
+          const validarRes = await fetch(`/api/fornecedor/pedidos/${id}/espelho/validar`, { method: 'POST' })
+          if (validarRes.ok) {
+            const validacao = await validarRes.json()
+            if (validacao.success) {
+              setValidacaoResult(validacao)
+              // Auto-fill validacaoItens from the result
+              setValidacaoItens((validacao.itens || []).map((item: any) => ({
+                ...item,
+                status_manual: null,
+                observacao_item: '',
+                motivo_faltante: item.status === 'faltando' ? 'ruptura' : null,
+              })))
+              // Auto-fill status_item based on validation
+              setSugestoes(prev => prev.map(sug => {
+                const valItem = (validacao.itens || []).find((vi: any) => {
+                  if (!vi.item_pedido) return false
+                  return vi.item_pedido.codigo === sug.codigo_fornecedor ||
+                         vi.item_pedido.gtin === sug.gtin
+                })
+                if (!valItem) return { ...sug, status_item: 'ok' as const }
+
+                if (valItem.status === 'faltando') return { ...sug, status_item: 'ruptura' as const }
+                if (valItem.status === 'divergencia') {
+                  const precoCat = sug.preco_catalogo ?? 0
+                  const precoEsp = valItem.item_espelho?.preco_unitario ?? 0
+                  if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
+                    return { ...sug, status_item: 'divergente' as const }
+                  }
+                }
+                return { ...sug, status_item: 'ok' as const }
+              }))
+            }
+          }
+        } catch (err) {
+          console.error('Erro ao auto-validar espelho:', err)
+        } finally {
+          setValidandoEspelho(false)
+        }
+        // Advance to Step 3
+        setCurrentStep(3)
       } else {
         const errData = await res.json()
         setToast({ type: 'error', msg: errData.error || 'Erro ao enviar espelho' })
@@ -380,31 +432,6 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   }
 
   // Handler para validar espelho com IA
-  const handleValidarEspelho = async () => {
-    setValidandoEspelho(true)
-    try {
-      const res = await fetch(`/api/fornecedor/pedidos/${id}/espelho/validar`, { method: 'POST' })
-      const data = await res.json()
-      if (res.ok && data.success) {
-        setValidacaoResult(data)
-        setValidacaoItens(data.itens.map((item: any) => ({
-          ...item,
-          motivo_faltante: null,
-          previsao_retorno: null,
-        })))
-        setShowValidacaoModal(true)
-      } else {
-        setToast({ type: 'error', msg: data.error || 'Erro ao validar espelho' })
-        setTimeout(() => setToast(null), 4000)
-      }
-    } catch {
-      setToast({ type: 'error', msg: 'Erro ao validar espelho' })
-      setTimeout(() => setToast(null), 4000)
-    } finally {
-      setValidandoEspelho(false)
-    }
-  }
-
   // Handler para salvar disponibilidade dos itens faltando
   const handleSalvarDisponibilidade = async () => {
     setSalvandoDisponibilidade(true)
@@ -456,7 +483,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     if (!data) return null
 
     // Total original
-    const totalOriginal = data.itens.reduce((sum, item) => sum + item.valor * item.quantidade, 0)
+    const totalOriginal = data.itens.reduce((sum, item) => sum + (item.preco_catalogo ?? 0) * item.quantidade, 0)
 
     // Total sugerido (com desconto por item)
     let totalSugeridoItens = 0
@@ -466,8 +493,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     data.itens.forEach(item => {
       const sug = sugestoes.find(s => s.item_id === item.id)
       if (sug) {
-        // Prioridade: preco_editado > preco_unitario (substituicao) > item.valor (original)
-        const valorUnit = sug.preco_editado != null ? sug.preco_editado : (sug.is_substituicao && sug.preco_unitario != null ? sug.preco_unitario : item.valor)
+        // Prioridade: preco_editado > preco_unitario (substituicao) > item.preco_catalogo (original)
+        const valorUnit = sug.preco_editado != null ? sug.preco_editado : (sug.is_substituicao && sug.preco_unitario != null ? sug.preco_unitario : (item.preco_catalogo ?? 0))
         const subtotalOriginal = valorUnit * sug.quantidade_sugerida
         const descontoItem = subtotalOriginal * (sug.desconto_percentual / 100)
         const subtotalComDesconto = subtotalOriginal - descontoItem
@@ -480,7 +507,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           totalBonificacaoUnidades += sug.bonificacao_quantidade
         }
       } else {
-        totalSugeridoItens += item.valor * item.quantidade
+        totalSugeridoItens += (item.preco_catalogo ?? 0) * item.quantidade
       }
     })
 
@@ -545,7 +572,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         sug.desconto_percentual > 0 ||
         sug.bonificacao_quantidade > 0 ||
         sug.is_substituicao ||
-        (sug.preco_editado != null && sug.preco_editado !== itemOriginal.valor)
+        (sug.preco_editado != null && sug.preco_editado !== (itemOriginal.preco_catalogo ?? 0))
 
       // Se foi alterado, precisa ter validade
       return foiAlterado && !sug.validade
@@ -588,6 +615,15 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       return
     }
 
+    // Block if divergent items without edited price
+    const divergenteSemPreco = sugestoes.filter(s =>
+      s.status_item === 'divergente' && !s.preco_editado && !s.preco_unitario
+    )
+    if (divergenteSemPreco.length > 0) {
+      setToast({ type: 'error', msg: `${divergenteSemPreco.length} item(ns) divergente(s) precisam ter o preco ajustado.` })
+      return
+    }
+
     setSubmitting(true)
     setToast(null)
 
@@ -600,6 +636,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           desconto_percentual: s.desconto_percentual,
           bonificacao_quantidade: s.bonificacao_quantidade,
           validade: s.validade || null,
+          status_item: s.status_item || 'ok',
+          observacao_item: s.observacao_item || null,
           // Campos de busca de produtos
           gtin: s.gtin || null,
           codigo_fornecedor: s.codigo_fornecedor || null,
@@ -690,46 +728,6 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       }
     } catch {
       alert('Erro ao excluir cotacao')
-    }
-  }
-
-  const handleResponderContraProposta = async (action: 'aceitar' | 'rejeitar', sugestaoId: number) => {
-    if (!data) return
-    setProcessandoContraProposta(true)
-    setToast(null)
-
-    try {
-      const res = await fetch(`/api/fornecedor/pedidos/${id}/responder-contra-proposta`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          sugestao_id: sugestaoId,
-          observacao: observacaoRespostaCP || undefined,
-        }),
-      })
-
-      const result = await res.json()
-
-      if (res.ok && result.success) {
-        setToast({
-          type: 'success',
-          msg: action === 'aceitar'
-            ? 'Contra-proposta aceita com sucesso!'
-            : 'Contra-proposta rejeitada'
-        })
-        setObservacaoRespostaCP('')
-        // Recarregar dados para atualizar status
-        setTimeout(() => {
-          window.location.reload()
-        }, 1500)
-      } else {
-        setToast({ type: 'error', msg: result.error || 'Erro ao processar resposta' })
-      }
-    } catch {
-      setToast({ type: 'error', msg: 'Erro de conexao' })
-    } finally {
-      setProcessandoContraProposta(false)
     }
   }
 
@@ -856,181 +854,57 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           </div>
         )}
 
-        {/* Contra-proposta do lojista */}
-        {pedido.status_interno === 'contra_proposta_pendente' && lastSugestao?.autor_tipo === 'lojista' && lastSugestao?.status === 'pendente' && (
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-6 py-4 bg-blue-100 border-b border-blue-200">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <h2 className="text-lg font-semibold text-blue-900">Contra-proposta do Lojista</h2>
-              </div>
-              <p className="text-sm text-blue-700 mt-1">
-                O lojista enviou uma contra-proposta. Analise e responda abaixo.
-              </p>
+        {/* Stepper */}
+        {data.pedido.status_interno === 'enviado_fornecedor' && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-6">
+            <div className="flex items-center justify-between">
+              {[
+                { n: 1, label: 'Conferir Itens', icon: '\uD83D\uDCCB' },
+                { n: 2, label: 'Subir Espelho', icon: '\uD83D\uDCC4' },
+                { n: 3, label: 'Validar e Ajustar', icon: '\u2713' },
+                { n: 4, label: 'Enviar', icon: '\uD83D\uDE80' },
+              ].map((step, idx) => (
+                <React.Fragment key={step.n}>
+                  {idx > 0 && <div className={`flex-1 h-0.5 mx-2 ${currentStep > idx ? 'bg-emerald-400' : 'bg-gray-200'}`} />}
+                  <button
+                    onClick={() => step.n <= currentStep && setCurrentStep(step.n as 1|2|3|4)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                      currentStep === step.n
+                        ? 'bg-[#336FB6] text-white'
+                        : currentStep > step.n
+                          ? 'bg-emerald-50 text-emerald-700 cursor-pointer'
+                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
+                    disabled={step.n > currentStep}
+                  >
+                    <span>{step.icon}</span>
+                    <span>{step.label}</span>
+                  </button>
+                </React.Fragment>
+              ))}
             </div>
+          </div>
+        )}
 
-            <div className="p-6 space-y-4">
-              {/* Observacao do lojista */}
-              {lastSugestao.observacao_lojista && (
-                <div className="bg-white rounded-lg p-4 border border-blue-100">
-                  <p className="text-sm font-medium text-gray-700 mb-1">Mensagem do lojista:</p>
-                  <p className="text-sm text-gray-600 italic">&quot;{lastSugestao.observacao_lojista}&quot;</p>
-                </div>
-              )}
-
-              {/* Itens da contra-proposta */}
-              {data.sugestaoItens && data.sugestaoItens.length > 0 && (
-                <div className="bg-white rounded-lg border border-blue-100 overflow-hidden">
-                  <div className="px-4 py-2 bg-gray-50 border-b">
-                    <p className="text-sm font-medium text-gray-700">Itens propostos pelo lojista:</p>
-                  </div>
-
-                  {/* Desktop: tabela */}
-                  <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs text-gray-500 uppercase bg-gray-50">
-                          <th className="px-4 py-2">Produto</th>
-                          <th className="px-4 py-2 text-right">Qtd Original</th>
-                          <th className="px-4 py-2 text-right">Qtd Proposta</th>
-                          <th className="px-4 py-2 text-right">Desconto</th>
-                          <th className="px-4 py-2 text-right">Bonificacao</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {data.sugestaoItens.map((sItem) => {
-                          const item = itens.find(i => i.id === sItem.item_pedido_compra_id)
-                          if (!item) return null
-                          const diferencaQtd = sItem.quantidade_sugerida - item.quantidade
-                          return (
-                            <tr key={sItem.item_pedido_compra_id} className="hover:bg-gray-50">
-                              <td className="px-4 py-2 text-gray-900">{item.descricao}</td>
-                              <td className="px-4 py-2 text-right text-gray-500">{item.quantidade}</td>
-                              <td className="px-4 py-2 text-right font-medium">
-                                <span className={diferencaQtd !== 0 ? (diferencaQtd > 0 ? 'text-emerald-600' : 'text-red-600') : 'text-gray-900'}>
-                                  {sItem.quantidade_sugerida}
-                                  {diferencaQtd !== 0 && (
-                                    <span className="text-xs ml-1">
-                                      ({diferencaQtd > 0 ? '+' : ''}{diferencaQtd})
-                                    </span>
-                                  )}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                {sItem.desconto_percentual > 0 ? (
-                                  <span className="text-emerald-600">{sItem.desconto_percentual}%</span>
-                                ) : (
-                                  <span className="text-gray-400">-</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-2 text-right">
-                                {sItem.bonificacao_quantidade > 0 ? (
-                                  <span className="text-blue-600">+{sItem.bonificacao_quantidade} un</span>
-                                ) : (
-                                  <span className="text-gray-400">-</span>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Mobile: cards */}
-                  <div className="md:hidden divide-y divide-gray-100">
-                    {data.sugestaoItens.map((sItem) => {
-                      const item = itens.find(i => i.id === sItem.item_pedido_compra_id)
-                      if (!item) return null
-                      const diferencaQtd = sItem.quantidade_sugerida - item.quantidade
-                      return (
-                        <div key={sItem.item_pedido_compra_id} className="p-3 space-y-2">
-                          <p className="text-sm font-medium text-gray-900">{item.descricao}</p>
-                          <div className="grid grid-cols-3 gap-2 text-xs">
-                            <div>
-                              <p className="text-gray-400">Qtd orig.</p>
-                              <p className="text-gray-600 font-medium">{item.quantidade}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-400">Qtd proposta</p>
-                              <p className={`font-semibold ${diferencaQtd !== 0 ? (diferencaQtd > 0 ? 'text-emerald-600' : 'text-red-600') : 'text-gray-900'}`}>
-                                {sItem.quantidade_sugerida}
-                                {diferencaQtd !== 0 && <span className="ml-0.5">({diferencaQtd > 0 ? '+' : ''}{diferencaQtd})</span>}
-                              </p>
-                            </div>
-                            <div className="flex gap-3">
-                              {sItem.desconto_percentual > 0 && (
-                                <div>
-                                  <p className="text-gray-400">Desc.</p>
-                                  <p className="text-emerald-600 font-medium">{sItem.desconto_percentual}%</p>
-                                </div>
-                              )}
-                              {sItem.bonificacao_quantidade > 0 && (
-                                <div>
-                                  <p className="text-gray-400">Bonif.</p>
-                                  <p className="text-blue-600 font-medium">+{sItem.bonificacao_quantidade}</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Campo de resposta */}
+        {/* Banner de rejeicao do lojista */}
+        {data.sugestoes?.some(s => s.motivo_rejeicao) && (
+          <div className="bg-red-50 border-l-4 border-red-500 rounded-r-xl p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 text-red-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sua resposta (opcional)
-                </label>
-                <textarea
-                  value={observacaoRespostaCP}
-                  onChange={(e) => setObservacaoRespostaCP(e.target.value)}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Adicione uma observacao sobre sua decisao..."
-                />
-              </div>
-
-              {/* Botoes de acao */}
-              <div className="flex flex-wrap gap-3 pt-2">
-                <Button
-                  variant="success"
-                  size="lg"
-                  loading={processandoContraProposta}
-                  onClick={() => handleResponderContraProposta('aceitar', lastSugestao.id)}
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Aceitar Contra-proposta
-                </Button>
-                <Button
-                  variant="danger"
-                  size="lg"
-                  loading={processandoContraProposta}
-                  onClick={() => handleResponderContraProposta('rejeitar', lastSugestao.id)}
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Rejeitar
-                </Button>
-                <p className="text-sm text-gray-500 w-full mt-2">
-                  Ao aceitar, os valores propostos pelo lojista serao aplicados ao pedido.
-                  Se rejeitar, o pedido voltara para aguardando resposta e voce podera enviar uma nova sugestao.
+                <p className="font-semibold text-red-800">Pedido devolvido pelo lojista</p>
+                <p className="text-red-700 text-sm mt-1">
+                  {data.sugestoes.filter(s => s.motivo_rejeicao).pop()?.motivo_rejeicao}
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Espelho do Pedido */}
-        {pedido && ['aceito', 'sugestao_pendente', 'enviado_fornecedor'].includes(pedido.status_interno) && (
+        {/* Espelho do Pedido (Step 2 when enviado_fornecedor) */}
+        {pedido && ['aceito', 'sugestao_pendente', 'enviado_fornecedor'].includes(pedido.status_interno) && (pedido.status_interno !== 'enviado_fornecedor' || currentStep === 2) && (
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
             <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100/50 border-b border-gray-200">
               <div className="flex items-center gap-3">
@@ -1071,28 +945,15 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                     >
                       Download
                     </a>
-                    <button
-                      onClick={handleValidarEspelho}
-                      disabled={validandoEspelho}
-                      className="shrink-0 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg text-sm font-medium hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
-                    >
-                      {validandoEspelho ? (
-                        <>
-                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          Validando...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Validar com IA
-                        </>
-                      )}
-                    </button>
+                    {validandoEspelho && (
+                      <span className="shrink-0 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-sm font-medium flex items-center gap-1.5">
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Validando...
+                      </span>
+                    )}
                     {validacaoResult && !showValidacaoModal && (
                       <button
                         onClick={() => setShowValidacaoModal(true)}
@@ -1240,10 +1101,18 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 </div>
               )}
             </div>
+            {pedido.status_interno === 'enviado_fornecedor' && currentStep === 2 && (
+              <div className="flex justify-end px-6 pb-6">
+                <button onClick={() => setCurrentStep(3)} className="px-6 py-2.5 bg-[#336FB6] text-white rounded-xl font-medium hover:bg-[#2a5a94] transition-colors">
+                  Proximo: Validar e Ajustar &rarr;
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Resumo do pedido */}
+        {/* Resumo do pedido (Step 1 when enviado_fornecedor) */}
+        {(pedido.status_interno !== 'enviado_fornecedor' || currentStep === 1) && (<>
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Resumo</h2>
 
@@ -1420,9 +1289,17 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             </p>
           )}
         </div>
+        {pedido.status_interno === 'enviado_fornecedor' && currentStep === 1 && (
+          <div className="flex justify-end mt-4">
+            <button onClick={() => setCurrentStep(2)} className="px-6 py-2.5 bg-[#336FB6] text-white rounded-xl font-medium hover:bg-[#2a5a94] transition-colors">
+              Proximo: Subir Espelho &rarr;
+            </button>
+          </div>
+        )}
+        </>)}
 
-        {/* Condicoes Comerciais - so aparece quando pode sugerir */}
-        {canSuggest && (
+        {/* Condicoes Comerciais - so aparece quando pode sugerir (Step 3 when enviado_fornecedor) */}
+        {canSuggest && (pedido.status_interno !== 'enviado_fornecedor' || currentStep === 3) && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Condicoes Comerciais</h2>
             <p className="text-sm text-gray-500 mb-4">
@@ -1542,7 +1419,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           </div>
         )}
 
-        {/* Itens + Formulario de sugestao */}
+        {/* Itens + Formulario de sugestao (Step 3 when enviado_fornecedor) */}
+        {(pedido.status_interno !== 'enviado_fornecedor' || currentStep === 3 || currentStep === 4) && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
             <h2 className="text-lg font-semibold text-gray-900">
@@ -1565,12 +1443,15 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               <thead>
                 <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
                   {canSuggest && (
+                    <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 w-28">Status</th>
+                  )}
+                  {canSuggest && (
                     <th className="px-2 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Acao</th>
                   )}
                   <th className="px-4 py-3">Produto</th>
                   <th className="px-4 py-3">Codigos</th>
                   <th className="px-4 py-3">Und</th>
-                  <th className="px-4 py-3 text-right">Valor unit.</th>
+                  <th className="px-4 py-3 text-right">Preco Catalogo</th>
                   <th className="px-4 py-3 text-right">Qtd original</th>
                   <th className="px-4 py-3 text-right">Subtotal original</th>
                   {canSuggest && (
@@ -1588,9 +1469,41 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               <tbody className="divide-y divide-gray-200">
                 {itens.map((item) => {
                   const sug = sugestoes.find(s => s.item_id === item.id)
-                  const valorUnitarioEfetivo = sug?.preco_editado != null ? sug.preco_editado : (sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : item.valor)
+                  const valorUnitarioEfetivo = sug?.preco_editado != null ? sug.preco_editado : (sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : (item.preco_catalogo ?? 0))
                   return (
                     <tr key={item.id} className="hover:bg-gray-50">
+                      {canSuggest && sug && (
+                        <td className="px-2 py-3">
+                          <select
+                            value={sug.status_item}
+                            onChange={(e) => updateSugestao(item.id, 'status_item', e.target.value)}
+                            className={`text-xs px-2 py-1 rounded-lg border font-medium w-full ${
+                              sug.status_item === 'ok' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                              sug.status_item === 'ruptura' ? 'bg-red-50 text-red-700 border-red-200' :
+                              sug.status_item === 'depreciado' ? 'bg-gray-100 text-gray-600 border-gray-200' :
+                              sug.status_item === 'divergente' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                              'bg-gray-50 text-gray-600 border-gray-200'
+                            }`}
+                          >
+                            <option value="ok">OK</option>
+                            <option value="ruptura">Ruptura</option>
+                            <option value="depreciado">Depreciado</option>
+                            <option value="divergente">Divergente</option>
+                          </select>
+                          {(sug.status_item === 'ruptura' || sug.status_item === 'depreciado' || sug.is_novo) && (
+                            <input
+                              type="text"
+                              value={sug.observacao_item}
+                              onChange={(e) => updateSugestao(item.id, 'observacao_item', e.target.value)}
+                              placeholder="Obs..."
+                              className="mt-1 w-full text-[10px] px-1.5 py-1 border border-gray-200 rounded-md"
+                            />
+                          )}
+                        </td>
+                      )}
+                      {canSuggest && !sug && (
+                        <td className="px-2 py-3" />
+                      )}
                       {canSuggest && (
                         <td className="px-2 py-2 text-center">
                           <button
@@ -1659,18 +1572,18 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                       <td className="px-4 py-3 text-sm text-gray-900 text-right">
                         {sug?.is_substituicao ? (
                           <div>
-                            <span className="text-xs text-gray-400 line-through block">{item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                            <span className="font-medium">{(sug.preco_unitario ?? item.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-xs text-gray-400 line-through block">{(item.preco_catalogo ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            <span className="font-medium">{(sug.preco_unitario ?? item.preco_catalogo ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           </div>
                         ) : (
-                          item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+                          (item.preco_catalogo ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
                         {item.quantidade}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
-                        R$ {(item.valor * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        R$ {((item.preco_catalogo ?? 0) * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
                       {canSuggest && sug && (
                         <>
@@ -1680,13 +1593,13 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                value={sug.preco_editado ?? item.valor}
+                                value={sug.preco_editado ?? (item.preco_catalogo ?? 0)}
                                 onChange={(e) => updateSugestao(item.id, 'preco_editado', parseFloat(e.target.value) || 0)}
-                                className={`w-20 px-2 py-1 text-sm text-right border rounded-md focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== item.valor ? 'border-[#FFAA11]' : 'border-gray-300'}`}
+                                className={`w-20 px-2 py-1 text-sm text-right border rounded-md focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== (item.preco_catalogo ?? 0) ? 'border-[#FFAA11]' : 'border-gray-300'}`}
                               />
-                              {sug.preco_editado != null && sug.preco_editado !== item.valor && (
-                                <div className={`text-xs mt-0.5 ${sug.preco_editado < item.valor ? 'text-green-600' : 'text-red-500'}`}>
-                                  {sug.preco_editado < item.valor ? '\u2193' : '\u2191'} {Math.abs(((sug.preco_editado - item.valor) / item.valor) * 100).toFixed(1)}%
+                              {sug.preco_editado != null && sug.preco_editado !== (item.preco_catalogo ?? 0) && (
+                                <div className={`text-xs mt-0.5 ${sug.preco_editado < (item.preco_catalogo ?? 0) ? 'text-green-600' : 'text-red-500'}`}>
+                                  {sug.preco_editado < (item.preco_catalogo ?? 0) ? '\u2193' : '\u2191'} {(item.preco_catalogo ?? 0) > 0 ? Math.abs(((sug.preco_editado - (item.preco_catalogo ?? 0)) / (item.preco_catalogo ?? 1)) * 100).toFixed(1) : '0.0'}%
                                 </div>
                               )}
                             </div>
@@ -1740,7 +1653,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                               const bonifUnidades = sug.bonificacao_quantidade || 0
                               const totalUnidades = sug.quantidade_sugerida + bonifUnidades
                               const custoEfetivo = totalUnidades > 0 ? subtotalComDesconto / totalUnidades : 0
-                              const diferenca = subtotalComDesconto - (item.valor * item.quantidade)
+                              const diferenca = subtotalComDesconto - ((item.preco_catalogo ?? 0) * item.quantidade)
                               return (
                                 <div className="text-right">
                                   <p className="text-sm font-semibold text-[#336FB6]">
@@ -1775,6 +1688,26 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   const subtotalComDesconto = subtotalBase - descontoVal
                   return (
                     <tr key={`novo-${idx}`} className="bg-secondary-50/30 border-l-4 border-secondary-400">
+                      {canSuggest && (
+                        <td className="px-2 py-3">
+                          <select
+                            value={sug.status_item}
+                            onChange={(e) => updateSugestao(null, 'status_item', e.target.value, globalIndex)}
+                            className={`text-xs px-2 py-1 rounded-lg border font-medium w-full ${
+                              sug.status_item === 'ok' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                              sug.status_item === 'ruptura' ? 'bg-red-50 text-red-700 border-red-200' :
+                              sug.status_item === 'depreciado' ? 'bg-gray-100 text-gray-600 border-gray-200' :
+                              sug.status_item === 'divergente' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                              'bg-gray-50 text-gray-600 border-gray-200'
+                            }`}
+                          >
+                            <option value="ok">OK</option>
+                            <option value="ruptura">Ruptura</option>
+                            <option value="depreciado">Depreciado</option>
+                            <option value="divergente">Divergente</option>
+                          </select>
+                        </td>
+                      )}
                       {canSuggest && (
                         <td className="px-2 py-2 text-center">
                           <button
@@ -1895,8 +1828,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           <div className="md:hidden divide-y divide-gray-200">
             {itens.map((item) => {
               const sug = sugestoes.find(s => s.item_id === item.id)
-              const subtotalOriginal = item.valor * item.quantidade
-              const valorUnitMobile = sug?.preco_editado != null ? sug.preco_editado : (sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : item.valor)
+              const subtotalOriginal = (item.preco_catalogo ?? 0) * item.quantidade
+              const valorUnitMobile = sug?.preco_editado != null ? sug.preco_editado : (sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : (item.preco_catalogo ?? 0))
 
               // Calculo do subtotal sugerido
               let subtotalSugerido = subtotalOriginal
@@ -1952,8 +1885,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   {/* Info basica: valor, qtd, subtotal */}
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="bg-gray-50 rounded-lg p-2">
-                      <p className="text-gray-400">Valor unit.</p>
-                      <p className="text-gray-900 font-medium">R$ {item.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      <p className="text-gray-400">Preco Catalogo</p>
+                      <p className="text-gray-900 font-medium">R$ {(item.preco_catalogo ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-2">
                       <p className="text-gray-400">Qtd original</p>
@@ -1976,13 +1909,13 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                             type="number"
                             step="0.01"
                             min="0"
-                            value={sug.preco_editado ?? item.valor}
+                            value={sug.preco_editado ?? (item.preco_catalogo ?? 0)}
                             onChange={(e) => updateSugestao(item.id, 'preco_editado', parseFloat(e.target.value) || 0)}
-                            className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== item.valor ? 'border-[#FFAA11]' : 'border-gray-300'}`}
+                            className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== (item.preco_catalogo ?? 0) ? 'border-[#FFAA11]' : 'border-gray-300'}`}
                           />
-                          {sug.preco_editado != null && sug.preco_editado !== item.valor && (
-                            <div className={`text-xs mt-0.5 ${sug.preco_editado < item.valor ? 'text-green-600' : 'text-red-500'}`}>
-                              {sug.preco_editado < item.valor ? '\u2193' : '\u2191'} {Math.abs(((sug.preco_editado - item.valor) / item.valor) * 100).toFixed(1)}% vs original
+                          {sug.preco_editado != null && sug.preco_editado !== (item.preco_catalogo ?? 0) && (
+                            <div className={`text-xs mt-0.5 ${sug.preco_editado < (item.preco_catalogo ?? 0) ? 'text-green-600' : 'text-red-500'}`}>
+                              {sug.preco_editado < (item.preco_catalogo ?? 0) ? '\u2193' : '\u2191'} {(item.preco_catalogo ?? 0) > 0 ? Math.abs(((sug.preco_editado - (item.preco_catalogo ?? 0)) / (item.preco_catalogo ?? 1)) * 100).toFixed(1) : '0.0'}% vs original
                             </div>
                           )}
                         </div>
@@ -2095,7 +2028,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   {/* Info basica */}
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-gray-50 rounded-lg p-2">
-                      <p className="text-gray-400">Valor unit.</p>
+                      <p className="text-gray-400">Preco Catalogo</p>
                       <p className="text-gray-900 font-medium">{preco > 0 ? `R$ ${preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}</p>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-2">
@@ -2190,8 +2123,17 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             </div>
           )}
 
-          {/* Observacao + Submit */}
-          {canSuggest && (
+          {/* Proximo button for Step 3 */}
+          {pedido.status_interno === 'enviado_fornecedor' && currentStep === 3 && (
+            <div className="flex justify-end mt-4 px-4 pb-4">
+              <button onClick={() => setCurrentStep(4)} className="px-6 py-2.5 bg-[#336FB6] text-white rounded-xl font-medium hover:bg-[#2a5a94] transition-colors">
+                Proximo: Enviar &rarr;
+              </button>
+            </div>
+          )}
+
+          {/* Observacao + Submit (Step 4 when enviado_fornecedor) */}
+          {canSuggest && (pedido.status_interno !== 'enviado_fornecedor' || currentStep === 4) && (
             <div className="px-4 sm:px-6 py-4 border-t border-gray-200 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2219,6 +2161,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             </div>
           )}
         </div>
+        )}
 
         {/* Timeline */}
         {timeline.length > 0 && (
