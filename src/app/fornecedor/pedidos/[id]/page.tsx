@@ -2201,28 +2201,28 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
 
         {/* Barra flutuante de navegação */}
         {data.pedido.status_interno === 'enviado_fornecedor' && (
-          <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-gray-200 shadow-lg px-6 py-3">
+          <div className="fixed bottom-[65px] md:bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-gray-200 shadow-lg px-4 md:px-6 py-2.5 md:py-3">
             <div className="max-w-5xl mx-auto flex items-center justify-between">
               <button
                 onClick={() => setCurrentStep(Math.max(1, currentStep - 1) as 1|2|3|4)}
                 disabled={currentStep === 1}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-3 md:px-5 py-2 text-xs md:text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                 </svg>
-                Anterior
+                <span className="hidden sm:inline">Anterior</span>
               </button>
-              <span className="text-sm text-gray-500">
-                Etapa {currentStep} de 4: {['Conferir Itens', 'Subir Espelho', 'Validar e Ajustar', 'Enviar'][currentStep - 1]}
+              <span className="text-xs md:text-sm text-gray-500">
+                {currentStep}/4 {['Conferir', 'Espelho', 'Validar', 'Enviar'][currentStep - 1]}
               </span>
               <button
                 onClick={() => setCurrentStep(Math.min(4, currentStep + 1) as 1|2|3|4)}
                 disabled={currentStep === 4}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-[#336FB6] rounded-lg hover:bg-[#2a5a94] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-3 md:px-5 py-2 text-xs md:text-sm font-medium text-white bg-[#336FB6] rounded-lg hover:bg-[#2a5a94] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                Proximo
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <span className="hidden sm:inline">Proximo</span>
+                <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </button>
