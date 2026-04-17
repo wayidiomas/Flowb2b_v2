@@ -1827,8 +1827,21 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                                 ? `R$ ${valItem.item_espelho.preco_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                                 : '-'}
                             </td>
-                            <td className="px-3 py-2.5 text-xs text-gray-500 bg-purple-50/30 max-w-[160px]">
-                              {valItem?.diferencas?.join('; ') || '-'}
+                            <td className="px-3 py-2.5 text-xs text-gray-500 bg-purple-50/30 max-w-[200px]">
+                              {(() => {
+                                const diffs: string[] = []
+                                const qtyPed = Number(item.quantidade) || 0
+                                const qtyEsp = valItem?.item_espelho?.quantidade
+                                const precoCat = item.preco_catalogo ?? 0
+                                const precoEsp = valItem?.item_espelho?.preco_unitario ?? 0
+                                if (qtyEsp != null && qtyPed !== qtyEsp) {
+                                  diffs.push(`Qty: pedido ${qtyPed}, espelho ${qtyEsp}`)
+                                }
+                                if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
+                                  diffs.push(`Preco: catalogo R$${precoCat.toFixed(2)}, espelho R$${precoEsp.toFixed(2)}`)
+                                }
+                                return diffs.length > 0 ? diffs.join('; ') : '-'
+                              })()}
                             </td>
                           </>
                         )
