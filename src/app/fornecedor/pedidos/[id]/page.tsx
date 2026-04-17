@@ -221,6 +221,57 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   }>>([])
   const [salvandoDisponibilidade, setSalvandoDisponibilidade] = useState(false)
 
+  // Auto-scroll to top when step changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [currentStep])
+
+  // Auto-validate when entering Step 3 without validation result
+  useEffect(() => {
+    if (currentStep === 3 && !validacaoResult && !validandoEspelho && espelhoInfo?.espelho_url) {
+      (async () => {
+        setValidandoEspelho(true)
+        try {
+          const res = await fetch(`/api/fornecedor/pedidos/${id}/espelho/validar`, { method: 'POST' })
+          if (res.ok) {
+            const validacao = await res.json()
+            if (validacao.success) {
+              setValidacaoResult(validacao)
+              setValidacaoItens((validacao.itens || []).map((item: any) => ({
+                ...item,
+                status_manual: null,
+                observacao_item: '',
+                motivo_faltante: item.status === 'faltando' ? 'ruptura' : null,
+              })))
+              setSugestoes(prev => prev.map(sug => {
+                const valItem = (validacao.itens || []).find((vi: any) => {
+                  if (!vi.item_pedido) return false
+                  return vi.item_pedido.codigo === sug.codigo_fornecedor ||
+                         vi.item_pedido.gtin === sug.gtin
+                })
+                if (!valItem) return { ...sug, status_item: 'ok' as const }
+                if (valItem.status === 'faltando') return { ...sug, status_item: 'ruptura' as const }
+                if (valItem.status === 'divergencia') {
+                  const precoCat = sug.preco_catalogo ?? 0
+                  const precoEsp = valItem.item_espelho?.preco_unitario ?? 0
+                  if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
+                    return { ...sug, status_item: 'divergente' as const }
+                  }
+                }
+                return { ...sug, status_item: 'ok' as const }
+              }))
+            }
+          }
+        } catch (err) {
+          console.error('Erro ao auto-validar espelho:', err)
+        } finally {
+          setValidandoEspelho(false)
+        }
+      })()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep])
+
   useEffect(() => {
     if (!user) return
 
@@ -763,6 +814,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const lastSugestao = sugestoesExistentes?.[0]
   const hasPendingSugestao = lastSugestao?.status === 'pendente' && lastSugestao?.autor_tipo !== 'lojista'
   const canCancel = !ESTADOS_FINAIS.includes(pedido.status_interno)
+  const isStepper = pedido.status_interno === 'enviado_fornecedor'
 
   return (
     <FornecedorLayout>
@@ -922,7 +974,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         )}
 
         {/* Espelho do Pedido (Step 2 when enviado_fornecedor) */}
-        {pedido && ['aceito', 'sugestao_pendente', 'enviado_fornecedor'].includes(pedido.status_interno) && (
+        {pedido && ['aceito', 'sugestao_pendente', 'enviado_fornecedor'].includes(pedido.status_interno) && (!isStepper || currentStep === 2) && (
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
             <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100/50 border-b border-gray-200">
               <div className="flex items-center gap-3">
@@ -937,6 +989,17 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 </div>
               </div>
             </div>
+
+            {isStepper && (
+              <div className="px-6 pt-4 pb-0">
+                <p className="text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2 inline-flex items-center gap-2">
+                  <svg className="w-4 h-4 text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                  <strong>{itens.length}</strong> itens no pedido
+                </p>
+              </div>
+            )}
 
             <div className="p-6">
               {espelhoInfo?.espelho_url ? (
@@ -1130,7 +1193,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         )}
 
         {/* Resumo do pedido (Step 1 when enviado_fornecedor) */}
-        {pedido && (<>
+        {pedido && (!isStepper || currentStep === 1) && (<>
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Resumo</h2>
 
@@ -1315,7 +1378,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         </>)}
 
         {/* Condicoes Comerciais - so aparece quando pode sugerir (Step 3 when enviado_fornecedor) */}
-        {canSuggest && (
+        {canSuggest && (!isStepper || currentStep === 3) && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Condicoes Comerciais</h2>
             <p className="text-sm text-gray-500 mb-4">
@@ -1435,8 +1498,143 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           </div>
         )}
 
-        {/* Itens + Formulario de sugestao (Step 3 when enviado_fornecedor) */}
-        {(
+        {/* Step 1 (stepper): Read-only items table */}
+        {isStepper && currentStep === 1 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
+              <h2 className="text-lg font-semibold text-gray-900">Itens do pedido</h2>
+              <p className="text-sm text-gray-500 mt-1">Confira os itens solicitados pelo lojista</p>
+            </div>
+            {/* Desktop read-only table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
+                    <th className="px-4 py-3">Cod. Fornecedor</th>
+                    <th className="px-4 py-3">EAN</th>
+                    <th className="px-4 py-3">Nome</th>
+                    <th className="px-4 py-3">Und</th>
+                    <th className="px-4 py-3 text-right">Qtd Pedida</th>
+                    <th className="px-4 py-3 text-right">Preco Catalogo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {itens.map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-900 font-medium">{item.codigo_fornecedor || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{item.ean || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 max-w-[250px] truncate" title={item.descricao}>{item.descricao}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{item.unidade}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-semibold">{item.quantidade}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                        {(item.preco_catalogo ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile read-only cards */}
+            <div className="md:hidden divide-y divide-gray-200">
+              {itens.map((item) => (
+                <div key={item.id} className="p-4 space-y-2">
+                  <p className="text-sm font-semibold text-gray-900">{item.descricao}</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                    {item.codigo_fornecedor && <span>SKU: {item.codigo_fornecedor}</span>}
+                    {item.ean && <span>EAN: {item.ean}</span>}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-gray-400">Unidade</p>
+                      <p className="text-gray-900 font-medium">{item.unidade}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-gray-400">Qtd Pedida</p>
+                      <p className="text-gray-900 font-semibold">{item.quantidade}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2">
+                      <p className="text-gray-400">Preco Catalogo</p>
+                      <p className="text-gray-900 font-medium">R$ {(item.preco_catalogo ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 (stepper): Loading state for validation */}
+        {isStepper && currentStep === 3 && validandoEspelho && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex flex-col items-center justify-center py-16 gap-4">
+              <svg className="w-12 h-12 animate-spin text-[#336FB6]" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <p className="text-gray-600 font-medium">Validando espelho com IA...</p>
+              <p className="text-sm text-gray-400">Isso pode levar alguns segundos</p>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4 (stepper): Summary cards + Observacao + Submit */}
+        {isStepper && currentStep === 4 && canSuggest && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
+              <h2 className="text-lg font-semibold text-gray-900">Resumo da Sugestao</h2>
+              <p className="text-sm text-gray-500 mt-1">Revise os status e envie sua sugestao</p>
+            </div>
+            <div className="p-4 sm:p-6">
+              {/* Summary cards */}
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="bg-emerald-50 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-bold text-emerald-700">{sugestoes.filter(s => s.status_item === 'ok').length}</p>
+                  <p className="text-xs text-emerald-600">OK</p>
+                </div>
+                <div className="bg-red-50 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-bold text-red-700">{sugestoes.filter(s => s.status_item === 'ruptura').length}</p>
+                  <p className="text-xs text-red-600">Ruptura</p>
+                </div>
+                <div className="bg-gray-100 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-bold text-gray-600">{sugestoes.filter(s => s.status_item === 'depreciado').length}</p>
+                  <p className="text-xs text-gray-500">Depreciado</p>
+                </div>
+                <div className="bg-amber-50 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-bold text-amber-700">{sugestoes.filter(s => s.status_item === 'divergente').length}</p>
+                  <p className="text-xs text-amber-600">Divergente</p>
+                </div>
+              </div>
+
+              {/* Observacao */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Observacao para o lojista (opcional)
+                </label>
+                <textarea
+                  value={observacao}
+                  onChange={(e) => setObservacao(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="Justifique suas sugestoes, informe prazos, condicoes especiais..."
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  loading={submitting}
+                  onClick={handleSubmitSugestao}
+                  className="w-full sm:w-auto"
+                >
+                  {hasPendingSugestao ? 'Reenviar sugestao' : 'Enviar sugestao'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Itens + Formulario de sugestao (Step 3 when stepper, always when not stepper) */}
+        {(!isStepper || (currentStep === 3 && !validandoEspelho)) && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
             <h2 className="text-lg font-semibold text-gray-900">
@@ -1470,6 +1668,14 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   <th className="px-4 py-3 text-right">Preco Catalogo</th>
                   <th className="px-4 py-3 text-right">Qtd original</th>
                   <th className="px-4 py-3 text-right">Subtotal original</th>
+                  {isStepper && validacaoResult && (
+                    <>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-purple-600 uppercase tracking-wider bg-purple-50">Produto (Espelho)</th>
+                      <th className="px-3 py-3 text-right bg-purple-50">Qty Espelho</th>
+                      <th className="px-3 py-3 text-right bg-purple-50">Preco Espelho</th>
+                      <th className="px-3 py-3 text-left bg-purple-50">Diferencas</th>
+                    </>
+                  )}
                   {canSuggest && (
                     <>
                       <th className="px-3 py-3 text-right text-xs font-semibold text-[#FFAA11] uppercase tracking-wider bg-[#FFAA11]/10">Preco sug.</th>
@@ -1601,6 +1807,32 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
                         R$ {((item.preco_catalogo ?? 0) * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
+                      {isStepper && validacaoResult && (() => {
+                        const valItem = validacaoResult.itens?.find(vi =>
+                          vi.item_pedido?.codigo === (sug?.codigo_fornecedor || item.codigo_fornecedor) ||
+                          vi.item_pedido?.gtin === (sug?.gtin || item.ean)
+                        )
+                        return (
+                          <>
+                            <td className="px-3 py-2.5 text-sm bg-purple-50/30 max-w-[150px]">
+                              <span className="truncate block text-gray-700" title={valItem?.item_espelho?.nome || ''}>
+                                {valItem?.item_espelho?.nome || '-'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-sm text-right bg-purple-50/30">
+                              {valItem?.item_espelho?.quantidade ?? '-'}
+                            </td>
+                            <td className="px-3 py-2.5 text-sm text-right bg-purple-50/30">
+                              {valItem?.item_espelho?.preco_unitario != null
+                                ? `R$ ${valItem.item_espelho.preco_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                : '-'}
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-gray-500 bg-purple-50/30 max-w-[160px]">
+                              {valItem?.diferencas?.join('; ') || '-'}
+                            </td>
+                          </>
+                        )
+                      })()}
                       {canSuggest && sug && (
                         <>
                           <td className="px-3 py-2 text-right bg-[#FFAA11]/5">
@@ -1763,6 +1995,14 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-400 text-right">-</td>
                       <td className="px-4 py-2 text-sm text-gray-400 text-right">-</td>
+                      {isStepper && validacaoResult && (
+                        <>
+                          <td className="px-3 py-2.5 text-sm bg-purple-50/30">-</td>
+                          <td className="px-3 py-2.5 text-sm text-right bg-purple-50/30">-</td>
+                          <td className="px-3 py-2.5 text-sm text-right bg-purple-50/30">-</td>
+                          <td className="px-3 py-2.5 text-xs text-gray-500 bg-purple-50/30">-</td>
+                        </>
+                      )}
                       {canSuggest && (
                         <>
                           <td className="px-3 py-2 text-right bg-[#FFAA11]/5">
@@ -2139,8 +2379,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             </div>
           )}
 
-          {/* Observacao + Submit */}
-          {canSuggest && (
+          {/* Observacao + Submit (only when NOT in stepper mode; stepper uses Step 4) */}
+          {canSuggest && !isStepper && (
             <div className="px-4 sm:px-6 py-4 border-t border-gray-200 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
