@@ -250,6 +250,13 @@ export interface SugestaoItem {
   bonificacao_quantidade: number     // Quantidade de unidades bonificadas deste item
   validade?: string
   preco_unitario?: number | null     // Preco sugerido pelo fornecedor (quando diferente do original)
+  status_item?: 'ok' | 'depreciado' | 'ruptura' | 'divergente' | null  // Status marcado pelo fornecedor
+  observacao_item?: string | null    // Observacao do fornecedor pra este item
+  is_substituicao?: boolean          // Produto substituto
+  is_novo?: boolean                  // Produto adicionado pelo fornecedor
+  produto_nome?: string | null       // Nome do produto (quando substituicao/novo)
+  gtin?: string | null
+  codigo_fornecedor?: string | null
   // Campos calculados (frontend)
   valor_unitario_com_desconto?: number
   subtotal_original?: number

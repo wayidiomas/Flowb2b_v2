@@ -303,6 +303,7 @@ export function StatusActionCard({
           <table className="w-full text-sm">
             <thead className="bg-gray-50/80 sticky top-0">
               <tr>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Status</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Produto</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Qtd Orig</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-secondary-600 uppercase tracking-wider">Qtd Sug</th>
@@ -322,8 +323,29 @@ export function StatusActionCard({
                 const qtdMudou = item.qtdOriginal !== item.quantidade_sugerida
                 return (
                   <tr key={item.id} className="hover:bg-secondary-50/30 transition-colors">
+                    <td className="px-3 py-2.5">
+                      {(() => {
+                        const s = item.status_item
+                        if (!s || s === 'ok') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700">OK</span>
+                        if (s === 'divergente') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700">Preco desatualizado</span>
+                        if (s === 'ruptura') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-700">Ruptura</span>
+                        if (s === 'depreciado') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">Depreciado</span>
+                        return <span className="text-gray-300">-</span>
+                      })()}
+                      {item.is_substituicao && <span className="block text-[9px] text-blue-600 mt-0.5">Substituicao</span>}
+                      {item.observacao_item && <span className="block text-[9px] text-gray-400 mt-0.5 truncate max-w-[80px]" title={item.observacao_item}>{item.observacao_item}</span>}
+                    </td>
                     <td className="px-4 py-2.5 text-gray-900 truncate max-w-[150px] font-medium" title={item.itemOriginal?.descricao}>
-                      {item.itemOriginal?.descricao || `Item #${item.item_pedido_compra_id}`}
+                      {item.is_substituicao && item.produto_nome ? (
+                        <div>
+                          <span className="line-through text-gray-400 text-xs">{item.itemOriginal?.descricao}</span>
+                          <span className="block text-blue-700">{item.produto_nome}</span>
+                        </div>
+                      ) : item.is_novo ? (
+                        <span className="text-blue-700">{item.produto_nome || `Item #${item.item_pedido_compra_id}`}</span>
+                      ) : (
+                        item.itemOriginal?.descricao || `Item #${item.item_pedido_compra_id}`
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-gray-400 text-right tabular-nums">{item.qtdOriginal}</td>
                     <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${qtdMudou ? 'text-secondary-700' : 'text-gray-700'}`}>
