@@ -304,7 +304,7 @@ export function StatusActionCard({
             <thead className="bg-gray-50/80 sticky top-0">
               <tr>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Status</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[140px]">Obs</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[140px]">Observacao</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Produto</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Qtd Orig</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-secondary-600 uppercase tracking-wider">Qtd Sug</th>

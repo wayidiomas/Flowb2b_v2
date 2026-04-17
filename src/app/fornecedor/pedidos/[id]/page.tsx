@@ -1761,7 +1761,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                     <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 w-24">Status</th>
                   )}
                   {canSuggest && (
-                    <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 min-w-[160px]">Obs</th>
+                    <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 min-w-[160px]">Observacao</th>
                   )}
                   {canSuggest && (
                     <th className="px-2 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Acao</th>
