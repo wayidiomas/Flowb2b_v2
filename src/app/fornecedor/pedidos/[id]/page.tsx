@@ -1817,14 +1817,18 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                             <option value="divergente">Divergente</option>
                           </select>
                         </td>
-                        <td className="px-2 py-3">
-                          <input
-                            type="text"
+                        <td className="px-2 py-3 align-top">
+                          <textarea
                             maxLength={100}
+                            rows={1}
                             value={sug.observacao_item}
-                            onChange={(e) => updateSugestao(item.id, 'observacao_item', e.target.value)}
-                            placeholder="Observacao..."
-                            className="w-full text-[11px] px-2 py-1.5 border border-gray-200 rounded-md focus:border-[#336FB6] focus:ring-1 focus:ring-[#336FB6]/20"
+                            onChange={(e) => {
+                              updateSugestao(item.id, 'observacao_item', e.target.value)
+                              e.target.style.height = 'auto'
+                              e.target.style.height = e.target.scrollHeight + 'px'
+                            }}
+                            placeholder="Obs..."
+                            className="w-full min-w-[100px] text-[11px] px-2 py-1.5 border border-gray-200 rounded-md focus:border-[#336FB6] focus:ring-1 focus:ring-[#336FB6]/20 resize-none overflow-hidden"
                           />
                         </td>
                       </>)}

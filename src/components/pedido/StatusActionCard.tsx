@@ -304,6 +304,7 @@ export function StatusActionCard({
             <thead className="bg-gray-50/80 sticky top-0">
               <tr>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Status</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-32">Obs</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Produto</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Qtd Orig</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-secondary-600 uppercase tracking-wider">Qtd Sug</th>
@@ -333,7 +334,13 @@ export function StatusActionCard({
                         return <span className="text-gray-300">-</span>
                       })()}
                       {item.is_substituicao && <span className="block text-[9px] text-blue-600 mt-0.5">Substituicao</span>}
-                      {item.observacao_item && <span className="block text-[9px] text-gray-400 mt-0.5 truncate max-w-[80px]" title={item.observacao_item}>{item.observacao_item}</span>}
+                    </td>
+                    <td className="px-3 py-2.5 align-top">
+                      {item.observacao_item ? (
+                        <span className="text-[11px] text-gray-600 leading-tight block break-words">{item.observacao_item}</span>
+                      ) : (
+                        <span className="text-gray-300 text-[10px]">-</span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-gray-900 truncate max-w-[150px] font-medium" title={item.itemOriginal?.descricao}>
                       {item.is_substituicao && item.produto_nome ? (
