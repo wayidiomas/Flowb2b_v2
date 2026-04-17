@@ -1813,15 +1813,13 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                             <option value="depreciado">Depreciado</option>
                             <option value="divergente">Divergente</option>
                           </select>
-                          {(sug.status_item === 'ruptura' || sug.status_item === 'depreciado' || sug.is_novo) && (
-                            <input
-                              type="text"
-                              value={sug.observacao_item}
-                              onChange={(e) => updateSugestao(item.id, 'observacao_item', e.target.value)}
-                              placeholder="Obs..."
-                              className="mt-1 w-full text-[10px] px-1.5 py-1 border border-gray-200 rounded-md"
-                            />
-                          )}
+                          <input
+                            type="text"
+                            value={sug.observacao_item}
+                            onChange={(e) => updateSugestao(item.id, 'observacao_item', e.target.value)}
+                            placeholder="Obs. do item..."
+                            className="mt-1 w-full text-[10px] px-1.5 py-1 border border-gray-200 rounded-md focus:border-[#336FB6] focus:ring-1 focus:ring-[#336FB6]/20"
+                          />
                         </td>
                       )}
                       {canSuggest && !sug && (
