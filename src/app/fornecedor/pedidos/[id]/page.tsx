@@ -226,6 +226,31 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [currentStep])
 
+  // Persistir validacaoResult em localStorage
+  useEffect(() => {
+    if (validacaoResult) {
+      try { localStorage.setItem(`validacao_${id}`, JSON.stringify(validacaoResult)) } catch {}
+    }
+  }, [validacaoResult, id])
+
+  // Carregar validacao do localStorage ao montar
+  useEffect(() => {
+    if (!validacaoResult) {
+      try {
+        const saved = localStorage.getItem(`validacao_${id}`)
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          setValidacaoResult(parsed)
+          setValidacaoItens((parsed.itens || []).map((item: any) => ({
+            ...item, status_manual: null, observacao_item: '',
+            motivo_faltante: item.status === 'faltando' ? 'ruptura' : null,
+          })))
+        }
+      } catch {}
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
   // Auto-validate when entering Step 3 without validation result
   useEffect(() => {
     if (currentStep === 3 && !validacaoResult && !validandoEspelho && espelhoInfo?.espelho_url) {
@@ -243,18 +268,32 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 observacao_item: '',
                 motivo_faltante: item.status === 'faltando' ? 'ruptura' : null,
               })))
+              // Auto-fill status_item: compara preco CATALOGO vs ESPELHO
               setSugestoes(prev => prev.map(sug => {
+                const codForn = (sug.codigo_fornecedor || '').replace(/^0+/, '')
+                const sugGtin = sug.gtin || ''
                 const valItem = (validacao.itens || []).find((vi: any) => {
-                  if (!vi.item_pedido) return false
-                  return vi.item_pedido.codigo === sug.codigo_fornecedor ||
-                         vi.item_pedido.gtin === sug.gtin
+                  if (!vi.item_pedido && !vi.item_espelho) return false
+                  const viCod = (vi.item_pedido?.codigo || '').replace(/^0+/, '')
+                  const viGtin = vi.item_pedido?.gtin || ''
+                  const viEspCod = (vi.item_espelho?.codigo || '').replace(/^0+/, '')
+                  if (codForn && viCod && codForn === viCod) return true
+                  if (codForn && viEspCod && codForn === viEspCod) return true
+                  if (sugGtin && viGtin && sugGtin === viGtin) return true
+                  return false
                 })
-                if (!valItem) return { ...sug, status_item: 'ok' as const }
-                if (valItem.status === 'faltando') return { ...sug, status_item: 'ruptura' as const }
-                if (valItem.status === 'divergencia') {
-                  const precoCat = sug.preco_catalogo ?? 0
-                  const precoEsp = valItem.item_espelho?.preco_unitario ?? 0
-                  if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
+                if (valItem?.status === 'faltando') return { ...sug, status_item: 'ruptura' as const }
+                const precoCat = sug.preco_catalogo ?? 0
+                const precoEsp = valItem?.item_espelho?.preco_unitario ?? 0
+                if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
+                  return { ...sug, status_item: 'divergente' as const }
+                }
+                const qtyPed = Number(sug.quantidade_sugerida) || 0
+                const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
+                if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
+                  const totalCat = precoCat * qtyPed
+                  const totalEsp = precoEsp * qtyEsp
+                  if (totalCat > 0 && totalEsp > 0 && Math.abs(totalCat - totalEsp) / totalCat > 0.05) {
                     return { ...sug, status_item: 'divergente' as const }
                   }
                 }
@@ -445,23 +484,50 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 observacao_item: '',
                 motivo_faltante: item.status === 'faltando' ? 'ruptura' : null,
               })))
-              // Auto-fill status_item based on validation
+              // Auto-fill status_item: compara preco CATALOGO vs ESPELHO (nao lojista)
               setSugestoes(prev => prev.map(sug => {
+                // Matching amplo: codigo, gtin, ou descricao parcial
+                const codForn = (sug.codigo_fornecedor || '').replace(/^0+/, '')
+                const sugGtin = sug.gtin || ''
                 const valItem = (validacao.itens || []).find((vi: any) => {
-                  if (!vi.item_pedido) return false
-                  return vi.item_pedido.codigo === sug.codigo_fornecedor ||
-                         vi.item_pedido.gtin === sug.gtin
+                  if (!vi.item_pedido && !vi.item_espelho) return false
+                  const viCod = (vi.item_pedido?.codigo || '').replace(/^0+/, '')
+                  const viGtin = vi.item_pedido?.gtin || ''
+                  const viEspCod = (vi.item_espelho?.codigo || '').replace(/^0+/, '')
+                  // Match por codigo fornecedor
+                  if (codForn && viCod && codForn === viCod) return true
+                  if (codForn && viEspCod && codForn === viEspCod) return true
+                  // Match por GTIN/EAN
+                  if (sugGtin && viGtin && sugGtin === viGtin) return true
+                  return false
                 })
-                if (!valItem) return { ...sug, status_item: 'ok' as const }
 
-                if (valItem.status === 'faltando') return { ...sug, status_item: 'ruptura' as const }
-                if (valItem.status === 'divergencia') {
-                  const precoCat = sug.preco_catalogo ?? 0
-                  const precoEsp = valItem.item_espelho?.preco_unitario ?? 0
-                  if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
+                // Item faltando no espelho = ruptura
+                if (valItem?.status === 'faltando') {
+                  return { ...sug, status_item: 'ruptura' as const }
+                }
+
+                // Pra items encontrados: checar preco catalogo vs espelho
+                const precoCat = sug.preco_catalogo ?? 0
+                const precoEsp = valItem?.item_espelho?.preco_unitario ?? 0
+                const qtyPed = Number(sug.quantidade_sugerida) || 0
+                const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
+
+                // Divergente se preco catalogo difere >2% do espelho
+                if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
+                  return { ...sug, status_item: 'divergente' as const }
+                }
+
+                // Divergente se qty difere significativamente (e nao eh conversao embalagem)
+                if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
+                  const totalCat = precoCat * qtyPed
+                  const totalEsp = precoEsp * qtyEsp
+                  // Se total da linha NAO bate (>5%), eh divergencia de qty real
+                  if (totalCat > 0 && totalEsp > 0 && Math.abs(totalCat - totalEsp) / totalCat > 0.05) {
                     return { ...sug, status_item: 'divergente' as const }
                   }
                 }
+
                 return { ...sug, status_item: 'ok' as const }
               }))
             }
@@ -1637,18 +1703,53 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         {(!isStepper || (currentStep === 3 && !validandoEspelho)) && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
-            <h2 className="text-lg font-semibold text-gray-900">
-              {canSuggest
-                ? hasPendingSugestao
-                  ? 'Itens - Editar sugestao enviada'
-                  : 'Itens - Enviar sugestao'
-                : 'Itens do pedido'}
-            </h2>
-            {canSuggest && (
-              <p className="text-sm text-gray-500 mt-1">
-                Altere quantidade, desconto, bonificacao e validade para enviar sua sugestao comercial
-              </p>
-            )}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {canSuggest
+                    ? hasPendingSugestao
+                      ? 'Itens - Editar sugestao enviada'
+                      : 'Itens - Enviar sugestao'
+                    : 'Itens do pedido'}
+                </h2>
+                {canSuggest && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    Altere quantidade, desconto, bonificacao e validade para enviar sua sugestao comercial
+                  </p>
+                )}
+              </div>
+              {isStepper && espelhoInfo?.espelho_url && (
+                <button
+                  onClick={async () => {
+                    setValidandoEspelho(true)
+                    setValidacaoResult(null)
+                    localStorage.removeItem(`validacao_${id}`)
+                    try {
+                      const res = await fetch(`/api/fornecedor/pedidos/${id}/espelho/validar`, { method: 'POST' })
+                      if (res.ok) {
+                        const validacao = await res.json()
+                        if (validacao.success) {
+                          setValidacaoResult(validacao)
+                          setValidacaoItens((validacao.itens || []).map((item: any) => ({
+                            ...item, status_manual: null, observacao_item: '',
+                            motivo_faltante: item.status === 'faltando' ? 'ruptura' : null,
+                          })))
+                        }
+                      }
+                    } finally {
+                      setValidandoEspelho(false)
+                    }
+                  }}
+                  disabled={validandoEspelho}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-[#336FB6] border border-[#336FB6]/30 rounded-lg hover:bg-[#336FB6]/5 transition-colors disabled:opacity-50"
+                >
+                  <svg className={`w-3.5 h-3.5 ${validandoEspelho ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+                  </svg>
+                  {validandoEspelho ? 'Validando...' : 'Refazer validacao'}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Desktop: tabela completa */}
