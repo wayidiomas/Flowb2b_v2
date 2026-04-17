@@ -1008,19 +1008,46 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           </div>
         )}
 
-        {/* Sugestao pendente - opcao de excluir */}
+        {/* Sugestao pendente - aguardando lojista */}
         {lastSugestao?.status === 'pendente' && lastSugestao?.autor_tipo !== 'lojista' && pedido.status_interno === 'sugestao_pendente' && (
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-center justify-between">
-            <p className="text-sm font-medium text-orange-800">Sua cotacao foi enviada e esta aguardando analise do lojista.</p>
-            <button
-              onClick={() => handleExcluirSugestao(lastSugestao.id)}
-              className="text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-              Excluir cotacao
-            </button>
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
+            {/* Stepper completo */}
+            <div className="p-4 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                {['Conferir Itens', 'Subir Espelho', 'Validar e Ajustar', 'Enviado'].map((label, idx) => (
+                  <React.Fragment key={idx}>
+                    {idx > 0 && <div className="flex-1 h-px bg-emerald-400 mx-2" />}
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-50 text-emerald-700">
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] font-bold">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      </span>
+                      <span className="hidden sm:inline">{label}</span>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+            {/* Status card */}
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">Aguardando analise do lojista</h3>
+              <p className="text-sm text-gray-500 mb-4">Sua sugestao foi enviada. Voce sera notificado quando houver uma resposta.</p>
+              <button
+                onClick={() => handleExcluirSugestao(lastSugestao.id)}
+                className="text-xs text-red-500 hover:text-red-700 font-medium inline-flex items-center gap-1 px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                </svg>
+                Cancelar e refazer sugestao
+              </button>
+            </div>
           </div>
         )}
 
