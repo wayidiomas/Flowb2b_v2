@@ -1758,7 +1758,10 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               <thead>
                 <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
                   {canSuggest && (
-                    <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 w-28">Status</th>
+                    <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 w-24">Status</th>
+                  )}
+                  {canSuggest && (
+                    <th className="px-2 py-3 text-left text-xs font-semibold text-gray-600 w-32">Obs</th>
                   )}
                   {canSuggest && (
                     <th className="px-2 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Acao</th>
@@ -1795,7 +1798,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   const valorUnitarioEfetivo = sug?.preco_editado != null ? sug.preco_editado : (sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : (item.preco_catalogo ?? 0))
                   return (
                     <tr key={item.id} className="hover:bg-gray-50">
-                      {canSuggest && sug && (
+                      {canSuggest && sug && (<>
                         <td className="px-2 py-3">
                           <select
                             value={sug.status_item}
@@ -1813,17 +1816,23 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                             <option value="depreciado">Depreciado</option>
                             <option value="divergente">Divergente</option>
                           </select>
+                        </td>
+                        <td className="px-2 py-3">
                           <input
                             type="text"
+                            maxLength={100}
                             value={sug.observacao_item}
                             onChange={(e) => updateSugestao(item.id, 'observacao_item', e.target.value)}
-                            placeholder="Obs. do item..."
-                            className="mt-1 w-full text-[10px] px-1.5 py-1 border border-gray-200 rounded-md focus:border-[#336FB6] focus:ring-1 focus:ring-[#336FB6]/20"
+                            placeholder="Observacao..."
+                            className="w-full text-[11px] px-2 py-1.5 border border-gray-200 rounded-md focus:border-[#336FB6] focus:ring-1 focus:ring-[#336FB6]/20"
                           />
                         </td>
-                      )}
+                      </>)}
                       {canSuggest && !sug && (
-                        <td className="px-2 py-3" />
+                        <>
+                          <td className="px-2 py-3" />
+                          <td className="px-2 py-3" />
+                        </>
                       )}
                       {canSuggest && (
                         <td className="px-2 py-2 text-center">
