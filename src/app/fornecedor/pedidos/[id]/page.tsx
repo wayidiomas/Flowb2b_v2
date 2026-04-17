@@ -260,6 +260,11 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               if (espelhoData.prazo_entrega_fornecedor) {
                 setPrazoEntrega(espelhoData.prazo_entrega_fornecedor)
               }
+              // Auto-avançar step baseado no estado atual
+              if (espelhoData.espelho_url) {
+                // Espelho já existe — pular pra Step 3 (validar)
+                setCurrentStep(3)
+              }
             }
           } catch (espelhoErr) {
             console.error('Erro ao carregar espelho:', espelhoErr)
@@ -854,45 +859,44 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           </div>
         )}
 
-        {/* Stepper */}
+        {/* Stepper — sticky top, todas as etapas clicáveis */}
         {data.pedido.status_interno === 'enviado_fornecedor' && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-6">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 mb-6 sticky top-2 z-30">
             <div className="flex items-center justify-between">
               {[
-                { n: 1, label: 'Conferir Itens' },
-                { n: 2, label: 'Subir Espelho' },
-                { n: 3, label: 'Validar e Ajustar' },
-                { n: 4, label: 'Enviar' },
+                { n: 1, label: 'Conferir Itens', done: true },
+                { n: 2, label: 'Subir Espelho', done: !!espelhoInfo?.espelho_url },
+                { n: 3, label: 'Validar e Ajustar', done: !!validacaoResult },
+                { n: 4, label: 'Enviar', done: false },
               ].map((step, idx) => (
                 <React.Fragment key={step.n}>
                   {idx > 0 && (
-                    <div className={`flex-1 h-px ${currentStep > idx ? 'bg-[#336FB6]' : 'bg-gray-200'}`} />
+                    <div className={`flex-1 h-px ${step.done || currentStep > idx ? 'bg-[#336FB6]' : 'bg-gray-200'}`} />
                   )}
                   <button
-                    onClick={() => step.n <= currentStep && setCurrentStep(step.n as 1|2|3|4)}
-                    className={`flex items-center gap-2.5 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    onClick={() => setCurrentStep(step.n as 1|2|3|4)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                       currentStep === step.n
                         ? 'bg-[#336FB6] text-white shadow-sm'
-                        : currentStep > step.n
+                        : step.done
                           ? 'bg-[#336FB6]/10 text-[#336FB6] cursor-pointer hover:bg-[#336FB6]/15'
-                          : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-50 text-gray-400 cursor-pointer hover:bg-gray-100'
                     }`}
-                    disabled={step.n > currentStep}
                   >
-                    <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                    <span className={`flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ${
                       currentStep === step.n
                         ? 'bg-white/20 text-white'
-                        : currentStep > step.n
+                        : step.done
                           ? 'bg-[#336FB6] text-white'
-                          : 'bg-gray-200 text-gray-400'
+                          : 'bg-gray-200 text-gray-500'
                     }`}>
-                      {currentStep > step.n ? (
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                      {step.done && currentStep !== step.n ? (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
                       ) : step.n}
                     </span>
-                    <span>{step.label}</span>
+                    <span className="hidden sm:inline">{step.label}</span>
                   </button>
                 </React.Fragment>
               ))}
@@ -918,7 +922,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         )}
 
         {/* Espelho do Pedido (Step 2 when enviado_fornecedor) */}
-        {pedido && ['aceito', 'sugestao_pendente', 'enviado_fornecedor'].includes(pedido.status_interno) && (pedido.status_interno !== 'enviado_fornecedor' || currentStep === 2) && (
+        {pedido && ['aceito', 'sugestao_pendente', 'enviado_fornecedor'].includes(pedido.status_interno) && (
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
             <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100/50 border-b border-gray-200">
               <div className="flex items-center gap-3">
@@ -1115,8 +1119,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 </div>
               )}
             </div>
-            {pedido.status_interno === 'enviado_fornecedor' && currentStep === 2 && (
-              <div className="flex justify-end px-6 pb-6">
+            {pedido.status_interno === 'enviado_fornecedor' && (
+              <div className="flex justify-end px-6 pb-6" style={{ display: 'none' }}>
                 <button onClick={() => setCurrentStep(3)} className="px-6 py-2.5 bg-[#336FB6] text-white rounded-xl font-medium hover:bg-[#2a5a94] transition-colors">
                   Proximo: Validar e Ajustar &rarr;
                 </button>
@@ -1126,7 +1130,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         )}
 
         {/* Resumo do pedido (Step 1 when enviado_fornecedor) */}
-        {(pedido.status_interno !== 'enviado_fornecedor' || currentStep === 1) && (<>
+        {pedido && (<>
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Resumo</h2>
 
@@ -1303,17 +1307,15 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             </p>
           )}
         </div>
-        {pedido.status_interno === 'enviado_fornecedor' && currentStep === 1 && (
+        {false && (
           <div className="flex justify-end mt-4">
-            <button onClick={() => setCurrentStep(2)} className="px-6 py-2.5 bg-[#336FB6] text-white rounded-xl font-medium hover:bg-[#2a5a94] transition-colors">
-              Proximo: Subir Espelho &rarr;
-            </button>
+            <button className="hidden">removed</button>
           </div>
         )}
         </>)}
 
         {/* Condicoes Comerciais - so aparece quando pode sugerir (Step 3 when enviado_fornecedor) */}
-        {canSuggest && (pedido.status_interno !== 'enviado_fornecedor' || currentStep === 3) && (
+        {canSuggest && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Condicoes Comerciais</h2>
             <p className="text-sm text-gray-500 mb-4">
@@ -1434,7 +1436,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         )}
 
         {/* Itens + Formulario de sugestao (Step 3 when enviado_fornecedor) */}
-        {(pedido.status_interno !== 'enviado_fornecedor' || currentStep === 3 || currentStep === 4) && (
+        {(
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-[#336FB6]/5">
             <h2 className="text-lg font-semibold text-gray-900">
@@ -2137,17 +2139,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             </div>
           )}
 
-          {/* Proximo button for Step 3 */}
-          {pedido.status_interno === 'enviado_fornecedor' && currentStep === 3 && (
-            <div className="flex justify-end mt-4 px-4 pb-4">
-              <button onClick={() => setCurrentStep(4)} className="px-6 py-2.5 bg-[#336FB6] text-white rounded-xl font-medium hover:bg-[#2a5a94] transition-colors">
-                Proximo: Enviar &rarr;
-              </button>
-            </div>
-          )}
-
-          {/* Observacao + Submit (Step 4 when enviado_fornecedor) */}
-          {canSuggest && (pedido.status_interno !== 'enviado_fornecedor' || currentStep === 4) && (
+          {/* Observacao + Submit */}
+          {canSuggest && (
             <div className="px-4 sm:px-6 py-4 border-t border-gray-200 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2202,6 +2195,37 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Barra flutuante de navegação */}
+        {data.pedido.status_interno === 'enviado_fornecedor' && (
+          <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-gray-200 shadow-lg px-6 py-3">
+            <div className="max-w-5xl mx-auto flex items-center justify-between">
+              <button
+                onClick={() => setCurrentStep(Math.max(1, currentStep - 1) as 1|2|3|4)}
+                disabled={currentStep === 1}
+                className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+                Anterior
+              </button>
+              <span className="text-sm text-gray-500">
+                Etapa {currentStep} de 4: {['Conferir Itens', 'Subir Espelho', 'Validar e Ajustar', 'Enviar'][currentStep - 1]}
+              </span>
+              <button
+                onClick={() => setCurrentStep(Math.min(4, currentStep + 1) as 1|2|3|4)}
+                disabled={currentStep === 4}
+                className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-[#336FB6] rounded-lg hover:bg-[#2a5a94] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Proximo
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+              </button>
             </div>
           </div>
         )}
