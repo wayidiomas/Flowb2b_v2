@@ -859,25 +859,39 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-6">
             <div className="flex items-center justify-between">
               {[
-                { n: 1, label: 'Conferir Itens', icon: '\uD83D\uDCCB' },
-                { n: 2, label: 'Subir Espelho', icon: '\uD83D\uDCC4' },
-                { n: 3, label: 'Validar e Ajustar', icon: '\u2713' },
-                { n: 4, label: 'Enviar', icon: '\uD83D\uDE80' },
+                { n: 1, label: 'Conferir Itens' },
+                { n: 2, label: 'Subir Espelho' },
+                { n: 3, label: 'Validar e Ajustar' },
+                { n: 4, label: 'Enviar' },
               ].map((step, idx) => (
                 <React.Fragment key={step.n}>
-                  {idx > 0 && <div className={`flex-1 h-0.5 mx-2 ${currentStep > idx ? 'bg-emerald-400' : 'bg-gray-200'}`} />}
+                  {idx > 0 && (
+                    <div className={`flex-1 h-px ${currentStep > idx ? 'bg-[#336FB6]' : 'bg-gray-200'}`} />
+                  )}
                   <button
                     onClick={() => step.n <= currentStep && setCurrentStep(step.n as 1|2|3|4)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-2.5 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
                       currentStep === step.n
-                        ? 'bg-[#336FB6] text-white'
+                        ? 'bg-[#336FB6] text-white shadow-sm'
                         : currentStep > step.n
-                          ? 'bg-emerald-50 text-emerald-700 cursor-pointer'
-                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          ? 'bg-[#336FB6]/10 text-[#336FB6] cursor-pointer hover:bg-[#336FB6]/15'
+                          : 'bg-gray-50 text-gray-400 cursor-not-allowed'
                     }`}
                     disabled={step.n > currentStep}
                   >
-                    <span>{step.icon}</span>
+                    <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                      currentStep === step.n
+                        ? 'bg-white/20 text-white'
+                        : currentStep > step.n
+                          ? 'bg-[#336FB6] text-white'
+                          : 'bg-gray-200 text-gray-400'
+                    }`}>
+                      {currentStep > step.n ? (
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      ) : step.n}
+                    </span>
                     <span>{step.label}</span>
                   </button>
                 </React.Fragment>
