@@ -251,6 +251,51 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  // Auto-fill status_item sempre que validacaoResult mudar e sugestoes existirem
+  useEffect(() => {
+    if (!validacaoResult || sugestoes.length === 0) return
+    const itensVal = validacaoResult.itens || []
+    if (itensVal.length === 0) return
+
+    setSugestoes(prev => {
+      // So rodar se tem algum item sem status preenchido pela validacao
+      const needsFill = prev.some(s => s.status_item === 'ok' || !s.status_item)
+      if (!needsFill) return prev
+
+      return prev.map(sug => {
+        const codForn = (sug.codigo_fornecedor || '').replace(/^0+/, '')
+        const sugGtin = sug.gtin || ''
+        const valItem = itensVal.find((vi: any) => {
+          if (!vi.item_pedido && !vi.item_espelho) return false
+          const viCod = (vi.item_pedido?.codigo || '').replace(/^0+/, '')
+          const viGtin = vi.item_pedido?.gtin || ''
+          const viEspCod = (vi.item_espelho?.codigo || '').replace(/^0+/, '')
+          if (codForn && viCod && codForn === viCod) return true
+          if (codForn && viEspCod && codForn === viEspCod) return true
+          if (sugGtin && viGtin && sugGtin === viGtin) return true
+          return false
+        })
+        if (valItem?.status === 'faltando') return { ...sug, status_item: 'ruptura' as const }
+        const precoCat = sug.preco_catalogo ?? 0
+        const precoEsp = valItem?.item_espelho?.preco_unitario ?? 0
+        if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
+          return { ...sug, status_item: 'divergente' as const }
+        }
+        const qtyPed = Number(sug.quantidade_sugerida) || 0
+        const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
+        if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
+          const totalCat = precoCat * qtyPed
+          const totalEsp = precoEsp * qtyEsp
+          if (totalCat > 0 && totalEsp > 0 && Math.abs(totalCat - totalEsp) / totalCat > 0.05) {
+            return { ...sug, status_item: 'divergente' as const }
+          }
+        }
+        return { ...sug, status_item: 'ok' as const }
+      })
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [validacaoResult])
+
   // Auto-validate when entering Step 3 without validation result
   useEffect(() => {
     if (currentStep === 3 && !validacaoResult && !validandoEspelho && espelhoInfo?.espelho_url) {
