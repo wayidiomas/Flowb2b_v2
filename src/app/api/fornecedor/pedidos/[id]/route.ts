@@ -110,8 +110,11 @@ export async function GET(
     }
 
     // Mapear itens para incluir ean e codigo_fornecedor correto
+    // Ordem: fornecedores_produtos (produto_id) > itens_pedido_compra.codigo_fornecedor (catalogo/restauracao)
     const itens = itensTyped.map(item => {
-      const codForn = (item.produto_id && codigosFornecedor[item.produto_id]) || null
+      const codForn = (item.produto_id && codigosFornecedor[item.produto_id])
+        || item.codigo_fornecedor
+        || null
       const ean = getGtin(item.produtos)
       return {
         id: item.id,
