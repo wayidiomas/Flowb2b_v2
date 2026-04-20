@@ -10,11 +10,8 @@ const TABLE_MAP: Record<string, string> = {
   representantes: 'users_representante',
 }
 
-const RESET_PATH_MAP: Record<string, string> = {
-  lojistas: '/reset-senha',
-  fornecedores: '/fornecedor/reset-senha',
-  representantes: '/representante/reset-senha',
-}
+// Pagina unica de reset-senha — o endpoint de confirmacao identifica o tipo pelo token
+const RESET_PATH = '/reset-senha'
 
 export async function POST(
   request: NextRequest,
@@ -81,8 +78,7 @@ export async function POST(
 
     // Build reset URL
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://flowb2b-v2.onrender.com'
-    const resetPath = RESET_PATH_MAP[tipo] || '/reset-senha'
-    const resetUrl = `${appUrl}${resetPath}?token=${resetToken}`
+    const resetUrl = `${appUrl}${RESET_PATH}?token=${resetToken}`
 
     // Send email
     const emailResult = await sendResetPasswordEmail(user.email, user.nome || '', resetUrl)

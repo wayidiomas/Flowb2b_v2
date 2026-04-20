@@ -14,6 +14,7 @@ const publicRoutes = [
   '/login',
   '/register',
   '/forgot-password',
+  '/reset-senha',
   '/verify-email',
   '/check-email',
   '/termos-de-uso',

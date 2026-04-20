@@ -53,6 +53,7 @@ export interface ResetPasswordResponse {
   success: boolean
   message?: string
   error?: string
+  userType?: 'lojista' | 'fornecedor' | 'representante'
 }
 
 export interface MagicLinkRequest {
