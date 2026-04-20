@@ -52,8 +52,8 @@ function Modal({ isOpen, onClose, children, size = 'md', mobileFullScreen = true
         className={`
           relative w-full bg-white shadow-xl animate-in zoom-in-95 duration-200
           ${mobileFullScreen
-            ? `h-full md:h-auto rounded-none md:rounded-2xl overflow-y-auto ${sizeStylesResponsive[size]}`
-            : `rounded-2xl ${sizeStyles[size]}`
+            ? `h-full md:h-auto md:max-h-[90vh] rounded-none md:rounded-2xl overflow-y-auto ${sizeStylesResponsive[size]}`
+            : `rounded-2xl max-h-[90vh] overflow-y-auto ${sizeStyles[size]}`
           }
         `}
       >

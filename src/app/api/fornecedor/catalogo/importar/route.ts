@@ -147,9 +147,11 @@ export async function POST(request: NextRequest) {
         empresa_id: Number(empresaId),
         produto_id: row.ean ? produtoByGtin.get(row.ean) || null : null,
         codigo: row.codigo_fornecedor || null,
+        ean: row.ean || null,
         nome: row.nome!,
         marca: row.marca || null,
         unidade: row.unidade || 'UN',
+        tipo_embalagem: row.tipo_embalagem || null,
         itens_por_caixa: row.itens_por_caixa ?? 1,
         preco_base: row.preco ?? 0,
         imagem_url: row.imagem_url || null,
@@ -176,8 +178,10 @@ export async function POST(request: NextRequest) {
       if (row.nome) updateData.nome = row.nome
       if (row.marca) updateData.marca = row.marca
       if (row.unidade) updateData.unidade = row.unidade
+      if (row.tipo_embalagem) updateData.tipo_embalagem = row.tipo_embalagem
       if (row.itens_por_caixa !== null) updateData.itens_por_caixa = row.itens_por_caixa
       if (row.imagem_url) updateData.imagem_url = row.imagem_url
+      if (row.ean) updateData.ean = row.ean
 
       await supabase
         .from('catalogo_itens')

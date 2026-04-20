@@ -3029,7 +3029,7 @@ export default function FornecedorCatalogoPage() {
         </div>
       )}
       {/* Modal Importar Excel */}
-      <Modal isOpen={showImportModal} onClose={() => !importando && setShowImportModal(false)} size="lg">
+      <Modal isOpen={showImportModal} onClose={() => !importando && setShowImportModal(false)} size="2xl">
         <ModalHeader onClose={() => !importando && setShowImportModal(false)}>
           <ModalTitle>Importar Produtos via Planilha</ModalTitle>
           <ModalDescription>Adicione ou atualize produtos no catalogo em massa</ModalDescription>
@@ -3364,8 +3364,8 @@ export default function FornecedorCatalogoPage() {
                 </div>
               )}
 
-              <div className="max-h-[400px] overflow-y-auto border border-gray-200 rounded-xl">
-                <table className="w-full text-xs">
+              <div className="max-h-[400px] overflow-auto border border-gray-200 rounded-xl">
+                <table className="min-w-[900px] w-full text-xs">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold text-gray-600 w-24">Status</th>

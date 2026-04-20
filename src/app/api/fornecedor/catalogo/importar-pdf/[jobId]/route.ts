@@ -23,7 +23,7 @@ export async function GET(
 
     const { data: job, error } = await supabase
       .from('catalogo_import_jobs')
-      .select('id, catalogo_id, status, total_pages, total_products, current_page, produtos_json, error_message, created_at')
+      .select('id, catalogo_id, status, total_pages, total_products, current_page, produtos_json, error, created_at')
       .eq('id', id)
       .single()
 
@@ -55,8 +55,8 @@ export async function GET(
       response.produtos = job.produtos_json
     }
 
-    if (job.status === 'error' && job.error_message) {
-      response.error = job.error_message
+    if (job.status === 'error' && job.error) {
+      response.error = job.error
     }
 
     return NextResponse.json(response)
