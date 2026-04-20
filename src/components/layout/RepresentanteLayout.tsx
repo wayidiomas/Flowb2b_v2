@@ -57,7 +57,7 @@ export function RepresentanteLayout({ children }: RepresentanteLayoutProps) {
   const pathname = usePathname()
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Header azul - igual ao lojista/fornecedor */}
       <header className="bg-[#336fb6] h-[60px] w-full shadow-md z-50 relative">
         <div className="h-full flex items-center px-6 md:px-12 gap-6">

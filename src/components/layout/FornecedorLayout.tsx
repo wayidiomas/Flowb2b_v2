@@ -166,7 +166,7 @@ export function FornecedorLayout({ children }: FornecedorLayoutProps) {
   const isMoreActive = moreMenuItems.some(item => pathname.startsWith(item.href))
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Header azul */}
       <header className="bg-[#336fb6] h-[60px] w-full shadow-md z-50 relative">
         <div className="h-full flex items-center px-4 md:px-12 gap-4 md:gap-6">

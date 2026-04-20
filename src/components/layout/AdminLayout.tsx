@@ -93,7 +93,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
+    <div className="min-h-screen bg-gray-100 flex overflow-x-hidden">
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex md:flex-col md:w-64 bg-gray-900 text-white">
         {/* Logo */}
