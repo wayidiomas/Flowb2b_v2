@@ -1707,6 +1707,20 @@ export default function FornecedorCatalogoPage() {
   const [multiModalEmpresaId, setMultiModalEmpresaId] = useState<number | null>(null)
   const [showMultiModal, setShowMultiModal] = useState(false)
 
+  // Mobile toolbar kebab menu
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false)
+  const toolbarMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!toolbarMenuOpen) return
+    const onClick = (e: MouseEvent) => {
+      if (toolbarMenuRef.current && !toolbarMenuRef.current.contains(e.target as Node)) {
+        setToolbarMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [toolbarMenuOpen])
+
   // Profile modal state
   const [showPerfilModal, setShowPerfilModal] = useState(false)
   const [perfilData, setPerfilData] = useState<{
@@ -2072,6 +2086,60 @@ export default function FornecedorCatalogoPage() {
   }
 
   // ------ Sync catalog ------
+  const handleBuscarImagens = async () => {
+    if (!catalogo?.id) return
+    if (imgSyncRunning) {
+      setShowImgSyncModal(true)
+      return
+    }
+    const catalogoId = catalogo.id
+    setImgProgress({ processed: 0, total: 0, found: 0 })
+    setImgSyncDone(false)
+    setImgSyncStartedAt(Date.now())
+    setImgSyncElapsed(0)
+    setImgSyncRunning(true)
+    imgSyncCancelRef.current = false
+    setShowImgSyncModal(true)
+
+    let done = false
+    let totalProcessed = 0
+    let totalFound = 0
+    let currentOffset = 0
+    let initialTotal = 0
+
+    while (!done && !imgSyncCancelRef.current) {
+      try {
+        const ctrl = new AbortController()
+        imgSyncAbortRef.current = ctrl
+        const imgRes = await fetch('/api/fornecedor/catalogo/processar-imagens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ catalogo_id: catalogoId, offset: currentOffset }),
+          signal: ctrl.signal,
+        })
+        const imgData = await imgRes.json()
+        totalProcessed += imgData.processed || 0
+        totalFound += imgData.com_imagem || 0
+        currentOffset = imgData.next_offset ?? (currentOffset + (imgData.processed || 0))
+        if (initialTotal === 0 && imgData.total_sem_imagem != null) {
+          initialTotal = (imgData.total_sem_imagem || 0) + totalFound
+        }
+        setImgProgress({
+          processed: totalProcessed,
+          total: initialTotal || totalProcessed,
+          found: totalFound,
+        })
+        done = imgData.done || imgData.remaining === 0 || imgData.processed === 0
+      } catch {
+        done = true
+      }
+    }
+    imgSyncAbortRef.current = null
+    setImgSyncDone(true)
+    setImgSyncRunning(false)
+    fetchItens()
+  }
+
   const handleSync = async () => {
     setSyncing(true)
     try {
@@ -2542,7 +2610,70 @@ export default function FornecedorCatalogoPage() {
               Gerencie produtos e precos para todos os lojistas
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {/* Kebab mobile: abre dropdown com acoes secundarias */}
+            <div className="relative sm:hidden" ref={toolbarMenuRef}>
+              <button
+                type="button"
+                onClick={() => setToolbarMenuOpen(!toolbarMenuOpen)}
+                className="inline-flex items-center justify-center w-9 h-9 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                aria-label="Mais acoes"
+                aria-expanded={toolbarMenuOpen}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+                </svg>
+              </button>
+              {toolbarMenuOpen && (
+                <div className="absolute left-0 mt-2 w-60 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden z-30 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => { setToolbarMenuOpen(false); handleSync() }}
+                    disabled={syncing}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <SyncIcon className="w-4 h-4 text-gray-500" />
+                    {syncing ? 'Sincronizando...' : 'Sincronizar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setToolbarMenuOpen(false); setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null); setImportEmpresaId(null) }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                    Importar Excel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setToolbarMenuOpen(false); setShowPdfImportModal(true); setPdfStep('upload'); setPdfFile(null); setPdfProdutos([]); setPdfCuracao(null); setPdfError(null); setPdfResult(null); setPdfJobId(null) }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                    Importar PDF
+                  </button>
+                  {totalItens > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setToolbarMenuOpen(false); handleBuscarImagens() }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>
+                      Buscar Imagens
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { setToolbarMenuOpen(false); setShowPerfilModal(true) }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" /></svg>
+                    Personalizar
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <span className="hidden sm:inline-flex">
             <Button
               variant="outline"
               size="sm"
@@ -2552,6 +2683,8 @@ export default function FornecedorCatalogoPage() {
             >
               Sincronizar
             </Button>
+            </span>
+            <span className="hidden sm:inline-flex">
             <Button
               variant="outline"
               size="sm"
@@ -2560,6 +2693,8 @@ export default function FornecedorCatalogoPage() {
             >
               Importar Excel
             </Button>
+            </span>
+            <span className="hidden sm:inline-flex">
             <Button
               variant="outline"
               size="sm"
@@ -2568,68 +2703,18 @@ export default function FornecedorCatalogoPage() {
             >
               Importar PDF
             </Button>
+            </span>
             {totalItens > 0 && (
+              <span className="hidden sm:inline-flex">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={async () => {
-                  if (!catalogo?.id) return
-                  // Se ja esta rodando, so reabre o modal pra mostrar progresso
-                  if (imgSyncRunning) {
-                    setShowImgSyncModal(true)
-                    return
-                  }
-                  const catalogoId = catalogo.id
-                  setImgProgress({ processed: 0, total: 0, found: 0 })
-                  setImgSyncDone(false)
-                  setImgSyncStartedAt(Date.now())
-                  setImgSyncElapsed(0)
-                  setImgSyncRunning(true)
-                  imgSyncCancelRef.current = false
-                  setShowImgSyncModal(true)
-
-                  let done = false
-                  let totalProcessed = 0
-                  let totalFound = 0
-                  let currentOffset = 0
-                  let initialTotal = 0
-
-                  while (!done && !imgSyncCancelRef.current) {
-                    try {
-                      const ctrl = new AbortController()
-                      imgSyncAbortRef.current = ctrl
-                      const imgRes = await fetch('/api/fornecedor/catalogo/processar-imagens', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ catalogo_id: catalogoId, offset: currentOffset }),
-                        signal: ctrl.signal,
-                      })
-                      const imgData = await imgRes.json()
-                      totalProcessed += imgData.processed || 0
-                      totalFound += imgData.com_imagem || 0
-                      currentOffset = imgData.next_offset ?? (currentOffset + (imgData.processed || 0))
-                      if (initialTotal === 0 && imgData.total_sem_imagem != null) {
-                        initialTotal = (imgData.total_sem_imagem || 0) + totalFound
-                      }
-                      setImgProgress({
-                        processed: totalProcessed,
-                        total: initialTotal || totalProcessed,
-                        found: totalFound,
-                      })
-                      done = imgData.done || imgData.remaining === 0 || imgData.processed === 0
-                    } catch {
-                      done = true
-                    }
-                  }
-                  imgSyncAbortRef.current = null
-                  setImgSyncDone(true)
-                  setImgSyncRunning(false)
-                  fetchItens()
-                }}
+                onClick={handleBuscarImagens}
                 leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>}
               >
                 Buscar Imagens
               </Button>
+              </span>
             )}
             <Button
               variant="outline"
@@ -2644,6 +2729,7 @@ export default function FornecedorCatalogoPage() {
                 </span>
               )}
             </Button>
+            <span className="hidden sm:inline-flex">
             <Button
               variant="outline"
               size="sm"
@@ -2652,6 +2738,7 @@ export default function FornecedorCatalogoPage() {
             >
               Personalizar
             </Button>
+            </span>
             <Button
               variant="primary"
               size="sm"
