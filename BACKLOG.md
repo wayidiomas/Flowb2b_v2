@@ -431,6 +431,55 @@ A cliente quer uma visão **unificada estilo vitrine** onde o lojista vê o cat�
 - `src/app/api/fornecedor/tabelas-preco/[id]/duplicar/route.ts` (novo)
 - `src/app/fornecedor/tabelas-preco/page.tsx` (botões + modal duplicação)
 
+### Task 15: Sprint 4 do fluxo Excel/PDF do catalogo
+**Prioridade:** Baixa (melhorias)
+**Registrado em:** 2026-04-20
+
+**Contexto:** Sprints 1-3 do fluxo de importacao (Excel + PDF) entregues:
+Excel persiste ean/tipo_embalagem, modais nao quebram em 1280/1024/768,
+teste E2E validado com planilha de 3 linhas. PDF em review com 11
+colunas ganhou `overflow-x-auto` e `min-w-[900px]` mas teste com PDF
+real nao foi executado (exige arquivo + processamento IA longo).
+
+**Debitos tecnicos e melhorias:**
+
+1. **Teste E2E PDF real** — subir um PDF de catalogo pequeno (~3 paginas),
+   processar chunks, validar tabela review nao quebra em 1024px,
+   confirmar insert em catalogo_itens. Hoje so o fluxo Excel foi testado.
+
+2. **Permitir cancelar durante `processing` e `saving`** — modal PDF
+   hoje trava fechamento com `!pdfImporting && !pdfSaving`
+   (`src/app/fornecedor/catalogo/page.tsx:3243`). Se job travar ou
+   usuario precisar abortar, nao tem saida. Adicionar botao cancelar
+   que manda `status='cancelled'` no job e libera o modal.
+
+3. **Progress bar real** — o loop `handlePdfProcess` processa chunks
+   mas nao mostra % pro usuario. Adicionar `pdfProgress` (pagina
+   atual / total) com barra visual.
+
+4. **Empresa_id no catalogo_import_jobs + PDF confirmar** — hoje os
+   jobs e itens inseridos via PDF ficam com `empresa_id=NULL`. Isso
+   cria um caso de edge onde Excel filtra por `empresa_id` mas PDF
+   fica fora do filtro. Considerar: (a) pedir empresa no upload do
+   PDF, ou (b) remover filtro de empresa no lookup do Excel
+   (`src/app/api/fornecedor/catalogo/importar/route.ts:58-63`).
+
+5. **Aba Excel dentro do modal PDF** — hoje tem tab "Excel Em breve"
+   desabilitada (`page.tsx:3257`). Unificar os 2 modais em um so
+   com tabs PDF/Excel funcionais.
+
+6. **Download de relatorio de erros** — hoje a API Excel reporta
+   erros por linha mas nao oferece CSV de download pro usuario
+   corrigir offline.
+
+**Arquivos envolvidos:**
+- `src/app/fornecedor/catalogo/page.tsx` (modais PDF/Excel + state)
+- `src/app/api/fornecedor/catalogo/importar/route.ts`
+- `src/app/api/fornecedor/catalogo/importar-pdf/**/route.ts`
+- `src/lib/catalogo-import.ts` (parser)
+
+---
+
 ### Task 14: Hardening do fluxo de reset de senha
 **Prioridade:** Baixa (débito técnico)
 **Registrado em:** 2026-04-20
