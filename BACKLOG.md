@@ -430,3 +430,37 @@ A cliente quer uma visão **unificada estilo vitrine** onde o lojista vê o cat�
 **Arquivos:**
 - `src/app/api/fornecedor/tabelas-preco/[id]/duplicar/route.ts` (novo)
 - `src/app/fornecedor/tabelas-preco/page.tsx` (botões + modal duplicação)
+
+### Task 14: Hardening do fluxo de reset de senha
+**Prioridade:** Baixa (débito técnico)
+**Registrado em:** 2026-04-20
+
+**Contexto:** O fluxo de reset de senha (admin "Resetar senha" + usuário "Esqueci a senha") foi corrigido para funcionar nos 3 tipos (lojista, fornecedor, representante) nos commits `4b2e8b2` e `a4cddd1`. A funcionalidade end-to-end está operacional, mas o code review identificou pontos de hardening que ficaram pra depois.
+
+**O que fazer:**
+
+1. **Timing attack no lookup de token** — `src/app/api/auth/reset-password/route.ts:34-47` e `src/app/api/auth/forgot-password/route.ts:41-57` fazem loop sequencial em 3 tabelas. Tempos distintos delatam em qual tabela o match ocorreu. Trocar por `Promise.all` dos 3 `.select` e escolher o primeiro hit.
+
+2. **Política de senha divergente** — `reset-password/route.ts:20` exige ≥8 caracteres, `admin/usuarios/[tipo]/[id]/editar/route.ts:99` aceita ≥6. Unificar em ≥8 (ou extrair constante em `lib/auth.ts`).
+
+3. **Middleware `startsWith` libera sub-rotas** — `src/middleware.ts:60` faz `pathname.startsWith(route)`, então `/reset-senha-xxx` também fica público (herdado — `/login`, `/register` tem o mesmo). Trocar por `pathname === route || pathname.startsWith(route + '/')`.
+
+4. **Validação de formato de token** — `reset-password/route.ts:38-40` aceita qualquer string como `token`. Adicionar `token.trim().length >= 32` (randomUUID×2 gera 72 chars).
+
+5. **Mensagens de erro revelam existência** — `reset-password/route.ts:49-60` retorna "Token inválido ou expirado" vs "Token expirado. Solicite um novo link" — distinção dá oráculo ao atacante. Unificar mensagem e status.
+
+6. **`new Date(null) = epoch 1970`** — `reset-password/route.ts:56` funciona por acidente quando `expiresAtRaw` é null. Explicitar `if (!expiresAtRaw)`.
+
+7. **`/reset-senha` validar token no mount** — `src/app/(auth)/reset-senha/page.tsx:46-49` só mostra erro ao submeter quando o token está ausente. Validar cedo para UX e previnir submit inútil.
+
+8. **Dedup `TABLE_MAP`** — `reset-password/route.ts:6`, `forgot-password/route.ts:6`, `admin/usuarios/[tipo]/[id]/editar/route.ts:6-10` e `admin/usuarios/[tipo]/[id]/reset-senha/route.ts:7-11` repetem o mesmo mapa. Extrair `src/lib/user-tables.ts`.
+
+**Arquivos envolvidos:**
+- `src/app/api/auth/reset-password/route.ts`
+- `src/app/api/auth/forgot-password/route.ts`
+- `src/app/api/admin/usuarios/[tipo]/[id]/editar/route.ts`
+- `src/app/api/admin/usuarios/[tipo]/[id]/reset-senha/route.ts`
+- `src/middleware.ts`
+- `src/app/(auth)/reset-senha/page.tsx`
+- `src/lib/user-tables.ts` (novo)
+- `src/lib/auth.ts` (constante de política de senha)
