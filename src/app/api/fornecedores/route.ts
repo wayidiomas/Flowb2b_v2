@@ -7,6 +7,7 @@ import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 // Interface para o corpo da requisicao
 interface FornecedorRequest {
   id?: number // Para update
+  empresa_ids?: number[] // Criar em multiplas lojas (Sprint multi-empresa). Se ausente, usa empresa ativa.
   nome: string
   nome_fantasia?: string
   codigo?: string
@@ -199,7 +200,144 @@ export async function GET() {
   }
 }
 
-// POST - Criar novo fornecedor
+// Resultado da criacao por empresa
+interface CreateResult {
+  empresaId: number
+  status: 'created' | 'created_without_bling' | 'skipped_duplicate' | 'error'
+  id?: number
+  id_bling?: number | null
+  message?: string
+}
+
+// Cria fornecedor em UMA empresa (Bling + Supabase).
+// Nao lanca: retorna objeto CreateResult com status.
+async function createFornecedorInEmpresa(
+  body: FornecedorRequest,
+  empresaId: number,
+  supabase: ReturnType<typeof createServerSupabaseClient>
+): Promise<CreateResult> {
+  try {
+    // Checar duplicata por CNPJ/CPF nessa empresa
+    const numeroDoc = body.tipo_pessoa === 'J'
+      ? body.cnpj?.replace(/\D/g, '')
+      : body.cpf?.replace(/\D/g, '')
+
+    if (numeroDoc) {
+      const { data: existing } = await supabase
+        .from('fornecedores')
+        .select('id')
+        .eq('empresa_id', empresaId)
+        .eq('numerodocumento', numeroDoc)
+        .limit(1)
+        .maybeSingle()
+
+      if (existing) {
+        return {
+          empresaId,
+          status: 'skipped_duplicate',
+          id: existing.id,
+          message: 'Fornecedor com este documento ja existe nesta loja',
+        }
+      }
+    }
+
+    // 1. Obter token do Bling
+    let accessToken: string | null = null
+    try {
+      accessToken = await getBlingAccessToken(empresaId, supabase)
+    } catch (err) {
+      console.warn(`Bling nao disponivel para empresa ${empresaId}:`, err)
+    }
+
+    // 2. Se nao tem Bling, salva so no Supabase
+    if (!accessToken) {
+      const insertData = buildSupabaseData(body, empresaId, null)
+      const { data, error } = await supabase
+        .from('fornecedores')
+        .insert(insertData)
+        .select('id')
+        .single()
+
+      if (error) {
+        return { empresaId, status: 'error', message: error.message }
+      }
+
+      return {
+        empresaId,
+        status: 'created_without_bling',
+        id: data.id,
+        id_bling: null,
+        message: 'Criado apenas localmente (Bling nao conectado)',
+      }
+    }
+
+    // 3. Criar contato no Bling
+    const blingPayload = buildBlingPayload(body)
+    const blingResponse = await fetch(`${BLING_CONFIG.apiUrl}/contatos`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(blingPayload),
+    })
+
+    if (!blingResponse.ok) {
+      const errorText = await blingResponse.text()
+      console.error(`Erro Bling empresa ${empresaId}:`, blingResponse.status, errorText)
+
+      // Fallback: salva so no Supabase
+      const insertData = buildSupabaseData(body, empresaId, null)
+      const { data, error } = await supabase
+        .from('fornecedores')
+        .insert(insertData)
+        .select('id')
+        .single()
+
+      if (error) {
+        return { empresaId, status: 'error', message: error.message }
+      }
+
+      return {
+        empresaId,
+        status: 'created_without_bling',
+        id: data.id,
+        id_bling: null,
+        message: `Bling falhou, salvo localmente: ${errorText.slice(0, 120)}`,
+      }
+    }
+
+    const blingData: BlingContatoResponse = await blingResponse.json()
+    const idBling = blingData.data.id
+
+    // 4. Salvar no Supabase com id_bling
+    const insertData = buildSupabaseData(body, empresaId, idBling)
+    const { data, error } = await supabase
+      .from('fornecedores')
+      .insert(insertData)
+      .select('id')
+      .single()
+
+    if (error) {
+      return { empresaId, status: 'error', message: error.message }
+    }
+
+    return {
+      empresaId,
+      status: 'created',
+      id: data.id,
+      id_bling: idBling,
+    }
+  } catch (err) {
+    return {
+      empresaId,
+      status: 'error',
+      message: err instanceof Error ? err.message : 'Erro desconhecido',
+    }
+  }
+}
+
+// POST - Criar novo fornecedor em uma ou mais empresas vinculadas ao user
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -217,85 +355,74 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServerSupabaseClient()
-    const empresaId = user.empresaId
 
-    // 1. Obter token do Bling
-    let accessToken: string
-    try {
-      accessToken = await getBlingAccessToken(empresaId, supabase)
-    } catch (err) {
-      // Se nao conseguir token do Bling, salva apenas no Supabase
-      console.warn('Bling nao disponivel, salvando apenas no Supabase:', err)
+    // 1. Resolver empresa_ids: usar body.empresa_ids ou fallback pra empresa ativa
+    const requestedIds = Array.isArray(body.empresa_ids) && body.empresa_ids.length > 0
+      ? Array.from(new Set(body.empresa_ids.map(Number).filter(n => Number.isFinite(n) && n > 0)))
+      : [user.empresaId]
 
-      const insertData = buildSupabaseData(body, empresaId, null)
-      const { data, error } = await supabase
-        .from('fornecedores')
-        .insert(insertData)
-        .select('id')
-        .single()
-
-      if (error) throw error
-
-      return NextResponse.json({
-        success: true,
-        id: data.id,
-        id_bling: null,
-        message: 'Fornecedor criado apenas localmente (Bling nao conectado)',
-      })
+    if (requestedIds.length === 0) {
+      return NextResponse.json({ error: 'Nenhuma loja selecionada' }, { status: 400 })
     }
 
-    // 2. Criar contato no Bling
-    const blingPayload = buildBlingPayload(body)
+    // 2. Validacao cross-tenant: garantir que todas as empresas pertencem ao user
+    const { data: vinculos, error: vinculosError } = await supabase
+      .from('users_empresas')
+      .select('empresa_id')
+      .eq('user_id', user.userId)
+      .eq('ativo', true)
+      .in('empresa_id', requestedIds)
 
-    const blingResponse = await fetch(`${BLING_CONFIG.apiUrl}/contatos`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(blingPayload),
-    })
-
-    if (!blingResponse.ok) {
-      const errorText = await blingResponse.text()
-      console.error('Erro Bling API:', blingResponse.status, errorText)
-
-      // Se falhar no Bling, salva apenas no Supabase
-      const insertData = buildSupabaseData(body, empresaId, null)
-      const { data, error } = await supabase
-        .from('fornecedores')
-        .insert(insertData)
-        .select('id')
-        .single()
-
-      if (error) throw error
-
-      return NextResponse.json({
-        success: true,
-        id: data.id,
-        id_bling: null,
-        warning: `Erro ao criar no Bling: ${errorText}. Salvo apenas localmente.`,
-      })
+    if (vinculosError) {
+      console.error('Erro ao validar vinculos:', vinculosError)
+      return NextResponse.json({ error: 'Erro ao validar lojas' }, { status: 500 })
     }
 
-    const blingData: BlingContatoResponse = await blingResponse.json()
-    const idBling = blingData.data.id
+    const idsAutorizados = new Set((vinculos || []).map(v => v.empresa_id))
+    const idsNaoAutorizados = requestedIds.filter(id => !idsAutorizados.has(id))
 
-    // 3. Salvar no Supabase com id_bling
-    const insertData = buildSupabaseData(body, empresaId, idBling)
-    const { data, error } = await supabase
-      .from('fornecedores')
-      .insert(insertData)
-      .select('id')
-      .single()
+    if (idsNaoAutorizados.length > 0) {
+      return NextResponse.json(
+        { error: `Acesso negado a empresa(s): ${idsNaoAutorizados.join(', ')}` },
+        { status: 403 }
+      )
+    }
 
-    if (error) throw error
+    // 3. Loop: criar fornecedor em cada empresa
+    const results: CreateResult[] = []
+    for (const empresaId of requestedIds) {
+      const result = await createFornecedorInEmpresa(body, empresaId, supabase)
+      results.push(result)
+    }
+
+    const summary = {
+      total: results.length,
+      created: results.filter(r => r.status === 'created').length,
+      created_without_bling: results.filter(r => r.status === 'created_without_bling').length,
+      skipped_duplicate: results.filter(r => r.status === 'skipped_duplicate').length,
+      errors: results.filter(r => r.status === 'error').length,
+    }
+
+    // Compat: quando e uma unica empresa (fluxo antigo), retorna shape legada
+    if (results.length === 1) {
+      const r = results[0]
+      if (r.status === 'error') {
+        return NextResponse.json({ error: r.message || 'Erro ao criar fornecedor' }, { status: 500 })
+      }
+      return NextResponse.json({
+        success: true,
+        id: r.id,
+        id_bling: r.id_bling ?? null,
+        message: r.message,
+        results,
+        summary,
+      })
+    }
 
     return NextResponse.json({
-      success: true,
-      id: data.id,
-      id_bling: idBling,
-      message: 'Fornecedor criado com sucesso no Bling e Supabase',
+      success: summary.errors < results.length,
+      results,
+      summary,
     })
 
   } catch (error) {

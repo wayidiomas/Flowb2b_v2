@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { LogoMark, FormActions } from '@/components/ui'
+import { EmpresaMultiSelect } from '@/components/forms/EmpresaMultiSelect'
+import { useAuth } from '@/contexts/AuthContext'
 import type {
   FornecedorFormData,
   TipoPessoa,
@@ -43,9 +45,19 @@ type TabType = 'contato' | 'endereco'
 
 export default function NovoFornecedorPage() {
   const router = useRouter()
+  const { empresas, empresa } = useAuth()
 
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('contato')
+
+  // Multi-empresa: default = todas as empresas vinculadas
+  const [empresaIds, setEmpresaIds] = useState<number[]>([])
+  useEffect(() => {
+    if (empresas && empresas.length > 0 && empresaIds.length === 0) {
+      setEmpresaIds(empresas.map(e => e.id))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresas])
 
   // Dados do fornecedor
   const [formData, setFormData] = useState<FornecedorFormData>({
@@ -141,6 +153,16 @@ export default function NovoFornecedorPage() {
       return
     }
 
+    // Multi-empresa: precisa ter ao menos 1 loja selecionada
+    const idsParaEnviar = empresaIds.length > 0
+      ? empresaIds
+      : (empresa?.id ? [empresa.id] : [])
+
+    if (empresas && empresas.length > 1 && empresaIds.length === 0) {
+      alert('Selecione ao menos uma loja')
+      return
+    }
+
     setSaving(true)
     try {
       const response = await fetch('/api/fornecedores', {
@@ -149,6 +171,7 @@ export default function NovoFornecedorPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          empresa_ids: idsParaEnviar,
           nome: formData.nome,
           nome_fantasia: formData.nome_fantasia,
           codigo: formData.codigo,
@@ -176,12 +199,19 @@ export default function NovoFornecedorPage() {
         throw new Error(result.error || 'Erro ao criar fornecedor')
       }
 
-      // Mostra warning se houver (ex: Bling nao conectado)
-      if (result.warning) {
+      // Se foi em multiplas lojas, mostrar resumo
+      if (result.summary && result.summary.total > 1) {
+        const s = result.summary
+        const partes: string[] = []
+        if (s.created > 0) partes.push(`${s.created} loja(s) com Bling`)
+        if (s.created_without_bling > 0) partes.push(`${s.created_without_bling} loja(s) sem Bling`)
+        if (s.skipped_duplicate > 0) partes.push(`${s.skipped_duplicate} ja existia(m)`)
+        if (s.errors > 0) partes.push(`${s.errors} erro(s)`)
+        alert(`Fornecedor processado em ${s.total} loja(s): ${partes.join(' · ')}`)
+      } else if (result.warning) {
         console.warn(result.warning)
       }
 
-      // Redireciona para a lista de fornecedores
       router.push('/cadastros/fornecedores')
     } catch (err) {
       console.error('Erro ao criar fornecedor:', err)
@@ -236,6 +266,14 @@ export default function NovoFornecedorPage() {
 
         {/* Form Content */}
         <div className="p-6">
+          {/* Multi-empresa: escolher em quais lojas criar */}
+          <EmpresaMultiSelect
+            value={empresaIds}
+            onChange={setEmpresaIds}
+            label="Cadastrar este fornecedor em quais lojas?"
+            helperText="O fornecedor sera criado em cada loja selecionada (Bling + banco). Lojas com o mesmo CNPJ ja cadastrado serao ignoradas."
+          />
+
           {/* Dados Gerais */}
           <div className="mb-8">
             <h3 className="text-base font-medium text-gray-900 mb-4">Dados Gerais</h3>
