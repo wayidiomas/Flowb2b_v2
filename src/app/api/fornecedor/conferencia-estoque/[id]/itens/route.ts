@@ -20,10 +20,13 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { gtin, quantidade, modo } = body
+    const { gtin, produto_id: produtoIdBody, quantidade, modo } = body
 
-    if (!gtin || quantidade === undefined || quantidade === null) {
-      return NextResponse.json({ error: 'gtin e quantidade obrigatorios' }, { status: 400 })
+    if (quantidade === undefined || quantidade === null) {
+      return NextResponse.json({ error: 'quantidade obrigatoria' }, { status: 400 })
+    }
+    if (!gtin && !produtoIdBody) {
+      return NextResponse.json({ error: 'gtin ou produto_id obrigatorio' }, { status: 400 })
     }
 
     const supabase = createServerSupabaseClient()
@@ -56,24 +59,36 @@ export async function POST(
       return NextResponse.json({ error: 'Conferencia nao esta em andamento' }, { status: 400 })
     }
 
-    // Buscar produto na empresa do lojista por gtin, gtin_embalagem ou codigo
-    const gtinClean = gtin.trim()
-    const { data: produtos, error: prodError } = await supabase
-      .from('produtos')
-      .select('id, codigo, nome, gtin, gtin_embalagem, estoque_atual')
-      .eq('empresa_id', conferencia.empresa_id)
-      .or(`gtin.eq.${gtinClean},gtin_embalagem.eq.${gtinClean},codigo.eq.${gtinClean}`)
+    // Buscar produto na empresa do lojista (por produto_id ou por gtin/codigo)
+    let produto: { id: number; codigo: string | null; nome: string; gtin: string | null; gtin_embalagem: string | null; estoque_atual: number | null } | null = null
 
-    if (prodError) {
-      console.error('Erro ao buscar produto:', prodError)
-      return NextResponse.json({ error: 'Erro ao buscar produto' }, { status: 500 })
+    if (produtoIdBody) {
+      const { data: p } = await supabase
+        .from('produtos')
+        .select('id, codigo, nome, gtin, gtin_embalagem, estoque_atual')
+        .eq('empresa_id', conferencia.empresa_id)
+        .eq('id', Number(produtoIdBody))
+        .maybeSingle()
+      produto = p
+    } else {
+      const gtinClean = String(gtin).trim()
+      const { data: produtos, error: prodError } = await supabase
+        .from('produtos')
+        .select('id, codigo, nome, gtin, gtin_embalagem, estoque_atual')
+        .eq('empresa_id', conferencia.empresa_id)
+        .or(`gtin.eq.${gtinClean},gtin_embalagem.eq.${gtinClean},codigo.eq.${gtinClean}`)
+
+      if (prodError) {
+        console.error('Erro ao buscar produto:', prodError)
+        return NextResponse.json({ error: 'Erro ao buscar produto' }, { status: 500 })
+      }
+
+      produto = produtos && produtos.length > 0 ? produtos[0] : null
     }
 
-    if (!produtos || produtos.length === 0) {
+    if (!produto) {
       return NextResponse.json({ error: 'Produto nao encontrado nesta empresa' }, { status: 404 })
     }
-
-    const produto = produtos[0]
 
     // Verificar se produto é do fornecedor
     const { data: vinculo, error: vincError } = await supabase
@@ -97,8 +112,11 @@ export async function POST(
 
     let item
     if (existente) {
-      // Produto já bipado - se modo não foi passado, retornar duplicado para o frontend decidir
-      if (!modo) {
+      // Quando veio do checklist (produto_id), sempre substituir (user esta editando direto).
+      // Quando veio do scan (gtin) e nao passou modo, devolver duplicado pro front decidir.
+      const modoEfetivo = modo || (produtoIdBody ? 'substituir' : null)
+
+      if (!modoEfetivo) {
         return NextResponse.json({
           duplicado: true,
           item_existente: {
@@ -112,7 +130,7 @@ export async function POST(
         }, { status: 200 })
       }
 
-      const novaQuantidade = modo === 'somar'
+      const novaQuantidade = modoEfetivo === 'somar'
         ? existente.estoque_conferido + Number(quantidade)
         : Number(quantidade)
 

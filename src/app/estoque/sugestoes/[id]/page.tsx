@@ -44,6 +44,7 @@ const statusConfig: Record<ConferenciaStatus, { label: string; bg: string; text:
 
 interface SugestaoDetalhe extends ConferenciaEstoque {
   fornecedor_nome?: string
+  total_catalogo?: number
 }
 
 export default function SugestaoDetalhePage() {
@@ -271,6 +272,33 @@ export default function SugestaoDetalhePage() {
             </p>
           </div>
         </div>
+
+        {/* Cobertura do catalogo */}
+        {sugestao.total_catalogo && sugestao.total_catalogo > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="text-gray-500">
+                Cobertura da conferencia:{' '}
+                <span className="font-semibold text-gray-900">{resumo.total} de {sugestao.total_catalogo}</span>
+                {' '}itens do catalogo do fornecedor
+              </span>
+              <span className="font-medium text-gray-700">
+                {Math.round((resumo.total / sugestao.total_catalogo) * 100)}%
+              </span>
+            </div>
+            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#336FB6] transition-all"
+                style={{ width: `${Math.min(100, Math.round((resumo.total / sugestao.total_catalogo) * 100))}%` }}
+              />
+            </div>
+            {resumo.total < sugestao.total_catalogo && (
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                {sugestao.total_catalogo - resumo.total} item(s) do catalogo nao foram conferidos nesta visita.
+              </p>
+            )}
+          </div>
+        )}
         {sugestao.observacao_fornecedor && (
           <div className="mt-4 pt-4 border-t border-gray-100">
             <p className="text-xs text-gray-500 mb-1">Observacao do Fornecedor</p>

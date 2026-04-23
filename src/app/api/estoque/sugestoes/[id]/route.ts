@@ -47,10 +47,28 @@ export async function GET(
       .eq('id', conferencia.fornecedor_id)
       .single()
 
+    // Calcular total do catalogo do fornecedor nessa empresa (cobertura)
+    let totalCatalogo = 0
+    const { data: vinculos } = await supabase
+      .from('fornecedores_produtos')
+      .select('produto_id')
+      .eq('fornecedor_id', conferencia.fornecedor_id)
+
+    const produtoIds = (vinculos || []).map(v => v.produto_id).filter(Boolean)
+    if (produtoIds.length > 0) {
+      const { count } = await supabase
+        .from('produtos')
+        .select('id', { count: 'exact', head: true })
+        .eq('empresa_id', conferencia.empresa_id)
+        .in('id', produtoIds)
+      totalCatalogo = count || 0
+    }
+
     return NextResponse.json({
       sugestao: {
         ...conferencia,
         fornecedor_nome: fornecedor?.nome_fantasia || fornecedor?.nome || '',
+        total_catalogo: totalCatalogo,
       },
       itens: itens || [],
     })
