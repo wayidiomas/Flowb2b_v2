@@ -27,8 +27,51 @@ const moreMenuItems = [
   { href: '/fornecedor/indicacoes', label: 'Indicacoes', icon: IndicacoesIcon },
 ]
 
-// Todos os itens para desktop nav
-const allNavItems = [...bottomTabItems, ...moreMenuItems]
+// Desktop nav: agrupado por afinidade (5 top-level)
+interface NavChildItem {
+  label: string
+  href: string
+}
+interface DesktopNavItem {
+  label: string
+  href: string
+  children?: NavChildItem[]
+}
+const desktopNav: DesktopNavItem[] = [
+  { label: 'Inicio', href: '/fornecedor/dashboard' },
+  {
+    label: 'Pedidos',
+    href: '/fornecedor/pedidos',
+    children: [
+      { label: 'Pedidos', href: '/fornecedor/pedidos' },
+      { label: 'Solicitacoes', href: '/fornecedor/solicitacoes' },
+    ],
+  },
+  {
+    label: 'Estoque',
+    href: '/fornecedor/estoque',
+    children: [
+      { label: 'Estoque', href: '/fornecedor/estoque' },
+      { label: 'Conferencia de Estoque', href: '/fornecedor/conferencia-estoque' },
+    ],
+  },
+  {
+    label: 'Catalogo',
+    href: '/fornecedor/catalogo',
+    children: [
+      { label: 'Catalogo', href: '/fornecedor/catalogo' },
+      { label: 'Tabelas de Preco', href: '/fornecedor/tabelas-preco' },
+    ],
+  },
+  {
+    label: 'Rede',
+    href: '/fornecedor/representantes',
+    children: [
+      { label: 'Representantes', href: '/fornecedor/representantes' },
+      { label: 'Indicacoes', href: '/fornecedor/indicacoes' },
+    ],
+  },
+]
 
 // Icone Solicitacoes (sino/bell)
 function SolicitacoesIcon({ className }: { className?: string }) {
@@ -130,6 +173,15 @@ function MoreIcon({ className }: { className?: string }) {
   )
 }
 
+// Icone Chevron Down
+function ChevronDownIcon({ className = 'w-3 h-3' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
+  )
+}
+
 // Icone X (fechar)
 function CloseIcon({ className }: { className?: string }) {
   return (
@@ -143,24 +195,36 @@ export function FornecedorLayout({ children }: FornecedorLayoutProps) {
   const { user, logout } = useFornecedorAuth()
   const pathname = usePathname()
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const moreMenuRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const userMenuRef = useRef<HTMLDivElement>(null)
 
-  // Fechar menu "Mais" ao navegar
+  // Fechar menus ao navegar
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMoreMenuOpen(false)
+    setOpenDropdown(null)
+    setUserMenuOpen(false)
   }, [pathname])
 
-  // Fechar menu "Mais" ao clicar fora
+  // Fechar menus ao clicar fora
   useEffect(() => {
-    if (!moreMenuOpen) return
     const handleClickOutside = (e: MouseEvent) => {
       if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
         setMoreMenuOpen(false)
       }
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null)
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false)
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [moreMenuOpen])
+  }, [])
 
   // Verifica se algum item do menu "Mais" esta ativo
   const isMoreActive = moreMenuItems.some(item => pathname.startsWith(item.href))
@@ -185,24 +249,59 @@ export function FornecedorLayout({ children }: FornecedorLayoutProps) {
             </span>
           </Link>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1 ml-4">
-            {allNavItems.map((item) => {
-              const isActive = pathname.startsWith(item.href)
-              const Icon = item.icon
+          {/* Desktop Navigation - agrupada com dropdowns */}
+          <nav className="hidden md:flex items-center gap-1 ml-4" ref={dropdownRef}>
+            {desktopNav.map((item) => {
+              const isActiveTop = item.children
+                ? item.children.some(c => pathname.startsWith(c.href))
+                : pathname.startsWith(item.href)
+
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-[#2660a5] text-white'
-                      : 'text-white/80 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {item.label}
-                </Link>
+                <div key={item.label} className="relative">
+                  {item.children ? (
+                    <button
+                      onClick={() => setOpenDropdown(openDropdown === item.label ? null : item.label)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        openDropdown === item.label || isActiveTop
+                          ? 'bg-[#2660a5] text-white'
+                          : 'text-white/80 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      {item.label}
+                      <ChevronDownIcon className={`w-3 h-3 transition-transform ${openDropdown === item.label ? 'rotate-180' : ''}`} />
+                    </button>
+                  ) : (
+                    <Link
+                      href={item.href}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        isActiveTop
+                          ? 'bg-[#2660a5] text-white'
+                          : 'text-white/80 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  )}
+
+                  {item.children && openDropdown === item.label && (
+                    <div className="absolute top-full left-0 mt-1 bg-white rounded-md shadow-lg py-2 min-w-[220px] z-50">
+                      {item.children.map((child) => (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={() => setOpenDropdown(null)}
+                          className={`block px-4 py-2 text-sm transition-colors ${
+                            pathname.startsWith(child.href)
+                              ? 'bg-[#336FB6]/10 text-[#336FB6] font-medium'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          }`}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </nav>
@@ -210,10 +309,14 @@ export function FornecedorLayout({ children }: FornecedorLayoutProps) {
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* User info + Logout */}
-          <div className="flex items-center gap-3 md:gap-4">
-            {/* User info */}
-            <div className="flex items-center gap-3">
+          {/* Avatar com dropdown (inclui Sair) */}
+          <div className="relative" ref={userMenuRef}>
+            <button
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="flex items-center gap-3 hover:bg-white/10 rounded-md px-2 py-1 transition-colors"
+              aria-label="Menu do usuario"
+              aria-expanded={userMenuOpen}
+            >
               {/* Avatar */}
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
                 <span className="text-white text-sm font-medium">
@@ -229,18 +332,33 @@ export function FornecedorLayout({ children }: FornecedorLayoutProps) {
                   {user?.cnpj?.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
                 </p>
               </div>
-            </div>
-
-            {/* Logout */}
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 text-sm text-white/80 hover:text-white px-3 py-2 rounded-md hover:bg-white/10 transition-colors"
-              title="Sair"
-              aria-label="Sair da conta"
-            >
-              <LogoutIcon className="w-5 h-5" />
-              <span className="hidden sm:inline">Sair</span>
+              <ChevronDownIcon className="w-3 h-3 text-white/70" />
             </button>
+
+            {userMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg py-2 min-w-[220px] z-50">
+                <div className="px-4 py-2 border-b border-gray-100">
+                  <p className="text-sm font-medium text-gray-900 truncate">{user?.nome}</p>
+                  {user?.email && (
+                    <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                  )}
+                  {user?.cnpj && (
+                    <p className="text-xs text-gray-400 font-mono truncate mt-0.5">
+                      {user.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')}
+                    </p>
+                  )}
+                </div>
+                <div className="border-t border-gray-100 mt-1 pt-1">
+                  <button
+                    onClick={() => { setUserMenuOpen(false); logout() }}
+                    className="flex items-center gap-2 w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogoutIcon className="w-4 h-4" />
+                    Sair
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>
