@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { DashboardLayout, PageHeader } from '@/components/layout'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter } from '@/components/ui'
+import { ModalSincronizarCatalogo } from '@/components/compras/ModalSincronizarCatalogo'
+import { useAtualizacoesCatalogo } from '@/hooks/useAtualizacoesCatalogo'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import type {
@@ -214,6 +216,10 @@ function NovoPedidoContent() {
   const [fornecedorId, setFornecedorId] = useState<number | null>(null)
   const [fornecedorIdBling, setFornecedorIdBling] = useState<number | null>(null)
   const [fornecedorNome, setFornecedorNome] = useState('')
+  const [fornecedorCnpj, setFornecedorCnpj] = useState<string | null>(null)
+
+  // Atualizações pendentes de catálogos — usado pelo gate de sincronização
+  const { data: atualizacoes, refetch: refetchAtualizacoes } = useAtualizacoesCatalogo()
   const [dataPedido, setDataPedido] = useState(new Date().toISOString().split('T')[0])
   const [dataPrevista, setDataPrevista] = useState('')
   const [ordemCompra, setOrdemCompra] = useState('')
@@ -279,7 +285,7 @@ function NovoPedidoContent() {
         // e NAO o id_bling (ID do cadastro de fornecedor)
         const { data: fornecedor, error: fError } = await supabase
           .from('fornecedores')
-          .select('id, id_contato_bling, nome')
+          .select('id, id_contato_bling, nome, cnpj')
           .eq('id', fId)
           .eq('empresa_id', empresaId)
           .single()
@@ -288,6 +294,7 @@ function NovoPedidoContent() {
         if (fornecedor) {
           setFornecedorNome(fornecedor.nome)
           setFornecedorIdBling(fornecedor.id_contato_bling)
+          setFornecedorCnpj(fornecedor.cnpj || null)
         }
 
         // Buscar politicas de compra do fornecedor
@@ -834,9 +841,25 @@ function NovoPedidoContent() {
     )
   }
 
+  // Gate de sincronização: se o fornecedor tem catálogo desatualizado,
+  // bloqueia o pedido até o lojista sincronizar (Sprint 2.5)
+  const cnpjLimpo = (fornecedorCnpj || '').replace(/\D/g, '')
+  const catalogoDesatualizado = cnpjLimpo
+    ? atualizacoes.por_catalogo.find(c => (c.cnpj || '').replace(/\D/g, '') === cnpjLimpo)
+    : null
+
   return (
     <RequirePermission permission="pedidos">
     <DashboardLayout>
+      {/* Modal gate obrigatório de sincronização do catálogo */}
+      {catalogoDesatualizado && (
+        <ModalSincronizarCatalogo
+          catalogo={catalogoDesatualizado}
+          onSincronizado={() => refetchAtualizacoes()}
+          onVoltar={() => router.push('/compras/pedidos')}
+        />
+      )}
+
       {/* Toast de notificacao */}
       {toast && <ToastNotification toast={toast} onClose={() => setToast(null)} />}
 
