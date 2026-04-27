@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { DashboardLayout, PageHeader } from '@/components/layout'
+import { BannerAtualizacoes } from '@/components/compras/BannerAtualizacoes'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { Skeleton, TableSkeleton } from '@/components/ui'
 import { Button } from '@/components/ui/Button'
@@ -1002,6 +1003,9 @@ export default function CatalogoPage() {
         title="Catalogos de Fornecedores"
         subtitle="Consulte produtos e precos dos seus fornecedores"
       />
+
+      {/* Aviso de catálogos com atualizações pendentes */}
+      <BannerAtualizacoes className="mb-4" />
 
       {/* Filters bar - only when a supplier is selected */}
       {selectedFornecedor && (

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Logo, LogoMark } from '@/components/ui'
+import { useAtualizacoesCatalogo } from '@/hooks/useAtualizacoesCatalogo'
 
 interface NavItem {
   label: string
@@ -141,11 +142,30 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
   const pathname = usePathname()
+  const { data: atualizacoes } = useAtualizacoesCatalogo()
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard'
     return pathname.startsWith(href)
   }
+
+  // Injeta badges dinâmicos nas rotas relevantes
+  const navigationComBadges = useMemo(() => {
+    const badgeMap: Record<string, number> = {
+      '/compras/pedidos': atualizacoes.total_nao_vistas
+    }
+
+    return navigation.map(group => ({
+      ...group,
+      items: group.items.map(item => {
+        const dynBadge = badgeMap[item.href]
+        if (dynBadge && dynBadge > 0) {
+          return { ...item, badge: dynBadge }
+        }
+        return item
+      })
+    }))
+  }, [atualizacoes.total_nao_vistas])
 
   return (
     <aside
@@ -181,7 +201,7 @@ export function Sidebar({ collapsed = false, onToggle }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-3">
-        {navigation.map((group, groupIndex) => (
+        {navigationComBadges.map((group, groupIndex) => (
           <div key={groupIndex} className={groupIndex > 0 ? 'mt-6' : ''}>
             {group.title && !collapsed && (
               <h3 className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
