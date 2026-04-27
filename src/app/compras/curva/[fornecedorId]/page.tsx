@@ -56,6 +56,7 @@ interface FornecedorData {
     nome: string
     telefone: string | null
     email: string | null
+    cnpj: string | null
   }
   prazo_entrega: number | null
   resumo: Resumo
@@ -685,6 +686,7 @@ export default function FornecedorCurvaPage() {
           }}
           fornecedorId={parseInt(fornecedorId)}
           fornecedorNome={data?.fornecedor.nome || ''}
+          fornecedorCnpj={data?.fornecedor.cnpj}
           onCriarPedido={handleCriarPedidoFromSugestao}
           autoCalculate={true}
           produtosPreSelecionados={produtosPreSelecionados}

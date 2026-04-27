@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { CurvaBadge } from './CurvaBadge'
 import { RupturaIndicator } from './RupturaIndicator'
 import { InlineLoader } from '@/components/ui/PageLoader'
+import { useCatalogoGate } from '@/hooks/useCatalogoGate'
+import { ModalSincronizarCatalogo } from '@/components/compras/ModalSincronizarCatalogo'
 
 interface SugestaoItem {
   produto_id: number
@@ -30,6 +32,7 @@ interface SugestaoModalProps {
   onClose: () => void
   fornecedorId: number
   fornecedorNome: string
+  fornecedorCnpj?: string | null // Para gate de sincronização do catálogo
   onCriarPedido: (items: SugestaoItem[]) => void
   autoCalculate?: boolean // Calcular automaticamente ao abrir
   produtosPreSelecionados?: number[] // IDs de produtos para pré-selecionar
@@ -172,6 +175,7 @@ export function SugestaoModal({
   onClose,
   fornecedorId,
   fornecedorNome,
+  fornecedorCnpj,
   onCriarPedido,
   autoCalculate = false,
   produtosPreSelecionados,
@@ -185,6 +189,12 @@ export function SugestaoModal({
   const [quantidades, setQuantidades] = useState<Map<number, number>>(new Map())
   const [calculated, setCalculated] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Gate de sincronização do catálogo: se há atualizações pendentes do fornecedor,
+  // bloqueia o cálculo da IA até o lojista sincronizar (pra IA não usar preços velhos)
+  const { catalogoPendente, refetch: refetchGate } = useCatalogoGate(fornecedorCnpj)
+  const [gateResolved, setGateResolved] = useState(false)
+  const showGate = isOpen && catalogoPendente && !gateResolved
 
   // Seções expandidas
   const [rupturasExpanded, setRupturasExpanded] = useState(true)
@@ -254,12 +264,12 @@ export function SugestaoModal({
     }
   }
 
-  // Auto-calcular quando abrir
+  // Auto-calcular quando abrir — bloqueado se gate de sincronização estiver ativo
   useEffect(() => {
-    if (isOpen && autoCalculate && !calculated && !loading) {
+    if (isOpen && autoCalculate && !calculated && !loading && !showGate) {
       handleCalcular()
     }
-  }, [isOpen, autoCalculate])
+  }, [isOpen, autoCalculate, showGate])
 
   // Reset quando fechar
   useEffect(() => {
@@ -269,6 +279,7 @@ export function SugestaoModal({
       setSelectedIds(new Set())
       setQuantidades(new Map())
       setError(null)
+      setGateResolved(false)
     }
   }, [isOpen])
 
@@ -342,6 +353,20 @@ export function SugestaoModal({
   const sugeridosSelecionados = itensSugeridos.filter(s => selectedIds.has(s.produto_id)).length
 
   if (!isOpen) return null
+
+  // Gate: catálogo do fornecedor está desatualizado — sincronizar antes de calcular IA
+  if (showGate && catalogoPendente) {
+    return (
+      <ModalSincronizarCatalogo
+        catalogo={catalogoPendente}
+        onSincronizado={() => {
+          setGateResolved(true)
+          refetchGate()
+        }}
+        onVoltar={onClose}
+      />
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">

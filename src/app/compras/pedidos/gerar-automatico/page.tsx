@@ -9,6 +9,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { FRETE_POR_CONTA_OPTIONS, calcularTotalPedido } from '@/types/pedido-compra'
 import { PedidoEmAbertoModal } from '@/components/compras/curva'
+import { ModalSincronizarCatalogo } from '@/components/compras/ModalSincronizarCatalogo'
+import { useCatalogoGate } from '@/hooks/useCatalogoGate'
 
 // Icons
 function ArrowLeftIcon() {
@@ -266,6 +268,10 @@ function GerarAutomaticoContent() {
   const fornecedorIdParam = searchParams.get('fornecedor_id')
 
   const [fornecedor, setFornecedor] = useState<Fornecedor | null>(null)
+  // Gate do catálogo: bloqueia o cálculo da IA até o lojista sincronizar atualizações
+  const { catalogoPendente, refetch: refetchGate } = useCatalogoGate(fornecedor?.cnpj)
+  const [gateResolved, setGateResolved] = useState(false)
+  const [showGateModal, setShowGateModal] = useState(false)
   const [politicas, setPoliticas] = useState<PoliticaCompra[]>([])
   const [politicaSelecionadaId, setPoliticaSelecionadaId] = useState<number | null>(null)
   const [sugestoes, setSugestoes] = useState<SugestaoItem[]>([])
@@ -760,6 +766,11 @@ function GerarAutomaticoContent() {
   // Calcular sugestoes com politica especifica (usado apos criar politica)
   const calcularSugestoesComPolitica = async (pol: PoliticaCompra) => {
     if (!fornecedor) return
+    // Gate: se catálogo desatualizado, sincronizar antes de chamar a IA
+    if (catalogoPendente && !gateResolved) {
+      setShowGateModal(true)
+      return
+    }
 
     setCalculando(true)
     setError(null)
@@ -845,6 +856,11 @@ function GerarAutomaticoContent() {
   // Calcular sugestoes via API externa
   const calcularSugestoes = async () => {
     if (!fornecedor) return
+    // Gate: se catálogo desatualizado, sincronizar antes de chamar a IA
+    if (catalogoPendente && !gateResolved) {
+      setShowGateModal(true)
+      return
+    }
     // Verificar se tem pedido em aberto antes de calcular
     await verificarPedidoEmAberto()
   }
@@ -2122,6 +2138,21 @@ function GerarAutomaticoContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal gate de sincronização do catálogo (antes da IA) */}
+      {showGateModal && catalogoPendente && (
+        <ModalSincronizarCatalogo
+          catalogo={catalogoPendente}
+          onSincronizado={() => {
+            setGateResolved(true)
+            setShowGateModal(false)
+            refetchGate()
+            // Re-tenta calcular agora que o catálogo está sincronizado
+            calcularSugestoes()
+          }}
+          onVoltar={() => setShowGateModal(false)}
+        />
       )}
 
       {/* Modal de Pedido em Aberto */}

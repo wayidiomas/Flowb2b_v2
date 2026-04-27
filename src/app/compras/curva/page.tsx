@@ -197,6 +197,7 @@ export default function ComprasCurvaPage() {
   const [selectedFornecedor, setSelectedFornecedor] = useState<{
     id: number
     nome: string
+    cnpj: string | null
     produtosIds: number[]
   } | null>(null)
   const [descontarPedidos, setDescontarPedidos] = useState(false)
@@ -282,7 +283,7 @@ export default function ComprasCurvaPage() {
     if (fornecedor?.pedido_em_aberto) {
       // Buscar itens do pedido em aberto
       setPedidoAbertoLoading(true)
-      setSelectedFornecedor({ id: fornecedorId, nome: fornecedorNome, produtosIds })
+      setSelectedFornecedor({ id: fornecedorId, nome: fornecedorNome, cnpj: fornecedor?.fornecedor_cnpj || null, produtosIds })
       setModalModo(modo)
       setPedidoAbertoModalOpen(true)
 
@@ -301,7 +302,7 @@ export default function ComprasCurvaPage() {
       }
     } else {
       // Fluxo normal - abrir SugestaoModal diretamente
-      setSelectedFornecedor({ id: fornecedorId, nome: fornecedorNome, produtosIds })
+      setSelectedFornecedor({ id: fornecedorId, nome: fornecedorNome, cnpj: fornecedor?.fornecedor_cnpj || null, produtosIds })
       setModalModo(modo)
       setDescontarPedidos(false)
       setModalOpen(true)
@@ -529,6 +530,7 @@ export default function ComprasCurvaPage() {
           }}
           fornecedorId={selectedFornecedor.id}
           fornecedorNome={selectedFornecedor.nome}
+          fornecedorCnpj={selectedFornecedor.cnpj}
           onCriarPedido={handleConfirmarPedido}
           autoCalculate={true}
           produtosPreSelecionados={selectedFornecedor.produtosIds}

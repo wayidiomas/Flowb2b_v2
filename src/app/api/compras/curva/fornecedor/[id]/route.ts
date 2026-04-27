@@ -53,7 +53,7 @@ export async function GET(
     // Buscar dados do fornecedor
     const { data: fornecedor, error: fornError } = await supabase
       .from('fornecedores')
-      .select('id, nome, nome_fantasia, telefone, email')
+      .select('id, nome, nome_fantasia, telefone, email, cnpj')
       .eq('id', fornecedorId)
       .eq('empresa_id', user.empresaId)
       .single()
@@ -315,6 +315,7 @@ export async function GET(
         nome: fornecedorNome,
         telefone: fornecedor.telefone,
         email: fornecedor.email,
+        cnpj: fornecedor.cnpj,
       },
       prazo_entrega: prazoEntrega,
       resumo,
