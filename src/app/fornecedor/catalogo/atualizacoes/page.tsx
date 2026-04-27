@@ -26,6 +26,23 @@ interface Resp {
   total: number
 }
 
+interface DivergenciasPreview {
+  catalogo_id: number
+  fornecedor_nome: string
+  total_divergencias: number
+  lojistas_afetados: number
+  ja_pendentes: number
+  novas: number
+}
+
+interface RepublicarResult {
+  success: boolean
+  criadas: number
+  ja_pendentes: number
+  lojistas_notificados: number
+  message: string
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatDateTime(iso: string | null) {
@@ -175,6 +192,13 @@ export default function FornecedorAtualizacoesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Divergências catálogo × cadastro lojistas (republicar estado atual)
+  const [preview, setPreview] = useState<DivergenciasPreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(true)
+  const [republishConfirmOpen, setRepublishConfirmOpen] = useState(false)
+  const [republishing, setRepublishing] = useState(false)
+  const [republishResult, setRepublishResult] = useState<RepublicarResult | null>(null)
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -190,7 +214,45 @@ export default function FornecedorAtualizacoesPage() {
     }
   }, [])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  const fetchPreview = useCallback(async () => {
+    setPreviewLoading(true)
+    try {
+      const r = await fetch('/api/fornecedor/catalogo/divergencias-preview', { cache: 'no-store' })
+      if (r.ok) setPreview(await r.json())
+    } catch {
+      // silencioso
+    } finally {
+      setPreviewLoading(false)
+    }
+  }, [])
+
+  const handleRepublish = async () => {
+    setRepublishing(true)
+    setRepublishResult(null)
+    try {
+      const r = await fetch('/api/fornecedor/catalogo/republicar-estado-atual', { method: 'POST' })
+      const json = await r.json()
+      if (!r.ok) throw new Error(json.error || `HTTP ${r.status}`)
+      setRepublishResult(json)
+      // Atualiza dados após sucesso
+      await Promise.all([fetchData(), fetchPreview()])
+    } catch (err) {
+      setRepublishResult({
+        success: false,
+        criadas: 0,
+        ja_pendentes: 0,
+        lojistas_notificados: 0,
+        message: err instanceof Error ? err.message : 'erro desconhecido'
+      })
+    } finally {
+      setRepublishing(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+    fetchPreview()
+  }, [fetchData, fetchPreview])
 
   return (
     <FornecedorLayout>
@@ -230,6 +292,134 @@ export default function FornecedorAtualizacoesPage() {
           {data.publicacoes.map(p => (
             <PublicacaoCard key={p.publicacao_at} pub={p} />
           ))}
+        </div>
+      )}
+
+      {/* Card "Publicar catálogo atual" — aparece só quando há divergências novas */}
+      {!previewLoading && preview && preview.novas > 0 && (
+        <div className="mt-6 bg-amber-50 border border-amber-200 rounded-xl p-5">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+              <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-gray-900 mb-1">Lojistas com preços diferentes do seu catálogo</h3>
+              <p className="text-sm text-gray-700 mb-3">
+                Detectei <strong className="font-semibold">{preview.novas}</strong>{' '}
+                {preview.novas === 1 ? 'item com preço divergente' : 'itens com preços divergentes'} entre o seu catálogo e o cadastro
+                {preview.lojistas_afetados === 1 ? ' do lojista' : ` dos ${preview.lojistas_afetados} lojistas`} vinculado{preview.lojistas_afetados !== 1 ? 's' : ''}.
+                {preview.ja_pendentes > 0 && (
+                  <> ({preview.ja_pendentes} já têm aviso pendente — não serão duplicados.)</>
+                )}
+              </p>
+              <p className="text-sm text-gray-600 mb-4">
+                Se o seu catálogo está atualizado, clique em <strong>Publicar</strong> para avisar os lojistas.
+                Eles verão a notificação e, ao tentarem criar um pedido, serão obrigados a sincronizar com seus preços atuais.
+              </p>
+              <button
+                onClick={() => setRepublishConfirmOpen(true)}
+                disabled={republishing}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                {republishing ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    Publicando...
+                  </>
+                ) : (
+                  <>Publicar catálogo atual</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmação */}
+      {republishConfirmOpen && preview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50" onClick={() => !republishing && setRepublishConfirmOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Confirmar publicação</h2>
+            <p className="text-sm text-gray-700 mb-4">
+              Vamos criar <strong>{preview.novas}</strong> avisos de mudança de preço para{' '}
+              <strong>{preview.lojistas_afetados}</strong> lojista{preview.lojistas_afetados !== 1 ? 's' : ''}.
+              Eles serão obrigados a sincronizar antes de criar o próximo pedido.
+            </p>
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+              ⚠️ Confirme que os preços do seu catálogo estão corretos antes de publicar.
+              Após sincronizar, o cadastro Bling dos lojistas será atualizado para os valores que estão em sua vitrine.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setRepublishConfirmOpen(false)}
+                disabled={republishing}
+                className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  setRepublishConfirmOpen(false)
+                  await handleRepublish()
+                }}
+                disabled={republishing}
+                className="px-5 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                Sim, publicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resultado da publicação */}
+      {republishResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setRepublishResult(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${republishResult.success ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                {republishResult.success ? (
+                  <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {republishResult.success ? 'Catálogo publicado' : 'Erro ao publicar'}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">{republishResult.message}</p>
+                {republishResult.success && republishResult.criadas > 0 && (
+                  <ul className="text-sm text-gray-700 mt-3 space-y-1">
+                    <li><strong>{republishResult.criadas}</strong> avisos criados</li>
+                    <li><strong>{republishResult.lojistas_notificados}</strong> lojista{republishResult.lojistas_notificados !== 1 ? 's' : ''} notificado{republishResult.lojistas_notificados !== 1 ? 's' : ''}</li>
+                    {republishResult.ja_pendentes > 0 && (
+                      <li className="text-gray-500">{republishResult.ja_pendentes} já tinham aviso pendente (não duplicados)</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setRepublishResult(null)}
+                className="px-5 py-2 text-sm font-medium text-white bg-[#336FB6] hover:bg-[#2660A5] rounded-lg transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </FornecedorLayout>
