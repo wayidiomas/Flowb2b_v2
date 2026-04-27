@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 import { blingFetch } from '@/lib/bling-fetch'
+import { notificarLojistas, notificarLojistasUmaMudanca, type MudancaCatalogo } from '@/lib/catalogo-notificacoes'
 
 function cleanCnpj(cnpj: string): string {
   return cnpj.replace(/\D/g, '')
@@ -144,6 +145,21 @@ export async function PUT(
     if (updateError) {
       console.error('Erro ao atualizar item do catalogo:', updateError)
       return NextResponse.json({ error: 'Erro ao atualizar item' }, { status: 500 })
+    }
+
+    // Notificar lojistas vinculados — registra em catalogo_atualizacoes (trigger
+    // bumpa catalogo_status_lojista). Não-bloqueante.
+    try {
+      const precoMudou = hasPriceUpdate &&
+        Math.abs(Number(catalogoItem.preco_base ?? 0) - Number(body.preco_base ?? 0)) > 0.001
+      await notificarLojistasUmaMudanca(supabase, catalogo.id, cnpjLimpo, {
+        tipo: precoMudou ? 'preco' : 'dados',
+        catalogo_item_id: itemId,
+        dados_antigos: { preco_base: catalogoItem.preco_base },
+        dados_novos: updated as Record<string, unknown>,
+      })
+    } catch (notifyErr) {
+      console.error('Erro ao notificar lojistas (não bloqueante, edição manual):', notifyErr)
     }
 
     // Se não houve atualização de preço, retornar simples (comportamento original)
@@ -437,6 +453,20 @@ export async function DELETE(
       return NextResponse.json({ error: 'Item nao encontrado' }, { status: 404 })
     }
 
+    // Listar IDs alvo do DELETE antes da exclusão, para podermos notificar lojistas com referência
+    let listQuery = supabase
+      .from('catalogo_itens')
+      .select('id, nome, preco_base, codigo')
+      .eq('catalogo_id', catalogo.id)
+
+    if (alvo.codigo) {
+      listQuery = listQuery.eq('codigo', alvo.codigo)
+    } else {
+      listQuery = listQuery.eq('nome', alvo.nome)
+    }
+
+    const { data: itensAlvo } = await listQuery
+
     let query = supabase
       .from('catalogo_itens')
       .delete({ count: 'exact' })
@@ -453,6 +483,21 @@ export async function DELETE(
     if (deleteError) {
       console.error('Erro ao deletar item:', deleteError)
       return NextResponse.json({ error: 'Erro ao deletar item' }, { status: 500 })
+    }
+
+    // Notificar lojistas — não-bloqueante
+    try {
+      const mudancas: MudancaCatalogo[] = (itensAlvo || []).map(item => ({
+        tipo: 'removido',
+        catalogo_item_id: item.id,
+        dados_antigos: { nome: item.nome, codigo: item.codigo, preco_base: item.preco_base },
+        dados_novos: null,
+      }))
+      if (mudancas.length > 0) {
+        await notificarLojistas(supabase, catalogo.id, cnpjLimpo, mudancas)
+      }
+    } catch (notifyErr) {
+      console.error('Erro ao notificar lojistas (não bloqueante, delete):', notifyErr)
     }
 
     return NextResponse.json({ success: true, deleted: count || 0 })

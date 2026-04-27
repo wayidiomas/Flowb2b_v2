@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import type { ProdutoExtraido } from '@/lib/catalogo-pdf-extractor'
+import { notificarLojistas, type MudancaCatalogo } from '@/lib/catalogo-notificacoes'
 
 export async function POST(
   request: NextRequest,
@@ -53,30 +54,31 @@ export async function POST(
     const eans = produtos.map(p => p.ean).filter(Boolean) as string[]
     const codigos = produtos.map(p => p.codigo_fornecedor).filter(Boolean) as string[]
 
-    const existingByEan = new Map<string, number>()
-    const existingByCodigo = new Map<string, number>()
+    type ExistingInfo = { id: number; preco_base: number | null }
+    const existingByEan = new Map<string, ExistingInfo>()
+    const existingByCodigo = new Map<string, ExistingInfo>()
 
     if (eans.length > 0) {
       const { data: byEan } = await supabase
         .from('catalogo_itens')
-        .select('id, ean')
+        .select('id, ean, preco_base')
         .eq('catalogo_id', catalogoId)
         .in('ean', eans)
 
       for (const item of byEan || []) {
-        if (item.ean) existingByEan.set(item.ean, item.id)
+        if (item.ean) existingByEan.set(item.ean, { id: item.id, preco_base: item.preco_base })
       }
     }
 
     if (codigos.length > 0) {
       const { data: byCodigo } = await supabase
         .from('catalogo_itens')
-        .select('id, codigo')
+        .select('id, codigo, preco_base')
         .eq('catalogo_id', catalogoId)
         .in('codigo', codigos)
 
       for (const item of byCodigo || []) {
-        if (item.codigo) existingByCodigo.set(item.codigo, item.id)
+        if (item.codigo) existingByCodigo.set(item.codigo, { id: item.id, preco_base: item.preco_base })
       }
     }
 
@@ -89,16 +91,16 @@ export async function POST(
       return true
     })
 
-    const toInsert: Array<Record<string, unknown>> = []
-    const toUpdate: Array<{ id: number; data: Record<string, unknown> }> = []
+    const inserts: Array<{ row: Record<string, unknown>; produto: ProdutoExtraido }> = []
+    const updates: Array<{ id: number; data: Record<string, unknown>; preco_antigo: number | null; produto: ProdutoExtraido }> = []
 
     for (const produto of produtosDedup) {
-      let existingId: number | null = null
+      let existing: ExistingInfo | null = null
 
       if (produto.ean && existingByEan.has(produto.ean)) {
-        existingId = existingByEan.get(produto.ean)!
+        existing = existingByEan.get(produto.ean)!
       } else if (produto.codigo_fornecedor && existingByCodigo.has(produto.codigo_fornecedor)) {
-        existingId = existingByCodigo.get(produto.codigo_fornecedor)!
+        existing = existingByCodigo.get(produto.codigo_fornecedor)!
       }
 
       // Sanitizar valores antes de inserir (IA pode retornar float em campo integer, ou medida confundida)
@@ -121,17 +123,18 @@ export async function POST(
         ativo: true,
       }
 
-      if (existingId) {
-        toUpdate.push({ id: existingId, data: itemData })
+      if (existing) {
+        updates.push({ id: existing.id, data: itemData, preco_antigo: existing.preco_base, produto })
       } else {
-        toInsert.push({ catalogo_id: catalogoId, ...itemData })
+        inserts.push({ row: { catalogo_id: catalogoId, ...itemData }, produto })
       }
     }
 
     let novos = 0
-    if (toInsert.length > 0) {
-      for (let i = 0; i < toInsert.length; i += 500) {
-        const batch = toInsert.slice(i, i + 500)
+    if (inserts.length > 0) {
+      const rowsToInsert = inserts.map(i => i.row)
+      for (let i = 0; i < rowsToInsert.length; i += 500) {
+        const batch = rowsToInsert.slice(i, i + 500)
         const { error: insertError } = await supabase
           .from('catalogo_itens')
           .insert(batch)
@@ -145,7 +148,7 @@ export async function POST(
     }
 
     let atualizados = 0
-    for (const item of toUpdate) {
+    for (const item of updates) {
       const { error: updateError } = await supabase
         .from('catalogo_itens')
         .update(item.data)
@@ -159,6 +162,74 @@ export async function POST(
       .from('catalogo_import_jobs')
       .update({ status: 'completed' })
       .eq('id', job.id)
+
+    // Notificar lojistas vinculados — não-bloqueante
+    try {
+      // Lookup de IDs dos itens recém-inseridos (batch insert não retornou IDs)
+      const insertedEans = inserts.map(i => i.produto.ean).filter(Boolean) as string[]
+      const insertedCodigos = inserts.map(i => i.produto.codigo_fornecedor).filter(Boolean) as string[]
+      const insertedIdMap = new Map<string, number>()
+      if (insertedEans.length > 0 || insertedCodigos.length > 0) {
+        let q = supabase
+          .from('catalogo_itens')
+          .select('id, ean, codigo')
+          .eq('catalogo_id', catalogoId)
+        if (insertedEans.length > 0 && insertedCodigos.length > 0) {
+          q = q.or(`ean.in.(${insertedEans.join(',')}),codigo.in.(${insertedCodigos.join(',')})`)
+        } else if (insertedEans.length > 0) {
+          q = q.in('ean', insertedEans)
+        } else {
+          q = q.in('codigo', insertedCodigos)
+        }
+        const { data: rows } = await q
+        for (const r of rows || []) {
+          if (r.ean) insertedIdMap.set(`ean:${r.ean}`, r.id)
+          if (r.codigo) insertedIdMap.set(`codigo:${r.codigo}`, r.id)
+        }
+      }
+
+      const mudancas: MudancaCatalogo[] = []
+      for (const ins of inserts) {
+        const id = (ins.produto.ean && insertedIdMap.get(`ean:${ins.produto.ean}`))
+          || (ins.produto.codigo_fornecedor && insertedIdMap.get(`codigo:${ins.produto.codigo_fornecedor}`))
+          || null
+        mudancas.push({
+          tipo: 'novo',
+          catalogo_item_id: id,
+          dados_antigos: null,
+          dados_novos: {
+            nome: ins.produto.nome,
+            ean: ins.produto.ean,
+            codigo: ins.produto.codigo_fornecedor,
+            preco_base: ins.row.preco_base
+          }
+        })
+      }
+      for (const upd of updates) {
+        const precoNovo = Number(upd.data.preco_base ?? 0)
+        const precoAntigo = upd.preco_antigo ?? 0
+        const precoMudou = upd.preco_antigo != null && Math.abs(precoAntigo - precoNovo) > 0.001
+        mudancas.push({
+          tipo: precoMudou ? 'preco' : 'dados',
+          catalogo_item_id: upd.id,
+          dados_antigos: { preco_base: upd.preco_antigo },
+          dados_novos: {
+            nome: upd.produto.nome,
+            ean: upd.produto.ean,
+            preco_base: precoNovo
+          }
+        })
+      }
+
+      if (mudancas.length > 0) {
+        const r = await notificarLojistas(supabase, catalogoId, cnpjLimpo, mudancas)
+        if (r.erros.length > 0) {
+          console.warn('Erros ao notificar lojistas (PDF):', r.erros)
+        }
+      }
+    } catch (notifyErr) {
+      console.error('Erro ao notificar lojistas (não bloqueante, PDF):', notifyErr)
+    }
 
     return NextResponse.json({
       success: true,

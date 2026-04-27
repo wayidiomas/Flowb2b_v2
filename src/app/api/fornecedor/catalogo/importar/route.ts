@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { parseImportFile } from '@/lib/catalogo-import'
+import { notificarLojistas, type MudancaCatalogo } from '@/lib/catalogo-notificacoes'
 
 export async function POST(request: NextRequest) {
   try {
@@ -63,7 +64,8 @@ export async function POST(request: NextRequest) {
 
     // Also get product GTINs for matching
     const produtoIds = (existingItems || []).map(i => i.produto_id).filter(Boolean)
-    const gtinMap = new Map<string, number>() // gtin → catalogo_item_id
+    type ExistingInfo = { id: number; preco_base: number | null }
+    const gtinMap = new Map<string, ExistingInfo>() // gtin → {id, preco_base}
     if (produtoIds.length > 0) {
       const { data: produtos } = await supabase
         .from('produtos')
@@ -73,35 +75,35 @@ export async function POST(request: NextRequest) {
       for (const p of produtos || []) {
         if (p.gtin) {
           const itemMatch = (existingItems || []).find(i => i.produto_id === p.id)
-          if (itemMatch) gtinMap.set(p.gtin, itemMatch.id)
+          if (itemMatch) gtinMap.set(p.gtin, { id: itemMatch.id, preco_base: itemMatch.preco_base })
         }
       }
     }
 
     // Build code map
-    const codigoMap = new Map<string, number>() // codigo → catalogo_item_id
+    const codigoMap = new Map<string, ExistingInfo>() // codigo → {id, preco_base}
     for (const item of existingItems || []) {
-      if (item.codigo) codigoMap.set(item.codigo, item.id)
+      if (item.codigo) codigoMap.set(item.codigo, { id: item.id, preco_base: item.preco_base })
     }
 
     // Classify each row
     const novos: typeof validos = []
-    const atualizados: Array<typeof validos[0] & { catalogo_item_id: number }> = []
+    const atualizados: Array<typeof validos[0] & { catalogo_item_id: number; preco_antigo: number | null }> = []
 
     for (const row of validos) {
-      let matchId: number | null = null
+      let match: ExistingInfo | null = null
 
       // Match by codigo_fornecedor first
       if (row.codigo_fornecedor && codigoMap.has(row.codigo_fornecedor)) {
-        matchId = codigoMap.get(row.codigo_fornecedor)!
+        match = codigoMap.get(row.codigo_fornecedor)!
       }
       // Then by EAN
-      if (!matchId && row.ean && gtinMap.has(row.ean)) {
-        matchId = gtinMap.get(row.ean)!
+      if (!match && row.ean && gtinMap.has(row.ean)) {
+        match = gtinMap.get(row.ean)!
       }
 
-      if (matchId) {
-        atualizados.push({ ...row, catalogo_item_id: matchId })
+      if (match) {
+        atualizados.push({ ...row, catalogo_item_id: match.id, preco_antigo: match.preco_base })
       } else {
         novos.push(row)
       }
@@ -189,6 +191,66 @@ export async function POST(request: NextRequest) {
         .eq('id', row.catalogo_item_id)
 
       updatedCount++
+    }
+
+    // Notificar lojistas vinculados — registra em catalogo_atualizacoes (trigger
+    // bumpa catalogo_status_lojista automaticamente). Não-bloqueante.
+    try {
+      // Buscar IDs dos itens novos recém-inseridos (batch insert não retornou IDs)
+      const novosEans = novos.filter(r => r.ean).map(r => r.ean!)
+      const novosCodigos = novos.filter(r => r.codigo_fornecedor).map(r => r.codigo_fornecedor!)
+      const novosItemIdMap = new Map<string, number>()
+      if (novosEans.length > 0 || novosCodigos.length > 0) {
+        let q = supabase
+          .from('catalogo_itens')
+          .select('id, ean, codigo')
+          .eq('catalogo_id', catalogo.id)
+        if (novosEans.length > 0 && novosCodigos.length > 0) {
+          q = q.or(`ean.in.(${novosEans.join(',')}),codigo.in.(${novosCodigos.join(',')})`)
+        } else if (novosEans.length > 0) {
+          q = q.in('ean', novosEans)
+        } else {
+          q = q.in('codigo', novosCodigos)
+        }
+        const { data: rows } = await q
+        for (const r of rows || []) {
+          if (r.ean) novosItemIdMap.set(`ean:${r.ean}`, r.id)
+          if (r.codigo) novosItemIdMap.set(`codigo:${r.codigo}`, r.id)
+        }
+      }
+
+      const mudancas: MudancaCatalogo[] = []
+      for (const novo of novos) {
+        const idNovo = (novo.ean && novosItemIdMap.get(`ean:${novo.ean}`))
+          || (novo.codigo_fornecedor && novosItemIdMap.get(`codigo:${novo.codigo_fornecedor}`))
+          || null
+        mudancas.push({
+          tipo: 'novo',
+          catalogo_item_id: idNovo,
+          dados_antigos: null,
+          dados_novos: { nome: novo.nome, ean: novo.ean, codigo: novo.codigo_fornecedor, preco_base: novo.preco }
+        })
+      }
+      for (const upd of atualizados) {
+        const precoNovo = upd.preco ?? 0
+        const precoAntigo = upd.preco_antigo ?? 0
+        const precoMudou = upd.preco_antigo != null && Math.abs(precoAntigo - precoNovo) > 0.001
+        mudancas.push({
+          tipo: precoMudou ? 'preco' : 'dados',
+          catalogo_item_id: upd.catalogo_item_id,
+          dados_antigos: { preco_base: upd.preco_antigo },
+          dados_novos: { nome: upd.nome, ean: upd.ean, preco_base: upd.preco }
+        })
+      }
+
+      if (mudancas.length > 0) {
+        const r = await notificarLojistas(supabase, catalogo.id, cnpjLimpo, mudancas)
+        if (r.erros.length > 0) {
+          console.warn('Erros ao notificar lojistas:', r.erros)
+        }
+      }
+    } catch (notifyErr) {
+      console.error('Erro ao notificar lojistas (não bloqueante):', notifyErr)
     }
 
     return NextResponse.json({

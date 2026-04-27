@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import type { CatalogoDiff } from '@/lib/catalogo-diff'
+import { notificarLojistas, type MudancaCatalogo } from '@/lib/catalogo-notificacoes'
 
 export async function POST(request: NextRequest) {
   try {
@@ -122,126 +123,85 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 5. Notify linked lojistas
+    // 5. Notificar lojistas vinculados via lib (registra em catalogo_atualizacoes;
+    //    trigger bumpa catalogo_status_lojista automaticamente).
     let lojistasNotificados = 0
 
     if (notificar_lojistas) {
-      const { data: fornecedoresVinculados } = await supabase
-        .from('fornecedores')
-        .select('empresa_id')
-        .eq('cnpj', cnpjLimpo)
-
-      const empresaIds = [...new Set(
-        (fornecedoresVinculados || [])
-          .map(f => f.empresa_id)
-          .filter((id): id is number => id !== null)
-      )]
-
-      if (empresaIds.length > 0) {
-        const notificacoes: Array<Record<string, any>> = []
-
-        // Fetch newly inserted item IDs for "novo" notifications
-        const novosItemMap = new Map<string, number>()
-        if (diff.novos.length > 0) {
-          const novosEans = diff.novos.map(p => p.ean).filter(Boolean) as string[]
-          const novosCodigos = diff.novos.map(p => p.codigo_fornecedor).filter(Boolean) as string[]
-
-          if (novosEans.length > 0 || novosCodigos.length > 0) {
-            let query = supabase
-              .from('catalogo_itens')
-              .select('id, ean, codigo')
-              .eq('catalogo_id', catalogo_id)
-              .eq('ativo', true)
-
-            if (novosEans.length > 0 && novosCodigos.length > 0) {
-              query = query.or(`ean.in.(${novosEans.join(',')}),codigo.in.(${novosCodigos.join(',')})`)
-            } else if (novosEans.length > 0) {
-              query = query.in('ean', novosEans)
-            } else {
-              query = query.in('codigo', novosCodigos)
-            }
-
-            const { data: novosItens } = await query
-            for (const item of novosItens || []) {
-              if (item.ean) novosItemMap.set(`ean:${item.ean}`, item.id)
-              if (item.codigo) novosItemMap.set(`codigo:${item.codigo}`, item.id)
-            }
+      // Lookup de IDs dos itens novos recém-inseridos (batch insert não retorna IDs)
+      const novosItemMap = new Map<string, number>()
+      if (diff.novos.length > 0) {
+        const novosEans = diff.novos.map(p => p.ean).filter(Boolean) as string[]
+        const novosCodigos = diff.novos.map(p => p.codigo_fornecedor).filter(Boolean) as string[]
+        if (novosEans.length > 0 || novosCodigos.length > 0) {
+          let query = supabase
+            .from('catalogo_itens')
+            .select('id, ean, codigo')
+            .eq('catalogo_id', catalogo_id)
+            .eq('ativo', true)
+          if (novosEans.length > 0 && novosCodigos.length > 0) {
+            query = query.or(`ean.in.(${novosEans.join(',')}),codigo.in.(${novosCodigos.join(',')})`)
+          } else if (novosEans.length > 0) {
+            query = query.in('ean', novosEans)
+          } else {
+            query = query.in('codigo', novosCodigos)
+          }
+          const { data: novosItens } = await query
+          for (const item of novosItens || []) {
+            if (item.ean) novosItemMap.set(`ean:${item.ean}`, item.id)
+            if (item.codigo) novosItemMap.set(`codigo:${item.codigo}`, item.id)
           }
         }
+      }
 
-        for (const empresaId of empresaIds) {
-          for (const novo of diff.novos) {
-            const matchedId = (novo.ean && novosItemMap.get(`ean:${novo.ean}`))
-              || (novo.codigo_fornecedor && novosItemMap.get(`codigo:${novo.codigo_fornecedor}`))
-              || null
-
-            notificacoes.push({
-              catalogo_id,
-              empresa_id: empresaId,
-              tipo: 'novo',
-              catalogo_item_id: matchedId,
-              dados_antigos: null,
-              dados_novos: { nome: novo.nome, ean: novo.ean, preco_base: novo.preco_base },
-              status: 'pendente',
-            })
-          }
-
-          for (const item of diff.removidos) {
-            notificacoes.push({
-              catalogo_id,
-              empresa_id: empresaId,
-              tipo: 'removido',
-              catalogo_item_id: item.id,
-              dados_antigos: { nome: item.nome, preco_base: item.preco_base },
-              dados_novos: null,
-              status: 'pendente',
-            })
-          }
-
-          for (const item of diff.preco_alterado) {
-            notificacoes.push({
-              catalogo_id,
-              empresa_id: empresaId,
-              tipo: 'preco',
-              catalogo_item_id: item.item.id,
-              dados_antigos: { preco_base: item.preco_antigo },
-              dados_novos: { preco_base: item.preco_novo, variacao_percentual: item.variacao_percentual },
-              status: 'pendente',
-            })
-          }
-
-          for (const item of diff.dados_alterados) {
-            const antigos: Record<string, any> = {}
-            const novosD: Record<string, any> = {}
-            for (const m of item.mudancas) {
-              antigos[m.campo] = m.antigo
-              novosD[m.campo] = m.novo
-            }
-
-            notificacoes.push({
-              catalogo_id,
-              empresa_id: empresaId,
-              tipo: 'dados',
-              catalogo_item_id: item.item.id,
-              dados_antigos: antigos,
-              dados_novos: novosD,
-              status: 'pendente',
-            })
-          }
+      const mudancas: MudancaCatalogo[] = []
+      for (const novo of diff.novos) {
+        const id = (novo.ean && novosItemMap.get(`ean:${novo.ean}`))
+          || (novo.codigo_fornecedor && novosItemMap.get(`codigo:${novo.codigo_fornecedor}`))
+          || null
+        mudancas.push({
+          tipo: 'novo',
+          catalogo_item_id: id,
+          dados_antigos: null,
+          dados_novos: { nome: novo.nome, ean: novo.ean, preco_base: novo.preco_base },
+        })
+      }
+      for (const item of diff.removidos) {
+        mudancas.push({
+          tipo: 'removido',
+          catalogo_item_id: item.id,
+          dados_antigos: { nome: item.nome, preco_base: item.preco_base },
+          dados_novos: null,
+        })
+      }
+      for (const item of diff.preco_alterado) {
+        mudancas.push({
+          tipo: 'preco',
+          catalogo_item_id: item.item.id,
+          dados_antigos: { preco_base: item.preco_antigo },
+          dados_novos: { preco_base: item.preco_novo, variacao_percentual: item.variacao_percentual },
+        })
+      }
+      for (const item of diff.dados_alterados) {
+        const antigos: Record<string, unknown> = {}
+        const novosD: Record<string, unknown> = {}
+        for (const m of item.mudancas) {
+          antigos[m.campo] = m.antigo
+          novosD[m.campo] = m.novo
         }
+        mudancas.push({
+          tipo: 'dados',
+          catalogo_item_id: item.item.id,
+          dados_antigos: antigos,
+          dados_novos: novosD,
+        })
+      }
 
-        if (notificacoes.length > 0) {
-          for (let i = 0; i < notificacoes.length; i += 500) {
-            const batch = notificacoes.slice(i, i + 500)
-            const { error: notifError } = await supabase
-              .from('catalogo_atualizacoes')
-              .insert(batch)
-
-            if (notifError) {
-              console.error('Erro ao criar notificacoes:', notifError)
-            }
-          }
-          lojistasNotificados = empresaIds.length
+      if (mudancas.length > 0) {
+        const r = await notificarLojistas(supabase, catalogo_id, cnpjLimpo, mudancas)
+        lojistasNotificados = r.empresasNotificadas
+        if (r.erros.length > 0) {
+          console.warn('Erros ao notificar lojistas (aplicar-diff):', r.erros)
         }
       }
     }
