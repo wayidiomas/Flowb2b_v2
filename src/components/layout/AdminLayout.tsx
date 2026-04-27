@@ -4,6 +4,7 @@ import { ReactNode, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
+import { useAdminAuditoriaContagem } from '@/hooks/useAdminAuditoriaContagem'
 
 interface AdminLayoutProps {
   children: ReactNode
@@ -73,12 +74,28 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    href: '/admin/auditoria',
+    label: 'Auditoria',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+      </svg>
+    ),
+  },
 ]
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname()
   const { user, loading, logout } = useAdminAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { data: auditoriaContagem } = useAdminAuditoriaContagem()
+  const badgeAuditoria = auditoriaContagem.total
+
+  const itemBadge = (href: string): number | null => {
+    if (href === '/admin/auditoria' && badgeAuditoria > 0) return badgeAuditoria
+    return null
+  }
 
   if (loading) {
     return (
@@ -124,7 +141,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 }`}
               >
                 {item.icon}
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {itemBadge(item.href) != null && (
+                  <span className="ml-auto inline-flex items-center justify-center min-w-[1.5rem] h-5 px-1.5 bg-red-600 text-white text-xs font-semibold rounded-full">
+                    {itemBadge(item.href)}
+                  </span>
+                )}
               </Link>
             )
           })}
