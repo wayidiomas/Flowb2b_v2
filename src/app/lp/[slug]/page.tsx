@@ -105,7 +105,9 @@ export default function LandingPagePublica() {
     []
   )
 
-  const podeComprar = data?.viewer_state === 'lojista_vinculado'
+  // Carrinho liberado pra todos — auth/vinculo e validado no /compras/pedidos/novo
+  const podeComprar = !!data
+  const isLojistaVinculado = data?.viewer_state === 'lojista_vinculado'
 
   const produtosFiltrados = useMemo(() => {
     if (!data) return []
@@ -117,19 +119,29 @@ export default function LandingPagePublica() {
   }, [data, busca])
 
   const handleFinalizar = () => {
-    if (!podeComprar) return
+    if (!data) return
+    // Persiste carrinho pra /compras/pedidos/novo ler depois
     try {
       window.localStorage.setItem(
         `flowb2b_pedido_lp_${slug}`,
         JSON.stringify({
           slug,
-          fornecedor_id: data?.landing_page.fornecedor.id,
-          fornecedor_cnpj: data?.landing_page.fornecedor.cnpj,
+          fornecedor_id: data.landing_page.fornecedor.id,
+          fornecedor_cnpj: data.landing_page.fornecedor.cnpj,
           itens: items,
           created_at: new Date().toISOString(),
         })
       )
     } catch { /* silent */ }
+
+    // Se nao e lojista logado e vinculado, manda pro login. O destino final
+    // e /compras/pedidos/novo?lp=slug — apos login, o carrinho do localStorage
+    // e lido e o pedido e pre-populado.
+    if (!isLojistaVinculado) {
+      const dest = `/compras/pedidos/novo?lp=${slug}`
+      router.push(`/login?redirect=${encodeURIComponent(dest)}`)
+      return
+    }
     router.push(`/compras/pedidos/novo?lp=${slug}`)
   }
 
@@ -137,7 +149,7 @@ export default function LandingPagePublica() {
     return (
       <div className="min-h-[100dvh] bg-[#F5F7FA]">
         <LpTopNav />
-        <div className="max-w-[1200px] mx-auto px-4 pt-6 pb-6">
+        <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 pt-6 pb-6">
           <div className="bg-white rounded-2xl shadow-sm p-5 md:p-6 flex items-center gap-4 animate-pulse">
             <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gray-200 shrink-0" />
             <div className="flex-1 space-y-2">
@@ -147,12 +159,12 @@ export default function LandingPagePublica() {
             </div>
           </div>
         </div>
-        <div className="max-w-[1200px] mx-auto px-4 py-3">
+        <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 py-3">
           <div className="h-11 bg-gray-200 rounded-xl animate-pulse" />
         </div>
-        <main className="max-w-[1200px] mx-auto px-4 py-5">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-            {Array.from({ length: 8 }).map((_, i) => (
+        <main className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 py-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 md:gap-4">
+            {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
                 <div className="aspect-[4/3] bg-gray-100" />
                 <div className="p-3 space-y-2">
@@ -209,7 +221,7 @@ export default function LandingPagePublica() {
         )}
 
         {/* Card do fornecedor */}
-        <div className={`max-w-[1200px] mx-auto px-4 ${lp.banner_url ? '-mt-16 md:-mt-20' : 'pt-6'} pb-6`}>
+        <div className={`max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 ${lp.banner_url ? '-mt-16 md:-mt-20' : 'pt-6'} pb-6`}>
           <div className="bg-white rounded-2xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.12)] p-5 md:p-6">
             <div className="flex items-start md:items-center gap-4 flex-col md:flex-row">
               {/* Logo: prioridade lp.logo_url > fornecedor.logo > inicial */}
@@ -282,7 +294,7 @@ export default function LandingPagePublica() {
 
       {/* Search bar sticky */}
       <div className="sticky top-12 z-20 bg-[#F5F7FA]/90 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-[1200px] mx-auto px-4 py-3">
+        <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 py-3">
           <div className="relative">
             <input
               type="text"
@@ -314,7 +326,7 @@ export default function LandingPagePublica() {
       </div>
 
       {/* Grid de produtos */}
-      <main className="max-w-[1200px] mx-auto px-4 py-5">
+      <main className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 py-5">
         {produtosFiltrados.length === 0 ? (
           <div className="bg-white rounded-2xl py-16 px-6 text-center border border-gray-100">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center" style={{
@@ -342,7 +354,7 @@ export default function LandingPagePublica() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 md:gap-4">
             {produtosFiltrados.map(p => (
               <ProdutoCard
                 key={p.id}
@@ -368,7 +380,7 @@ export default function LandingPagePublica() {
 
       {/* Sobre o fornecedor */}
       {lp.descricao && (
-        <section className="max-w-[1200px] mx-auto px-4 mt-12 mb-8">
+        <section className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 mt-12 mb-8">
           <div className="bg-white rounded-2xl border border-gray-100 p-6 md:p-8">
             <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-gray-500 mb-3">
               Sobre {fornecedorLabel}
@@ -381,7 +393,7 @@ export default function LandingPagePublica() {
       )}
 
       {/* Footer */}
-      <footer className="max-w-[1200px] mx-auto px-4 mt-8 mb-24 md:mb-8">
+      <footer className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 mt-8 mb-24 md:mb-8">
         <div className="border-t border-gray-200 pt-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="text-xs text-gray-500">Powered by</span>
@@ -555,34 +567,31 @@ function ViewerStateBanner({
   fornecedorNome: string
   slug: string
 }) {
+  // Lojista vinculado nao precisa de banner.
   if (viewerState === 'lojista_vinculado') return null
 
-  let mensagem = ''
-  let cta: { label: string; href: string } | null = null
-  let bgClass = 'bg-amber-50 border-amber-200 text-amber-900'
-
-  if (viewerState === 'anonimo') {
-    mensagem = `Faca login pra comprar de ${fornecedorNome}`
-    cta = { label: 'Entrar', href: `/login?redirect=/lp/${slug}` }
-    bgClass = 'bg-blue-50 border-blue-200 text-blue-900'
-  } else if (viewerState === 'lojista_sem_vinculo') {
+  // Lojista logado mas sem vinculo: oferece solicitar atendimento.
+  if (viewerState === 'lojista_sem_vinculo') {
     return <SolicitarVinculoBanner slug={slug} fornecedorNome={fornecedorNome} />
-  } else {
-    mensagem = 'Visualizacao apenas. Pra comprar use uma conta de lojista.'
   }
 
+  // Anonimo / outro tipo: hint discreto sobre fluxo de finalizar.
+  // O carrinho ja esta liberado; o login so e exigido no checkout.
+  const isAnonimo = viewerState === 'anonimo'
   return (
-    <div className="max-w-[1200px] mx-auto px-4 pt-4">
-      <div className={`${bgClass} border rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm`}>
-        <p className="font-medium">{mensagem}</p>
-        {cta && (
-          <Link
-            href={cta.href}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold underline underline-offset-2 hover:no-underline shrink-0"
-          >
-            {cta.label} →
-          </Link>
-        )}
+    <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 pt-4">
+      <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+        <p className="font-medium">
+          {isAnonimo
+            ? `Monte seu carrinho e finalize com sua conta. Sem conta? Voce pode se cadastrar na hora.`
+            : `Voce esta logado em outro perfil. Pra fechar pedido, entre como lojista.`}
+        </p>
+        <Link
+          href={`/login?redirect=/lp/${slug}`}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold underline underline-offset-2 hover:no-underline shrink-0"
+        >
+          Entrar →
+        </Link>
       </div>
     </div>
   )
@@ -610,7 +619,7 @@ function LpTopNav() {
 
   return (
     <nav className="bg-[#336FB6] h-12 w-full sticky top-0 z-30 shadow-sm">
-      <div className="max-w-[1200px] mx-auto px-4 h-full flex items-center justify-between">
+      <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 h-full flex items-center justify-between">
         <Link href="/" className="flex items-center">
           <Image
             src="/assets/branding/logo-white.png"
@@ -774,7 +783,7 @@ function SolicitarVinculoBanner({ slug, fornecedorNome }: { slug: string; fornec
   }
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 pt-4">
+    <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 pt-4">
       <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
         <p className="font-medium">
           {enviado
