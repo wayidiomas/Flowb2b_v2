@@ -717,64 +717,75 @@ function FloatingCart({
         onClick={onClick}
         disabled={isEmpty}
         aria-label={isEmpty ? 'Carrinho vazio' : `Carrinho com ${count} itens`}
-        className={`group relative w-20 h-20 md:w-24 md:h-24 rounded-full flex flex-col items-center justify-center transition-all duration-300 active:scale-[0.95] ${
-          isEmpty ? 'opacity-95 cursor-not-allowed' : 'cart-glow hover:scale-[1.08]'
-        }`}
+        className={`group relative flex transition-all duration-300 active:scale-[0.96]
+          /* Mobile: circular 80x80 */
+          w-20 h-20 rounded-full flex-col items-center justify-center
+          /* Desktop: pill horizontal */
+          md:w-auto md:h-auto md:min-w-[260px] md:rounded-full md:flex-row md:items-center md:gap-4 md:pl-4 md:pr-6 md:py-3
+          ${isEmpty ? 'opacity-95 cursor-not-allowed' : 'cart-glow hover:scale-[1.04]'}
+        `}
         style={{
-          background: `radial-gradient(circle at 30% 30%, ${FLOWB2B_ORANGE} 0%, ${FLOWB2B_BLUE} 75%)`,
+          background: `linear-gradient(135deg, ${FLOWB2B_ORANGE} 0%, #ff8a00 30%, ${FLOWB2B_BLUE} 100%)`,
         }}
       >
         {/* Highlight superior */}
         <span
           aria-hidden
-          className="absolute inset-0 rounded-full pointer-events-none opacity-50"
+          className="absolute inset-0 rounded-full md:rounded-full pointer-events-none opacity-50"
           style={{
             background:
-              'radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.55) 0%, transparent 50%)',
+              'radial-gradient(ellipse at 30% 0%, rgba(255,255,255,0.5) 0%, transparent 55%)',
           }}
         />
 
-        {/* Icone sacola FlowB2B (premium) */}
-        <svg
-          className="relative w-10 h-10 md:w-12 md:h-12 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.2)]"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={1.8}
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
-          />
-        </svg>
+        {/* Icone sacola */}
+        <span className="relative flex items-center justify-center md:w-14 md:h-14 md:rounded-full md:bg-white/15 md:backdrop-blur-sm">
+          <svg
+            className="w-10 h-10 md:w-7 md:h-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.25)]"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.8}
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
+            />
+          </svg>
+        </span>
 
-        {/* Texto pequeno embaixo do icone */}
-        <span className="relative text-[9px] md:text-[10px] font-semibold uppercase tracking-[0.15em] text-white/90 mt-0.5">
+        {/* Mobile: label embaixo do icone */}
+        <span className="relative md:hidden text-[9px] font-semibold uppercase tracking-[0.15em] text-white/90 mt-0.5">
           {isEmpty ? 'Vazio' : formatBRL(total)}
         </span>
 
-        {/* Badge contagem */}
+        {/* Desktop: bloco de info (label + valor) */}
+        <span className="relative hidden md:flex flex-col items-start text-left flex-1 leading-tight">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-white/85">
+            {isEmpty ? 'Carrinho' : `${count} ${count === 1 ? 'item' : 'itens'}`}
+          </span>
+          <span className="text-base font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+            {isEmpty ? 'Vazio' : formatBRL(total)}
+          </span>
+        </span>
+
+        {/* Desktop: seta direita */}
+        {!isEmpty && (
+          <span className="relative hidden md:flex w-9 h-9 rounded-full bg-white/15 backdrop-blur-sm items-center justify-center transition-transform duration-300 group-hover:translate-x-0.5">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+            </svg>
+          </span>
+        )}
+
+        {/* Badge contagem (so mobile — desktop tem 'X itens' inline) */}
         {count > 0 && (
-          <span className="badge-pulse absolute -top-1 -right-1 min-w-[26px] h-[26px] px-1.5 rounded-full bg-white text-[12px] font-bold flex items-center justify-center shadow-[0_4px_12px_-2px_rgba(0,0,0,0.2)]" style={{ color: FLOWB2B_BLUE }}>
+          <span className="badge-pulse md:hidden absolute -top-1 -right-1 min-w-[26px] h-[26px] px-1.5 rounded-full bg-white text-[12px] font-bold flex items-center justify-center shadow-[0_4px_12px_-2px_rgba(0,0,0,0.2)]" style={{ color: FLOWB2B_BLUE }}>
             {count > 99 ? '99+' : count}
           </span>
         )}
       </button>
-
-      {/* Etiqueta lateral (so quando ha itens) */}
-      {!isEmpty && (
-        <div
-          className="hidden md:block absolute right-full top-1/2 -translate-y-1/2 mr-3 bg-white rounded-xl shadow-[0_4px_16px_-4px_rgba(0,0,0,0.12)] px-3 py-2 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-        >
-          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-500 leading-none">
-            {count} {count === 1 ? 'item' : 'itens'}
-          </p>
-          <p className="text-sm font-semibold text-gray-900 leading-tight mt-0.5">
-            Ver carrinho →
-          </p>
-        </div>
-      )}
     </div>
   )
 }
