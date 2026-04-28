@@ -216,7 +216,7 @@ export function MainHeader() {
 
   return (
     <header className="bg-[#336fb6] h-[60px] w-full shadow-md z-50 relative">
-      <div className="h-full flex items-center px-4 md:px-12 gap-4 md:gap-6">
+      <div className="h-full flex items-center px-3 md:px-12 gap-2 md:gap-6">
         {/* Logo */}
         <Link href="/dashboard" className="shrink-0">
           <Image
@@ -224,7 +224,7 @@ export function MainHeader() {
             alt="FlowB2B"
             width={120}
             height={38}
-            className="object-contain"
+            className="object-contain h-7 w-auto md:h-9"
             priority
           />
         </Link>
@@ -295,15 +295,15 @@ export function MainHeader() {
         <div className="flex-1" />
 
         {/* Right side */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1 md:gap-4 shrink-0">
           {/* User info with dropdown */}
           <div className="relative" ref={userMenuRef}>
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className="flex items-center gap-3 hover:bg-white/10 rounded-md px-2 py-1 transition-colors"
+              className="flex items-center gap-2 md:gap-3 hover:bg-white/10 rounded-md px-1.5 md:px-2 py-1 transition-colors"
             >
               {/* Avatar */}
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center overflow-hidden shrink-0">
                 <span className="text-white text-sm font-medium">
                   {user?.nome?.charAt(0).toUpperCase() || 'U'}
                 </span>
@@ -317,7 +317,7 @@ export function MainHeader() {
                   {user?.role === 'admin' ? 'Administrador' : 'Usuario'} - {empresa?.nome_fantasia || 'Empresa'}
                 </p>
               </div>
-              <ChevronDownIcon className="w-3 h-3 text-white/70" />
+              <ChevronDownIcon className="w-3 h-3 text-white/70 shrink-0" />
             </button>
 
             {/* User dropdown */}
@@ -356,10 +356,10 @@ export function MainHeader() {
           </div>
 
           {/* Notifications */}
-          <div className="relative" ref={notificacoesRef}>
+          <div className="relative shrink-0" ref={notificacoesRef}>
             <button
               onClick={() => setNotificacoesOpen(!notificacoesOpen)}
-              className="p-2 rounded-md text-white/80 hover:text-white hover:bg-white/10 transition-colors relative"
+              className="p-1.5 md:p-2 rounded-md text-white/80 hover:text-white hover:bg-white/10 transition-colors relative"
             >
               <BellIcon />
               {naoLidas > 0 && (
@@ -371,7 +371,7 @@ export function MainHeader() {
 
             {/* Dropdown de notificacoes */}
             {notificacoesOpen && (
-              <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg py-2 w-80 max-h-96 overflow-y-auto z-50">
+              <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-lg py-2 w-[calc(100vw-1.5rem)] max-w-[320px] max-h-96 overflow-y-auto z-50">
                 <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
                   <p className="text-sm font-semibold text-gray-900">Notificacoes</p>
                   {naoLidas > 0 && (
@@ -434,11 +434,11 @@ export function MainHeader() {
             )}
           </div>
 
-          {/* Settings */}
+          {/* Settings (desktop only — no mobile esta dentro do dropdown do usuario) */}
           {hasPermission('configuracoes') && (
             <Link
               href="/configuracoes"
-              className="p-2 rounded-md text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              className="hidden md:inline-flex p-2 rounded-md text-white/80 hover:text-white hover:bg-white/10 transition-colors"
             >
               <SettingsIcon />
             </Link>
