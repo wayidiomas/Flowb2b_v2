@@ -700,8 +700,15 @@ function LpTopNav() {
             />
           </Link>
 
-          {/* Direita: Entrar + CTA */}
+          {/* Direita: Conheca + Entrar + CTA */}
           <div className="flex items-center gap-1 md:gap-2 pr-1">
+            <Link
+              href="/"
+              className="hidden md:inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-full text-white/85 hover:text-white hover:bg-white/10 transition-colors duration-300"
+            >
+              Conheca a FlowB2B
+            </Link>
+
             <div className="relative" ref={entrarRef}>
               <button
                 onClick={() => setEntrarOpen(!entrarOpen)}
