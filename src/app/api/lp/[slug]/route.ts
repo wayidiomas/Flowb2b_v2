@@ -227,8 +227,8 @@ export async function GET(
         nome: lp.nome,
         modo: lp.modo,
         cor_marca: lp.cor_marca,
-        logo_url: lp.logo_url,
-        banner_url: lp.banner_url,
+        logo_url: lp.logo_url || null,
+        banner_url: lp.banner_url || null,
         hero_titulo: lp.hero_titulo,
         hero_subtitulo: lp.hero_subtitulo,
         fornecedor: {

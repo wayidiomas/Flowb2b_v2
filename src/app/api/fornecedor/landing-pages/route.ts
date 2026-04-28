@@ -152,6 +152,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Buscar nome do lojista pra defaults bons
+    const { data: empLojista } = await supabase
+      .from('empresas')
+      .select('razao_social, nome_fantasia')
+      .eq('id', body.empresa_id_lojista)
+      .maybeSingle()
+
+    const fornecedorNomeAmigavel =
+      fornecedorNoLojista.nome_fantasia || fornecedorNoLojista.nome || fornecedorNoLojista.razao_social || 'Fornecedor'
+    const lojistaNomeAmigavel =
+      empLojista?.nome_fantasia || empLojista?.razao_social || 'sua loja'
+
+    const heroTituloDefault = `Catalogo ${fornecedorNomeAmigavel}`
+    const heroSubtituloDefault = `Selecionado para ${lojistaNomeAmigavel}`
+
     // Insert LP
     const { data: lp, error: lpErr } = await supabase
       .from('landing_pages_fornecedor')
@@ -162,12 +177,12 @@ export async function POST(request: NextRequest) {
         slug,
         nome: body.nome.trim(),
         modo: body.modo,
-        cor_marca: body.cor_marca || null,
+        cor_marca: body.cor_marca || null, // null = usa azul FlowB2B no render
         logo_url: body.logo_url || null,
         banner_url: body.banner_url || null,
-        hero_titulo: body.hero_titulo?.trim() || null,
-        hero_subtitulo: body.hero_subtitulo?.trim() || null,
-        created_by_user_id: null, // referencia users (UUID), nao users_fornecedor (int)
+        hero_titulo: body.hero_titulo?.trim() || heroTituloDefault,
+        hero_subtitulo: body.hero_subtitulo?.trim() || heroSubtituloDefault,
+        created_by_user_id: null,
       })
       .select('*')
       .single()

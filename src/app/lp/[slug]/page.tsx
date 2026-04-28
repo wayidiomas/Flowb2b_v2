@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useLpCart } from '@/hooks/useLpCart'
+import { resolveLpAccent, FLOWB2B_BLUE, FLOWB2B_ORANGE } from '@/lib/colors'
 import type { LpViewerState } from '@/app/api/lp/[slug]/route'
 
 interface LpProduto {
@@ -25,6 +26,8 @@ interface LpData {
     nome: string
     modo: 'todos' | 'comprados' | 'selecao'
     cor_marca: string | null
+    logo_url: string | null
+    banner_url: string | null
     hero_titulo: string | null
     hero_subtitulo: string | null
     fornecedor: {
@@ -85,10 +88,17 @@ export default function LandingPagePublica() {
     load()
   }, [slug])
 
-  // Cor accent: cor_marca do fornecedor OU azul FlowB2B padrao
-  const accentColor = data?.landing_page.cor_marca || '#336FB6'
+  // Paleta:
+  //   --accent: cor_marca se setada, senao azul FlowB2B (CTAs primarios)
+  //   --accent-2: laranja FlowB2B (botoes + dos produtos, badges destaque)
+  const accentColor = resolveLpAccent(data?.landing_page.cor_marca)
   const cssVars = useMemo(
-    () => ({ '--accent': accentColor, '--accent-fg': '#FFFFFF' }) as React.CSSProperties,
+    () => ({
+      '--accent': accentColor,
+      '--accent-fg': '#FFFFFF',
+      '--accent-2': FLOWB2B_ORANGE,
+      '--brand-blue': FLOWB2B_BLUE,
+    }) as React.CSSProperties,
     [accentColor]
   )
 
@@ -150,29 +160,43 @@ export default function LandingPagePublica() {
 
   return (
     <div style={cssVars} className="min-h-[100dvh] bg-[#F5F7FA] pb-24 md:pb-0">
-      {/* Header Hero — estilo iFood (compacto, branco, com cor accent) */}
+      {/* Header Hero — banner customizado ou gradient da paleta da LP */}
       <header className="bg-white border-b border-gray-100">
         <div
-          className="h-32 md:h-40 relative overflow-hidden"
-          style={{
-            background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%)`,
-          }}
+          className="h-32 md:h-44 relative overflow-hidden"
+          style={
+            lp.banner_url
+              ? { backgroundImage: `url(${lp.banner_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              : { background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%)` }
+          }
         >
-          {/* Padrão sutil de fundo */}
-          <div className="absolute inset-0 opacity-10" style={{
-            backgroundImage: 'radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 30%, white 1px, transparent 1px)',
-            backgroundSize: '40px 40px',
-          }} />
+          {/* Overlay escuro pra contraste quando tem banner */}
+          {lp.banner_url ? (
+            <div className="absolute inset-0 bg-black/30" />
+          ) : (
+            <div
+              className="absolute inset-0 opacity-10"
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 30%, white 1px, transparent 1px)',
+                backgroundSize: '40px 40px',
+              }}
+            />
+          )}
         </div>
 
-        {/* Card do fornecedor (sobrepoõe o gradiente, estilo iFood) */}
+        {/* Card do fornecedor (sobrepoõe o hero) */}
         <div className="max-w-[1200px] mx-auto px-4 -mt-12 md:-mt-14 pb-5">
           <div className="bg-white rounded-2xl shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] p-4 md:p-5 flex items-center gap-4">
-            {/* Logo */}
+            {/* Logo: prioridade lp.logo_url > fornecedor.logo > inicial do nome */}
             <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
-              {lp.fornecedor.logo ? (
+              {(lp.logo_url || lp.fornecedor.logo) ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={lp.fornecedor.logo} alt={fornecedorLabel} className="w-full h-full object-cover" />
+                <img
+                  src={lp.logo_url || lp.fornecedor.logo || ''}
+                  alt={fornecedorLabel}
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <span className="text-xl font-bold text-gray-400">
                   {fornecedorLabel.charAt(0).toUpperCase()}
@@ -350,8 +374,8 @@ function ProdutoCard({
         {podeComprar && noCarrinho === 0 && produto.preco != null && produto.preco > 0 && (
           <button
             onClick={onAdd}
-            className="absolute bottom-2 right-2 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 active:scale-90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.15)]"
-            style={{ background: 'var(--accent)' }}
+            className="absolute bottom-2 right-2 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 active:scale-90 shadow-[0_4px_12px_-2px_rgba(0,0,0,0.15)] hover:scale-110"
+            style={{ background: 'var(--accent-2)' }}
             aria-label="Adicionar ao carrinho"
           >
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
@@ -366,8 +390,8 @@ function ProdutoCard({
           >
             <button
               onClick={() => onUpdateQty(noCarrinho - 1)}
-              className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-100 text-gray-700 text-sm font-semibold"
-              style={{ color: 'var(--accent)' }}
+              className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-100 text-sm font-semibold"
+              style={{ color: 'var(--accent-2)' }}
             >
               −
             </button>
@@ -375,7 +399,7 @@ function ProdutoCard({
             <button
               onClick={() => onUpdateQty(noCarrinho + 1)}
               className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-100 text-sm font-semibold"
-              style={{ color: 'var(--accent)' }}
+              style={{ color: 'var(--accent-2)' }}
             >
               +
             </button>
