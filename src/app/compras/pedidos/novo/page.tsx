@@ -211,6 +211,7 @@ function NovoPedidoContent() {
   const searchParams = useSearchParams()
   const fornecedorIdParam = searchParams.get('fornecedor_id')
   const fromCurva = searchParams.get('from') === 'curva'
+  const fromLpSlug = searchParams.get('from_lp')
 
   // Form state
   const [fornecedorId, setFornecedorId] = useState<number | null>(null)
@@ -389,6 +390,72 @@ function NovoPedidoContent() {
       }
     }
   }, [fromCurva, fornecedorId])
+
+  // Carregar itens do carrinho da Landing Page (vindo de /lp/[slug]/checkout)
+  useEffect(() => {
+    if (!fromLpSlug || !fornecedorId) return
+    const empresaId = empresa?.id || user?.empresa_id
+    if (!empresaId) return
+
+    const loadFromLp = async () => {
+      try {
+        const raw = window.localStorage.getItem(`flowb2b_pedido_lp_${fromLpSlug}`)
+        if (!raw) return
+        const parsed = JSON.parse(raw) as {
+          itens: Array<{ produto_id: number; codigo: string | null; nome: string; preco: number; quantidade: number; unidade: string | null }>
+        }
+        if (!Array.isArray(parsed.itens) || parsed.itens.length === 0) return
+
+        const produtoIds = parsed.itens.map(i => i.produto_id)
+
+        // Busca metadados do produto (id_bling, ean, estoque) e do vinculo (codigo_fornecedor)
+        const [{ data: prods }, { data: vinculos }] = await Promise.all([
+          supabase
+            .from('produtos')
+            .select('id, id_produto_bling, gtin, estoque_atual, unidade')
+            .eq('empresa_id', empresaId)
+            .in('id', produtoIds),
+          supabase
+            .from('fornecedores_produtos')
+            .select('produto_id, codigo_fornecedor, valor_de_compra')
+            .eq('fornecedor_id', fornecedorId)
+            .eq('empresa_id', empresaId)
+            .in('produto_id', produtoIds),
+        ])
+
+        const prodMap = new Map((prods || []).map(p => [p.id, p]))
+        const vincMap = new Map((vinculos || []).map(v => [v.produto_id, v]))
+
+        const itensFormatados: ItemPedidoCompra[] = parsed.itens.map(it => {
+          const p = prodMap.get(it.produto_id)
+          const v = vincMap.get(it.produto_id)
+          return {
+            produto_id: it.produto_id,
+            id_produto_bling: p?.id_produto_bling ?? 0,
+            codigo_produto: it.codigo || '',
+            codigo_fornecedor: v?.codigo_fornecedor || undefined,
+            descricao: it.nome,
+            unidade: it.unidade || p?.unidade || 'UN',
+            quantidade: it.quantidade,
+            valor: it.preco || v?.valor_de_compra || 0,
+            aliquota_ipi: 0,
+            estoque_atual: p?.estoque_atual || 0,
+            ean: p?.gtin || undefined,
+          }
+        })
+
+        setItens(itensFormatados)
+        showToast('success', 'Carrinho importado', `${itensFormatados.length} produto(s) carregado(s) da landing page.`)
+        window.localStorage.removeItem(`flowb2b_pedido_lp_${fromLpSlug}`)
+        window.localStorage.removeItem(`lp_cart_${fromLpSlug}`)
+      } catch (error) {
+        console.error('Erro ao carregar carrinho da LP:', error)
+      }
+    }
+
+    loadFromLp()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromLpSlug, fornecedorId, empresa?.id, user?.empresa_id])
 
   // Buscar produtos do fornecedor
   const fetchProdutosFornecedor = async (search: string = '') => {

@@ -147,15 +147,12 @@ export default function LandingPagePublica() {
       )
     } catch { /* silent */ }
 
-    // Se nao e lojista logado e vinculado, manda pro login. O destino final
-    // e /compras/pedidos/novo?lp=slug — apos login, o carrinho do localStorage
-    // e lido e o pedido e pre-populado.
-    if (!isLojistaVinculado) {
-      const dest = `/compras/pedidos/novo?lp=${slug}`
-      router.push(`/login?redirect=${encodeURIComponent(dest)}`)
-      return
-    }
-    router.push(`/compras/pedidos/novo?lp=${slug}`)
+    // Tela intermediaria /lp/[slug]/checkout cuida de:
+    //  - pedir login se nao logado
+    //  - mostrar picker de empresa quando user tem >1 loja
+    //  - resolver fornecedor.id por (empresa_id, cnpj)
+    //  - redirecionar pra /compras/pedidos/novo?fornecedor_id=X&from_lp=slug
+    router.push(`/lp/${slug}/checkout`)
   }
 
   if (loading) {
