@@ -1031,6 +1031,21 @@ function CartDrawer({
   onCheckout: () => void
 }) {
   const totalItens = items.reduce((s, i) => s + i.quantidade, 0)
+  const PAGE_SIZE = 8
+  const [page, setPage] = useState(1)
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
+  const pageClamped = Math.min(page, totalPages)
+  const visibleItems = items.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
+
+  const goToPage = (p: number) => {
+    setPage(p)
+    listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -1108,7 +1123,7 @@ function CartDrawer({
         </div>
 
         {/* Lista */}
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4">
           {items.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-6">
               <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
@@ -1121,7 +1136,7 @@ function CartDrawer({
             </div>
           ) : (
             <div className="space-y-2">
-              {items.map(item => {
+              {visibleItems.map(item => {
                 const subtotal = item.preco * item.quantidade
                 return (
                   <div
@@ -1222,6 +1237,17 @@ function CartDrawer({
           )}
         </div>
 
+        {items.length > 0 && totalPages > 1 && (
+          <CartPagination
+            page={pageClamped}
+            totalPages={totalPages}
+            onChange={goToPage}
+            from={(pageClamped - 1) * PAGE_SIZE + 1}
+            to={Math.min(pageClamped * PAGE_SIZE, items.length)}
+            total={items.length}
+          />
+        )}
+
         {items.length > 0 && (
           <div className="px-5 py-4 border-t border-gray-100 bg-white shadow-[0_-4px_16px_-4px_rgba(0,0,0,0.06)]">
             <div className="flex items-baseline justify-between mb-3">
@@ -1248,6 +1274,85 @@ function CartDrawer({
             </p>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Cart Pagination ─────────────────────────────────────────────────────────
+function CartPagination({
+  page,
+  totalPages,
+  onChange,
+  from,
+  to,
+  total,
+}: {
+  page: number
+  totalPages: number
+  onChange: (p: number) => void
+  from: number
+  to: number
+  total: number
+}) {
+  const pages: (number | 'ellipsis')[] = []
+  if (totalPages <= 5) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (page > 3) pages.push('ellipsis')
+    const start = Math.max(2, page - 1)
+    const end = Math.min(totalPages - 1, page + 1)
+    for (let i = start; i <= end; i++) pages.push(i)
+    if (page < totalPages - 2) pages.push('ellipsis')
+    pages.push(totalPages)
+  }
+
+  return (
+    <div className="px-4 py-2.5 border-t border-gray-100 bg-white flex items-center justify-between gap-2">
+      <p className="text-[11px] text-gray-500 tabular-nums">
+        <span className="font-semibold text-gray-700">{from}–{to}</span> de {total}
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onChange(Math.max(1, page - 1))}
+          disabled={page === 1}
+          className="w-7 h-7 inline-flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+          aria-label="Pagina anterior"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+        {pages.map((p, i) =>
+          p === 'ellipsis' ? (
+            <span key={`e-${i}`} className="px-1 text-gray-300 text-xs">…</span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onChange(p)}
+              className={[
+                'w-7 h-7 inline-flex items-center justify-center rounded-lg text-xs font-semibold tabular-nums transition-colors',
+                p === page
+                  ? 'text-white shadow-[0_2px_8px_-2px_rgba(255,170,17,0.55)]'
+                  : 'text-gray-600 hover:bg-gray-100',
+              ].join(' ')}
+              style={p === page ? { background: FLOWB2B_ORANGE } : undefined}
+            >
+              {p}
+            </button>
+          )
+        )}
+        <button
+          onClick={() => onChange(Math.min(totalPages, page + 1))}
+          disabled={page === totalPages}
+          className="w-7 h-7 inline-flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+          aria-label="Proxima pagina"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
       </div>
     </div>
   )
