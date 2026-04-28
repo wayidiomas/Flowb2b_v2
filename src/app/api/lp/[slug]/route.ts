@@ -39,6 +39,7 @@ export async function GET(
       .select(`
         id, slug, nome, modo, cor_marca, logo_url, banner_url,
         hero_titulo, hero_subtitulo, ativa,
+        descricao, whatsapp_contato, instagram_url, site_url, endereco_resumido,
         fornecedor_id, empresa_id_fornecedor, empresa_id_lojista,
         fornecedor:fornecedor_id (id, cnpj, nome, nome_fantasia, razao_social, logotipo)
       `)
@@ -96,43 +97,51 @@ export async function GET(
       unidade: string | null
       itens_por_caixa: number | null
       curva: string | null
+      imagem_url: string | null
     }
     let produtos: ProdRow[] = []
 
     if (lp.modo === 'todos') {
-      // Todos os produtos vinculados a esse fornecedor na empresa do lojista
-      const { data: vinculos } = await supabase
-        .from('fornecedores_produtos')
-        .select('produto_id, valor_de_compra')
-        .eq('fornecedor_id', lp.fornecedor_id)
-        .limit(500)
+      // Modo 'todos': busca o catalogo proprio do fornecedor (catalogo_itens via CNPJ).
+      // Independe de empresa_id_lojista — funciona em LP generica.
+      const cnpjForn = String(fornecedorData?.cnpj || '').replace(/\D/g, '')
+      if (cnpjForn) {
+        const { data: catFor } = await supabase
+          .from('catalogo_fornecedor')
+          .select('id')
+          .eq('cnpj', cnpjForn)
+          .limit(1)
+          .maybeSingle()
 
-      const produtoIds = (vinculos || []).map(v => v.produto_id).filter(Boolean)
-      if (produtoIds.length > 0) {
-        const precoPorProd = new Map<number, number | null>()
-        for (const v of vinculos || []) {
-          if (v.produto_id) precoPorProd.set(v.produto_id, v.valor_de_compra ?? null)
+        if (catFor) {
+          const { data: itens } = await supabase
+            .from('catalogo_itens')
+            .select('id, codigo, ean, nome, marca, unidade, itens_por_caixa, preco_base, imagem_url, ativo')
+            .eq('catalogo_id', catFor.id)
+            .eq('ativo', true)
+            .order('nome', { ascending: true })
+            .limit(500)
+
+          produtos = (itens || []).map(it => ({
+            id: it.id,
+            codigo: it.codigo || null,
+            nome: it.nome || '',
+            gtin: it.ean || null,
+            marca: it.marca || null,
+            preco: it.preco_base != null ? Number(it.preco_base) : null,
+            unidade: it.unidade || null,
+            itens_por_caixa: it.itens_por_caixa || null,
+            curva: null,
+            imagem_url: it.imagem_url || null,
+          }))
         }
-        const { data: prods } = await supabase
-          .from('produtos')
-          .select('id, codigo, nome, gtin, marca, unidade, itens_por_caixa, curva')
-          .eq('empresa_id', lp.empresa_id_lojista)
-          .in('id', produtoIds)
-
-        produtos = (prods || []).map(p => ({
-          id: p.id,
-          codigo: p.codigo,
-          nome: p.nome,
-          gtin: p.gtin,
-          marca: p.marca,
-          preco: precoPorProd.get(p.id) ?? null,
-          unidade: p.unidade,
-          itens_por_caixa: p.itens_por_caixa,
-          curva: p.curva,
-        }))
       }
     } else if (lp.modo === 'comprados') {
       // Produtos que esse lojista ja comprou nesse fornecedor (ultimos 12 meses)
+      // 'comprados' so faz sentido com lojista alvo
+      if (!lp.empresa_id_lojista) {
+        return NextResponse.json({ error: 'Modo "comprados" requer lojista alvo' }, { status: 400 })
+      }
       const dataLimite = new Date()
       dataLimite.setMonth(dataLimite.getMonth() - 12)
       const { data: pedidos } = await supabase
@@ -177,6 +186,7 @@ export async function GET(
           unidade: p.unidade,
           itens_por_caixa: p.itens_por_caixa,
           curva: p.curva,
+          imagem_url: null,
         }))
       }
     } else if (lp.modo === 'selecao') {
@@ -216,6 +226,7 @@ export async function GET(
           unidade: p.unidade,
           itens_por_caixa: p.itens_por_caixa,
           curva: p.curva,
+          imagem_url: null,
         }))
       }
     }
@@ -226,10 +237,15 @@ export async function GET(
         slug: lp.slug,
         nome: lp.nome,
         modo: lp.modo,
-        cor_marca: lp.cor_marca,
+        cor_marca: null, // legacy, sempre null pra forcar paleta FlowB2B
         logo_url: lp.logo_url || null,
         banner_url: lp.banner_url || null,
         hero_titulo: lp.hero_titulo,
+        descricao: lp.descricao || null,
+        whatsapp_contato: lp.whatsapp_contato || null,
+        instagram_url: lp.instagram_url || null,
+        site_url: lp.site_url || null,
+        endereco_resumido: lp.endereco_resumido || null,
         hero_subtitulo: lp.hero_subtitulo,
         fornecedor: {
           id: fornecedorData?.id || lp.fornecedor_id,

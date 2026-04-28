@@ -102,11 +102,15 @@ export async function PUT(
     const updates: Record<string, any> = {}
     if (body.nome !== undefined) updates.nome = body.nome.trim()
     if (body.modo !== undefined) updates.modo = body.modo
-    if (body.cor_marca !== undefined) updates.cor_marca = body.cor_marca || null
     if (body.logo_url !== undefined) updates.logo_url = body.logo_url || null
     if (body.banner_url !== undefined) updates.banner_url = body.banner_url || null
     if (body.hero_titulo !== undefined) updates.hero_titulo = body.hero_titulo?.trim() || null
     if (body.hero_subtitulo !== undefined) updates.hero_subtitulo = body.hero_subtitulo?.trim() || null
+    if (body.descricao !== undefined) updates.descricao = body.descricao?.trim() || null
+    if (body.whatsapp_contato !== undefined) updates.whatsapp_contato = body.whatsapp_contato?.replace(/\D/g, '') || null
+    if (body.instagram_url !== undefined) updates.instagram_url = body.instagram_url?.trim() || null
+    if (body.site_url !== undefined) updates.site_url = body.site_url?.trim() || null
+    if (body.endereco_resumido !== undefined) updates.endereco_resumido = body.endereco_resumido?.trim() || null
     if (body.ativa !== undefined) updates.ativa = body.ativa
     if (body.slug !== undefined) {
       const newSlug = slugify(body.slug)

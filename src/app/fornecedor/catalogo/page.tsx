@@ -81,6 +81,18 @@ interface ImportConfirmResponse {
   resumo: ImportResumo
 }
 
+interface ImportJobStatus {
+  id: number
+  status: 'pending' | 'processing' | 'completed' | 'error'
+  totalLinhas: number
+  processados: number
+  novos: number
+  atualizados: number
+  erros: number
+  errorMessage: string | null
+  resumo: { total: number; novos: number; atualizados: number; erros: unknown[] } | null
+}
+
 interface ProdutoExtraido {
   codigo_fornecedor: string | null
   codigo_fabricante: string | null
@@ -1743,8 +1755,10 @@ export default function FornecedorCatalogoPage() {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importando, setImportando] = useState(false)
   const [importPreview, setImportPreview] = useState<ImportPreviewResponse | null>(null)
-  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'done'>('upload')
+  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'processing' | 'done'>('upload')
   const [importResult, setImportResult] = useState<ImportConfirmResponse | null>(null)
+  const [importJobId, setImportJobId] = useState<number | null>(null)
+  const [importJobStatus, setImportJobStatus] = useState<ImportJobStatus | null>(null)
 
   // Import PDF state
   const [showPdfImportModal, setShowPdfImportModal] = useState(false)
@@ -2105,18 +2119,47 @@ export default function FornecedorCatalogoPage() {
     let totalFound = 0
     let currentOffset = 0
     let initialTotal = 0
+    let consecutiveFailures = 0
+    const MAX_CONSECUTIVE_FAILURES = 5
 
     while (!done && !imgSyncCancelRef.current) {
+      const ctrl = new AbortController()
+      imgSyncAbortRef.current = ctrl
       try {
-        const ctrl = new AbortController()
-        imgSyncAbortRef.current = ctrl
         const imgRes = await fetch('/api/fornecedor/catalogo/processar-imagens', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ catalogo_id: catalogoId, offset: currentOffset }),
           signal: ctrl.signal,
         })
-        const imgData = await imgRes.json()
+
+        // 5xx ou parsing inesperado nao devem matar o loop — pula 1 item e continua
+        if (!imgRes.ok) {
+          console.warn(`[ImgSync] HTTP ${imgRes.status} no offset ${currentOffset} — pulando 1 e continuando`)
+          consecutiveFailures++
+          currentOffset++
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            console.error('[ImgSync] muitas falhas seguidas, abortando')
+            done = true
+          }
+          continue
+        }
+
+        let imgData: {
+          processed?: number; com_imagem?: number; next_offset?: number;
+          total_sem_imagem?: number; done?: boolean; remaining?: number
+        }
+        try {
+          imgData = await imgRes.json()
+        } catch (parseErr) {
+          console.warn('[ImgSync] resposta nao-JSON (provavel recompile dev) — pulando 1', parseErr)
+          consecutiveFailures++
+          currentOffset++
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) done = true
+          continue
+        }
+
+        consecutiveFailures = 0 // sucesso reseta
         totalProcessed += imgData.processed || 0
         totalFound += imgData.com_imagem || 0
         currentOffset = imgData.next_offset ?? (currentOffset + (imgData.processed || 0))
@@ -2128,9 +2171,21 @@ export default function FornecedorCatalogoPage() {
           total: initialTotal || totalProcessed,
           found: totalFound,
         })
-        done = imgData.done || imgData.remaining === 0 || imgData.processed === 0
-      } catch {
-        done = true
+        // processed==0 aqui significa nao ha mais itens com EAN sem imagem
+        done = imgData.done === true || (imgData.remaining ?? 1) === 0 || (imgData.processed ?? 0) === 0
+      } catch (err) {
+        // AbortError do cancelarSyncImagens encerra de fato; demais sao retryable
+        if (err instanceof Error && err.name === 'AbortError' && imgSyncCancelRef.current) {
+          done = true
+          break
+        }
+        console.warn('[ImgSync] erro de rede — retry', err)
+        consecutiveFailures++
+        currentOffset++
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          console.error('[ImgSync] muitas falhas seguidas, abortando')
+          done = true
+        }
       }
     }
     imgSyncAbortRef.current = null
@@ -2206,21 +2261,68 @@ export default function FornecedorCatalogoPage() {
     }
   }
 
+  // Polling do import job (a cada 2s) ate status final
+  useEffect(() => {
+    if (!importJobId || importStep !== 'processing') return
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/fornecedor/catalogo/importar/job?id=${importJobId}`)
+        if (!res.ok) return
+        const data: ImportJobStatus = await res.json()
+        if (cancelled) return
+        setImportJobStatus(data)
+        if (data.status === 'completed') {
+          setImportResult({
+            success: true,
+            resumo: {
+              total: data.totalLinhas,
+              novos: data.novos,
+              atualizados: data.atualizados,
+              erros: data.erros,
+            },
+          })
+          setImportStep('done')
+          fetchItens()
+        } else if (data.status === 'error') {
+          setToast({ message: data.errorMessage || 'Erro na importacao', type: 'error' })
+          setImportStep('done')
+          fetchItens()
+        }
+      } catch {
+        // silencia falha pontual de polling — proxima tentativa retoma
+      }
+    }
+    tick() // primeira chamada imediata
+    const interval = setInterval(tick, 2000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [importJobId, importStep, fetchItens])
+
   const handleImportConfirm = async () => {
     if (!importFile) return
     setImportando(true)
     try {
       const res = await fetch('/api/fornecedor/catalogo/importar', { method: 'POST', body: buildImportFormData('confirm') })
       const data = await res.json()
-      if (res.ok && data.success) {
-        setImportResult(data)
-        setImportStep('done')
-        fetchItens() // refresh the catalog list
+      if (res.ok && data.success && data.jobId) {
+        setImportJobId(data.jobId)
+        setImportJobStatus({
+          id: data.jobId,
+          status: 'pending',
+          totalLinhas: data.total ?? 0,
+          processados: 0,
+          novos: 0,
+          atualizados: 0,
+          erros: 0,
+          errorMessage: null,
+          resumo: null,
+        })
+        setImportStep('processing')
       } else {
-        setToast({ message: data.error || 'Erro ao importar', type: 'error' })
+        setToast({ message: data.error || 'Erro ao iniciar importacao', type: 'error' })
       }
     } catch {
-      setToast({ message: 'Erro ao importar', type: 'error' })
+      setToast({ message: 'Erro ao iniciar importacao', type: 'error' })
     } finally {
       setImportando(false)
     }
@@ -2337,24 +2439,47 @@ export default function FornecedorCatalogoPage() {
       let totalFound = 0
       let currentOffset = 0
       let initialTotal = 0  // travado na primeira resposta
+      let consecutiveFailures = 0
+      const MAX_CONSECUTIVE_FAILURES = 5
 
       while (!done && !imgSyncCancelRef.current) {
+        const ctrl = new AbortController()
+        imgSyncAbortRef.current = ctrl
         try {
-          const ctrl = new AbortController()
-          imgSyncAbortRef.current = ctrl
           const imgRes = await fetch('/api/fornecedor/catalogo/processar-imagens', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ catalogo_id: catalogoId, offset: currentOffset }),
             signal: ctrl.signal,
           })
-          const imgData = await imgRes.json()
 
+          if (!imgRes.ok) {
+            console.warn(`[ImgSync/PDF] HTTP ${imgRes.status} no offset ${currentOffset}`)
+            consecutiveFailures++
+            currentOffset++
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) done = true
+            continue
+          }
+
+          let imgData: {
+            processed?: number; com_imagem?: number; next_offset?: number;
+            total_sem_imagem?: number; done?: boolean; remaining?: number
+          }
+          try {
+            imgData = await imgRes.json()
+          } catch (parseErr) {
+            console.warn('[ImgSync/PDF] resposta nao-JSON, pulando', parseErr)
+            consecutiveFailures++
+            currentOffset++
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) done = true
+            continue
+          }
+
+          consecutiveFailures = 0
           totalProcessed += imgData.processed || 0
           totalFound += imgData.com_imagem || 0
           currentOffset = imgData.next_offset ?? (currentOffset + (imgData.processed || 0))
 
-          // Total inicial = total_sem_imagem + quantos ja foram achados (reconstrucao fiel)
           if (initialTotal === 0 && imgData.total_sem_imagem != null) {
             initialTotal = (imgData.total_sem_imagem || 0) + totalFound
           }
@@ -2365,9 +2490,16 @@ export default function FornecedorCatalogoPage() {
             found: totalFound,
           })
 
-          done = imgData.done || imgData.remaining === 0 || imgData.processed === 0
-        } catch {
-          done = true
+          done = imgData.done === true || (imgData.remaining ?? 1) === 0 || (imgData.processed ?? 0) === 0
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError' && imgSyncCancelRef.current) {
+            done = true
+            break
+          }
+          console.warn('[ImgSync/PDF] erro de rede, retry', err)
+          consecutiveFailures++
+          currentOffset++
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) done = true
         }
       }
 
@@ -2635,7 +2767,7 @@ export default function FornecedorCatalogoPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setToolbarMenuOpen(false); setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null) }}
+                    onClick={() => { setToolbarMenuOpen(false); setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null); setImportJobId(null); setImportJobStatus(null) }}
                     className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
                   >
                     <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
@@ -2686,7 +2818,7 @@ export default function FornecedorCatalogoPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null) }}
+              onClick={() => { setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null); setImportJobId(null); setImportJobStatus(null) }}
               leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>}
             >
               Importar Excel
@@ -3251,6 +3383,39 @@ export default function FornecedorCatalogoPage() {
                 </div>
               )}
 
+              {importStep === 'processing' && importJobStatus && (
+                <div className="py-6 space-y-4">
+                  <div className="text-center">
+                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#336FB6]/10 mb-3">
+                      <svg className="w-6 h-6 text-[#336FB6] animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.667 0l3.181-3.183m0-4.991v4.991M2.985 9.348h4.992m11.046 0L15.842 6.166a8.25 8.25 0 00-11.667 0L.985 9.348" />
+                      </svg>
+                    </div>
+                    <h4 className="text-lg font-semibold text-gray-900">Importando produtos...</h4>
+                    <p className="text-sm text-gray-500">Pode fechar esta tela; o processamento continua no servidor.</p>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-sm text-gray-700 mb-1">
+                      <span>{importJobStatus.processados} de {importJobStatus.totalLinhas}</span>
+                      <span>{importJobStatus.totalLinhas > 0 ? Math.round((importJobStatus.processados / importJobStatus.totalLinhas) * 100) : 0}%</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+                      <div
+                        className="h-full bg-[#336FB6] transition-all"
+                        style={{ width: `${importJobStatus.totalLinhas > 0 ? (importJobStatus.processados / importJobStatus.totalLinhas) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center gap-4 text-sm">
+                    <span className="text-emerald-600 font-medium">{importJobStatus.novos} novos</span>
+                    <span className="text-blue-600 font-medium">{importJobStatus.atualizados} atualizados</span>
+                    {importJobStatus.erros > 0 && <span className="text-red-600 font-medium">{importJobStatus.erros} erros</span>}
+                  </div>
+                </div>
+              )}
+
               {importStep === 'done' && importResult && (
                 <div className="text-center py-6">
                   <svg className="w-16 h-16 text-emerald-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -3293,6 +3458,11 @@ export default function FornecedorCatalogoPage() {
                     {`Confirmar importacao (${(importPreview?.resumo.novos || 0) + (importPreview?.resumo.atualizados || 0)} itens)`}
                   </Button>
                 </>
+              )}
+              {importStep === 'processing' && (
+                <Button variant="outline" size="sm" onClick={() => setShowImportModal(false)}>
+                  Fechar (continua em background)
+                </Button>
               )}
               {importStep === 'done' && (
                 <Button variant="primary" size="sm" onClick={() => setShowImportModal(false)}>Fechar</Button>

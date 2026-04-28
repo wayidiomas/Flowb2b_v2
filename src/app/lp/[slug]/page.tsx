@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useLpCart } from '@/hooks/useLpCart'
-import { resolveLpAccent, FLOWB2B_BLUE, FLOWB2B_ORANGE } from '@/lib/colors'
+import { FLOWB2B_BLUE, FLOWB2B_ORANGE } from '@/lib/colors'
 import type { LpViewerState } from '@/app/api/lp/[slug]/route'
 
 interface LpProduto {
@@ -17,6 +18,7 @@ interface LpProduto {
   unidade: string | null
   itens_por_caixa: number | null
   curva: string | null
+  imagem_url: string | null
 }
 
 interface LpData {
@@ -25,11 +27,15 @@ interface LpData {
     slug: string
     nome: string
     modo: 'todos' | 'comprados' | 'selecao'
-    cor_marca: string | null
     logo_url: string | null
     banner_url: string | null
     hero_titulo: string | null
     hero_subtitulo: string | null
+    descricao: string | null
+    whatsapp_contato: string | null
+    instagram_url: string | null
+    site_url: string | null
+    endereco_resumido: string | null
     fornecedor: {
       id: number
       cnpj: string
@@ -88,18 +94,15 @@ export default function LandingPagePublica() {
     load()
   }, [slug])
 
-  // Paleta:
-  //   --accent: cor_marca se setada, senao azul FlowB2B (CTAs primarios)
-  //   --accent-2: laranja FlowB2B (botoes + dos produtos, badges destaque)
-  const accentColor = resolveLpAccent(data?.landing_page.cor_marca)
+  // Paleta FIXA FlowB2B: azul (CTA primario) + laranja (accent botao +)
   const cssVars = useMemo(
     () => ({
-      '--accent': accentColor,
+      '--accent': FLOWB2B_BLUE,
       '--accent-fg': '#FFFFFF',
       '--accent-2': FLOWB2B_ORANGE,
       '--brand-blue': FLOWB2B_BLUE,
     }) as React.CSSProperties,
-    [accentColor]
+    []
   )
 
   const podeComprar = data?.viewer_state === 'lojista_vinculado'
@@ -132,8 +135,35 @@ export default function LandingPagePublica() {
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-[#F5F7FA]">
-        <div className="w-10 h-10 border-2 border-[#336FB6]/20 border-t-[#336FB6] rounded-full animate-spin" />
+      <div className="min-h-[100dvh] bg-[#F5F7FA]">
+        <LpTopNav />
+        <div className="max-w-[1200px] mx-auto px-4 pt-6 pb-6">
+          <div className="bg-white rounded-2xl shadow-sm p-5 md:p-6 flex items-center gap-4 animate-pulse">
+            <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gray-200 shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-6 bg-gray-200 rounded w-1/2" />
+              <div className="h-4 bg-gray-100 rounded w-3/4" />
+              <div className="h-3 bg-gray-100 rounded w-2/3" />
+            </div>
+          </div>
+        </div>
+        <div className="max-w-[1200px] mx-auto px-4 py-3">
+          <div className="h-11 bg-gray-200 rounded-xl animate-pulse" />
+        </div>
+        <main className="max-w-[1200px] mx-auto px-4 py-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
+                <div className="aspect-[4/3] bg-gray-100" />
+                <div className="p-3 space-y-2">
+                  <div className="h-3 bg-gray-100 rounded w-1/3" />
+                  <div className="h-4 bg-gray-200 rounded w-full" />
+                  <div className="h-5 bg-gray-200 rounded w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </main>
       </div>
     )
   }
@@ -160,72 +190,89 @@ export default function LandingPagePublica() {
 
   return (
     <div style={cssVars} className="min-h-[100dvh] bg-[#F5F7FA] pb-24 md:pb-0">
-      {/* Header Hero — banner customizado ou gradient da paleta da LP */}
+      {/* Top nav: logo FlowB2B + botao Entrar */}
+      <LpTopNav />
+
+      {/* Header — banner customizado ou nada (hero limpo) */}
       <header className="bg-white border-b border-gray-100">
-        <div
-          className="h-32 md:h-44 relative overflow-hidden"
-          style={
-            lp.banner_url
-              ? { backgroundImage: `url(${lp.banner_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-              : { background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%)` }
-          }
-        >
-          {/* Overlay escuro pra contraste quando tem banner */}
-          {lp.banner_url ? (
+        {lp.banner_url && (
+          <div
+            className="h-40 md:h-56 relative overflow-hidden"
+            style={{
+              backgroundImage: `url(${lp.banner_url})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          >
             <div className="absolute inset-0 bg-black/30" />
-          ) : (
-            <div
-              className="absolute inset-0 opacity-10"
-              style={{
-                backgroundImage:
-                  'radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 30%, white 1px, transparent 1px)',
-                backgroundSize: '40px 40px',
-              }}
-            />
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Card do fornecedor (sobrepoõe o hero) */}
-        <div className="max-w-[1200px] mx-auto px-4 -mt-12 md:-mt-14 pb-5">
-          <div className="bg-white rounded-2xl shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] p-4 md:p-5 flex items-center gap-4">
-            {/* Logo: prioridade lp.logo_url > fornecedor.logo > inicial do nome */}
-            <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
-              {(lp.logo_url || lp.fornecedor.logo) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={lp.logo_url || lp.fornecedor.logo || ''}
-                  alt={fornecedorLabel}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="text-xl font-bold text-gray-400">
-                  {fornecedorLabel.charAt(0).toUpperCase()}
-                </span>
-              )}
-            </div>
-
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-              <h1 className="text-lg md:text-xl font-semibold text-gray-900 truncate">
-                {fornecedorLabel}
-              </h1>
-              <p className="text-xs text-gray-500 mt-0.5">
-                <span className="font-mono">{formatCnpj(lp.fornecedor.cnpj)}</span>
-                <span className="mx-2">·</span>
-                {data.produtos.length} produtos
-              </p>
-              {lp.hero_subtitulo && (
-                <p className="text-sm text-gray-700 mt-1 line-clamp-1">{lp.hero_subtitulo}</p>
-              )}
-            </div>
-
-            {/* Chip status só mostra quando o user pode comprar */}
-            {podeComprar && (
-              <div className="hidden md:flex items-center gap-1.5 bg-green-50 text-green-700 px-2.5 py-1 rounded-full text-xs font-medium shrink-0">
-                <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                Cliente
+        {/* Card do fornecedor */}
+        <div className={`max-w-[1200px] mx-auto px-4 ${lp.banner_url ? '-mt-16 md:-mt-20' : 'pt-6'} pb-6`}>
+          <div className="bg-white rounded-2xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.12)] p-5 md:p-6">
+            <div className="flex items-start md:items-center gap-4 flex-col md:flex-row">
+              {/* Logo: prioridade lp.logo_url > fornecedor.logo > inicial */}
+              <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                {(lp.logo_url || lp.fornecedor.logo) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={lp.logo_url || lp.fornecedor.logo || ''}
+                    alt={fornecedorLabel}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-3xl font-bold text-gray-400">
+                    {fornecedorLabel.charAt(0).toUpperCase()}
+                  </span>
+                )}
               </div>
-            )}
+
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight">
+                  {lp.hero_titulo || `Catalogo ${fornecedorLabel}`}
+                </h1>
+                {lp.hero_subtitulo && (
+                  <p className="text-sm md:text-base text-gray-600 mt-1.5">{lp.hero_subtitulo}</p>
+                )}
+                <div className="flex items-center gap-3 mt-3 flex-wrap text-xs text-gray-500">
+                  <span className="font-medium text-gray-700">{fornecedorLabel}</span>
+                  <span className="text-gray-300">·</span>
+                  <span className="font-mono">{formatCnpj(lp.fornecedor.cnpj)}</span>
+                  <span className="text-gray-300">·</span>
+                  <span>{data.produtos.length} produtos</span>
+                  {lp.endereco_resumido && (
+                    <>
+                      <span className="text-gray-300">·</span>
+                      <span>{lp.endereco_resumido}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* CTAs do hero */}
+              <div className="flex items-center gap-2 shrink-0 self-stretch md:self-auto">
+                {lp.whatsapp_contato && (
+                  <a
+                    href={`https://wa.me/55${lp.whatsapp_contato.replace(/\D/g, '')}?text=${encodeURIComponent(`Ola ${fornecedorLabel}, vim pelo catalogo`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-[#25D366] hover:bg-[#1faa56] text-white text-sm font-medium px-4 py-2.5 transition-all duration-300 active:scale-[0.98]"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654z" />
+                    </svg>
+                    Falar agora
+                  </a>
+                )}
+                {podeComprar && (
+                  <div className="hidden md:flex items-center gap-1.5 bg-green-50 text-green-700 px-2.5 py-1 rounded-full text-xs font-medium">
+                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                    Cliente
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -234,7 +281,7 @@ export default function LandingPagePublica() {
       <ViewerStateBanner viewerState={data.viewer_state} fornecedorNome={fornecedorLabel} slug={slug} />
 
       {/* Search bar sticky */}
-      <div className="sticky top-0 z-30 bg-[#F5F7FA] border-b border-gray-100">
+      <div className="sticky top-12 z-20 bg-[#F5F7FA]/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-[1200px] mx-auto px-4 py-3">
           <div className="relative">
             <input
@@ -242,25 +289,57 @@ export default function LandingPagePublica() {
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar produto, codigo ou marca..."
-              className="w-full h-11 pl-11 pr-4 rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-[var(--accent)] text-sm placeholder:text-gray-400 transition-colors"
+              className="w-full h-12 pl-12 pr-4 rounded-2xl border border-gray-200 bg-white shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] focus:outline-none focus:border-[#336FB6] focus:ring-2 focus:ring-[#336FB6]/15 text-sm placeholder:text-gray-400 transition-all"
             />
-            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
             </svg>
+            {busca && (
+              <button
+                onClick={() => setBusca('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full"
+                aria-label="Limpar busca"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
+          <p className="text-[11px] text-gray-500 mt-2">
+            {produtosFiltrados.length} {produtosFiltrados.length === 1 ? 'produto' : 'produtos'}
+            {busca && ` encontrados pra "${busca}"`}
+          </p>
         </div>
       </div>
 
       {/* Grid de produtos */}
       <main className="max-w-[1200px] mx-auto px-4 py-5">
         {produtosFiltrados.length === 0 ? (
-          <div className="bg-white rounded-2xl py-16 text-center border border-gray-100">
-            <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-            <p className="text-sm text-gray-500">
+          <div className="bg-white rounded-2xl py-16 px-6 text-center border border-gray-100">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center" style={{
+              background: 'linear-gradient(135deg, rgba(51,111,182,0.08) 0%, rgba(255,170,17,0.08) 100%)',
+            }}>
+              <svg className="w-8 h-8 text-[#336FB6]/50" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+            </div>
+            <h3 className="text-base font-medium text-gray-900 mb-1">
               {busca ? 'Nenhum produto encontrado' : 'Catalogo em preparacao'}
+            </h3>
+            <p className="text-sm text-gray-500 max-w-sm mx-auto">
+              {busca
+                ? `Tente buscar por outro termo ou nome de produto`
+                : `${fornecedorLabel} ainda nao publicou produtos no catalogo`}
             </p>
+            {busca && (
+              <button
+                onClick={() => setBusca('')}
+                className="mt-4 text-sm text-[#336FB6] font-medium hover:underline"
+              >
+                Limpar busca
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
@@ -287,51 +366,67 @@ export default function LandingPagePublica() {
         )}
       </main>
 
-      {/* Footer cart mobile (estilo iFood) */}
-      {podeComprar && count > 0 && (
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200 shadow-[0_-4px_16px_-4px_rgba(0,0,0,0.08)] px-4 py-3 flex items-center justify-between"
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className="relative w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: 'var(--accent)' }}
-            >
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-              </svg>
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-white border-2 border-[var(--accent)] flex items-center justify-center text-[10px] font-bold" style={{ color: 'var(--accent)' }}>
-                {count}
-              </span>
-            </div>
-            <div className="text-left">
-              <p className="text-xs text-gray-500">{count} {count === 1 ? 'item' : 'itens'}</p>
-              <p className="text-sm font-semibold text-gray-900">{formatBRL(total)}</p>
-            </div>
+      {/* Sobre o fornecedor */}
+      {lp.descricao && (
+        <section className="max-w-[1200px] mx-auto px-4 mt-12 mb-8">
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 md:p-8">
+            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-gray-500 mb-3">
+              Sobre {fornecedorLabel}
+            </p>
+            <p className="text-sm md:text-base text-gray-700 leading-relaxed whitespace-pre-line">
+              {lp.descricao}
+            </p>
           </div>
-          <span className="text-sm font-medium" style={{ color: 'var(--accent)' }}>
-            Ver carrinho
-          </span>
-        </button>
+        </section>
       )}
 
-      {/* Botão flutuante carrinho desktop */}
-      {podeComprar && count > 0 && (
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="hidden md:flex fixed top-1/2 right-6 -translate-y-1/2 z-40 items-center gap-2.5 bg-white hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)] shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)] rounded-2xl px-4 py-3 transition-all"
-        >
-          <div className="relative">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} style={{ color: 'var(--accent)' }}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-            </svg>
-            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
-              {count}
-            </span>
+      {/* Footer */}
+      <footer className="max-w-[1200px] mx-auto px-4 mt-8 mb-24 md:mb-8">
+        <div className="border-t border-gray-200 pt-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500">Powered by</span>
+            <span className="text-sm font-bold" style={{ color: FLOWB2B_BLUE }}>FlowB2B</span>
           </div>
-          <span className="text-sm font-semibold text-gray-900">{formatBRL(total)}</span>
-        </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            {lp.whatsapp_contato && (
+              <a
+                href={`https://wa.me/55${lp.whatsapp_contato.replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-gray-600 hover:text-[#25D366] transition-colors"
+              >
+                WhatsApp
+              </a>
+            )}
+            {lp.instagram_url && (
+              <a
+                href={lp.instagram_url.startsWith('http') ? lp.instagram_url : `https://instagram.com/${lp.instagram_url.replace('@', '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-gray-600 hover:text-pink-600 transition-colors"
+              >
+                Instagram
+              </a>
+            )}
+            {lp.site_url && (
+              <a
+                href={lp.site_url.startsWith('http') ? lp.site_url : `https://${lp.site_url}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-gray-600 hover:text-[#336FB6] transition-colors"
+              >
+                Site
+              </a>
+            )}
+            <span className="text-xs text-gray-400">·</span>
+            <span className="text-xs text-gray-400 font-mono">{formatCnpj(lp.fornecedor.cnpj)}</span>
+          </div>
+        </div>
+      </footer>
+
+      {/* Carrinho flutuante GLOW NEON — sempre visivel quando lojista_vinculado */}
+      {podeComprar && (
+        <FloatingCart count={count} total={total} onClick={() => setDrawerOpen(true)} />
       )}
 
       {/* Drawer */}
@@ -364,12 +459,33 @@ function ProdutoCard({
   onUpdateQty: (q: number) => void
 }) {
   return (
-    <article className="bg-white rounded-2xl border border-gray-100 hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.06)] transition-all duration-300 overflow-hidden">
+    <article className="group bg-white rounded-2xl border border-gray-100 hover:border-[#336FB6]/30 hover:shadow-[0_8px_24px_-8px_rgba(51,111,182,0.18)] hover:-translate-y-0.5 transition-all duration-300 overflow-hidden">
       {/* Imagem com botao + flutuante */}
-      <div className="relative aspect-[4/3] bg-gray-50 flex items-center justify-center">
-        <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.25}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
-        </svg>
+      <div
+        className="relative aspect-[4/3] flex items-center justify-center overflow-hidden"
+        style={{
+          background: produto.imagem_url
+            ? '#F5F7FA'
+            : 'linear-gradient(135deg, rgba(51,111,182,0.04) 0%, rgba(255,170,17,0.06) 100%)',
+        }}
+      >
+        {produto.imagem_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={produto.imagem_url}
+            alt={produto.nome}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <svg className="w-14 h-14 text-[#336FB6]/30" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+          </svg>
+        )}
+        {produto.marca && (
+          <span className="absolute top-2 left-2 inline-flex items-center bg-white/90 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-700 shadow-sm">
+            {produto.marca}
+          </span>
+        )}
 
         {podeComprar && noCarrinho === 0 && produto.preco != null && produto.preco > 0 && (
           <button
@@ -468,6 +584,163 @@ function ViewerStateBanner({
           </Link>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Top nav (logo FlowB2B + dropdown Entrar) ────────────────────────────────
+function LpTopNav() {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const loginOptions = [
+    { label: 'Lojista', href: '/login' },
+    { label: 'Fornecedor', href: '/fornecedor/login' },
+    { label: 'Representante', href: '/representante/login' },
+  ]
+
+  return (
+    <nav className="bg-[#336FB6] h-12 w-full sticky top-0 z-30 shadow-sm">
+      <div className="max-w-[1200px] mx-auto px-4 h-full flex items-center justify-between">
+        <Link href="/" className="flex items-center">
+          <Image
+            src="/assets/branding/logo-white.png"
+            alt="FlowB2B"
+            width={96}
+            height={28}
+            priority
+            className="object-contain"
+          />
+        </Link>
+
+        <div className="relative" ref={ref}>
+          <button
+            onClick={() => setOpen(!open)}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition-colors duration-300"
+          >
+            Entrar
+            <svg
+              className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {open && (
+            <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-lg py-1.5 min-w-[180px] z-50 ring-1 ring-black/5">
+              <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-gray-500 px-4 pt-2 pb-1">
+                Tipo de conta
+              </p>
+              {loginOptions.map(opt => (
+                <Link
+                  key={opt.label}
+                  href={opt.href}
+                  onClick={() => setOpen(false)}
+                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  {opt.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </nav>
+  )
+}
+
+// ─── Floating Cart com GLOW NEON (laranja → azul) ───────────────────────────
+function FloatingCart({
+  count,
+  total,
+  onClick,
+}: {
+  count: number
+  total: number
+  onClick: () => void
+}) {
+  const isEmpty = count === 0
+
+  return (
+    <div className="fixed bottom-5 right-5 z-40">
+      <style jsx>{`
+        @keyframes neonGlow {
+          0%, 100% {
+            box-shadow:
+              0 0 20px rgba(255, 170, 17, 0.5),
+              0 0 40px rgba(51, 111, 182, 0.4),
+              0 4px 24px rgba(0, 0, 0, 0.15);
+          }
+          50% {
+            box-shadow:
+              0 0 30px rgba(255, 170, 17, 0.7),
+              0 0 60px rgba(51, 111, 182, 0.5),
+              0 4px 24px rgba(0, 0, 0, 0.15);
+          }
+        }
+        .neon-cart {
+          animation: neonGlow 2.5s ease-in-out infinite;
+        }
+      `}</style>
+
+      <button
+        onClick={onClick}
+        disabled={isEmpty}
+        className={`group relative inline-flex items-center gap-3 rounded-full bg-white pl-3 pr-5 py-3 transition-all duration-300 active:scale-[0.97] ${
+          isEmpty ? 'opacity-90 cursor-not-allowed' : 'neon-cart hover:scale-[1.04]'
+        }`}
+      >
+        {/* Borda gradient laranja → azul */}
+        <span
+          aria-hidden
+          className="absolute inset-0 rounded-full pointer-events-none"
+          style={{
+            padding: '2px',
+            background: `linear-gradient(135deg, ${FLOWB2B_ORANGE} 0%, ${FLOWB2B_BLUE} 100%)`,
+            WebkitMask:
+              'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+            WebkitMaskComposite: 'xor',
+            maskComposite: 'exclude',
+          }}
+        />
+
+        <div
+          className="relative w-10 h-10 rounded-full flex items-center justify-center text-white"
+          style={{
+            background: `linear-gradient(135deg, ${FLOWB2B_ORANGE} 0%, ${FLOWB2B_BLUE} 100%)`,
+          }}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+          </svg>
+          {count > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-white border-2 border-[#FFAA11] text-[10px] font-bold flex items-center justify-center text-gray-900">
+              {count}
+            </span>
+          )}
+        </div>
+
+        <div className="text-left">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-500 leading-none">
+            Carrinho
+          </p>
+          <p className="text-sm font-semibold text-gray-900 leading-tight mt-0.5">
+            {isEmpty ? 'Vazio' : formatBRL(total)}
+          </p>
+        </div>
+      </button>
     </div>
   )
 }

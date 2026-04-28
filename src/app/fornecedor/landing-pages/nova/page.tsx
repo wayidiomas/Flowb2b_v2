@@ -17,12 +17,16 @@ export default function NovaLandingPagePage() {
   const [lojistas, setLojistas] = useState<LojistaListItem[]>([])
 
   const [form, setForm] = useState({
-    empresa_id_lojista: '',
+    empresa_id_lojista: '', // vazio = LP generica publica
     nome: '',
     modo: 'todos' as LpModo,
-    cor_marca: '',
     hero_titulo: '',
     hero_subtitulo: '',
+    descricao: '',
+    whatsapp_contato: '',
+    instagram_url: '',
+    site_url: '',
+    endereco_resumido: '',
   })
 
   useEffect(() => {
@@ -44,16 +48,12 @@ export default function NovaLandingPagePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.empresa_id_lojista) {
-      setError('Selecione um lojista')
-      return
-    }
     if (!form.nome.trim()) {
       setError('Nome obrigatorio')
       return
     }
-    if (form.cor_marca && !/^#[0-9A-Fa-f]{6}$/.test(form.cor_marca)) {
-      setError('Cor invalida (use formato #RRGGBB)')
+    if (form.modo === 'comprados' && !form.empresa_id_lojista) {
+      setError('Modo "ja comprados" exige um lojista alvo')
       return
     }
 
@@ -63,12 +63,16 @@ export default function NovaLandingPagePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          empresa_id_lojista: Number(form.empresa_id_lojista),
+          empresa_id_lojista: form.empresa_id_lojista ? Number(form.empresa_id_lojista) : null,
           nome: form.nome.trim(),
           modo: form.modo,
-          cor_marca: form.cor_marca || undefined,
           hero_titulo: form.hero_titulo.trim() || undefined,
           hero_subtitulo: form.hero_subtitulo.trim() || undefined,
+          descricao: form.descricao.trim() || undefined,
+          whatsapp_contato: form.whatsapp_contato.trim() || undefined,
+          instagram_url: form.instagram_url.trim() || undefined,
+          site_url: form.site_url.trim() || undefined,
+          endereco_resumido: form.endereco_resumido.trim() || undefined,
         }),
       })
       const data = await res.json()
@@ -115,41 +119,29 @@ export default function NovaLandingPagePage() {
           </p>
         </div>
 
-        {lojistas.length === 0 ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
-            <h3 className="text-sm font-medium text-amber-900 mb-1">Nenhum lojista cadastrado</h3>
-            <p className="text-sm text-amber-800 mb-4">
-              Pra criar uma landing page voce precisa primeiro cadastrar o lojista alvo.
-            </p>
-            <Link
-              href="/fornecedor/lojistas/novo"
-              className="inline-flex items-center gap-2 rounded-full bg-amber-900 hover:bg-amber-950 text-white text-sm font-medium px-5 py-2.5 transition-all duration-300"
+        <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl p-6 space-y-5">
+          {/* Lojista alvo (opcional) */}
+          <div>
+            <label htmlFor="lojista" className="block text-xs font-medium text-gray-700 mb-1.5">
+              Lojista alvo <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <select
+              id="lojista"
+              value={form.empresa_id_lojista}
+              onChange={(e) => { setForm({ ...form, empresa_id_lojista: e.target.value }); setError('') }}
+              className="w-full h-11 px-3.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6] text-sm"
             >
-              Cadastrar lojista
-            </Link>
+              <option value="">LP generica (publica para todos)</option>
+              {lojistas.map(l => (
+                <option key={l.empresa_id} value={l.empresa_id}>
+                  {l.nome_fantasia || l.razao_social} · {l.cnpj}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-500 mt-1">
+              LP generica e publica e qualquer um pode ver. Lojista alvo e usado pra modo &quot;ja comprados&quot;.
+            </p>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl p-6 space-y-5">
-            {/* Lojista */}
-            <div>
-              <label htmlFor="lojista" className="block text-xs font-medium text-gray-700 mb-1.5">
-                Lojista alvo <span className="text-rose-500">*</span>
-              </label>
-              <select
-                id="lojista"
-                value={form.empresa_id_lojista}
-                onChange={(e) => { setForm({ ...form, empresa_id_lojista: e.target.value }); setError('') }}
-                className="w-full h-11 px-3.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1F150C]/15 focus:border-[#1F150C] text-sm"
-                required
-              >
-                <option value="">Selecione um lojista</option>
-                {lojistas.map(l => (
-                  <option key={l.empresa_id} value={l.empresa_id}>
-                    {l.nome_fantasia || l.razao_social} · {l.cnpj}
-                  </option>
-                ))}
-              </select>
-            </div>
 
             {/* Nome da LP */}
             <div>
@@ -205,33 +197,11 @@ export default function NovaLandingPagePage() {
               </div>
             </div>
 
-            {/* Personalizacao (opcional) */}
+            {/* Personalizacao */}
             <div className="border-t border-gray-100 pt-5 space-y-4">
               <p className="text-xs font-medium uppercase tracking-[0.15em] text-gray-500">
                 Personalizacao (opcional)
               </p>
-
-              <div>
-                <label htmlFor="cor_marca" className="block text-xs font-medium text-gray-700 mb-1.5">
-                  Cor da marca
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    id="cor_marca"
-                    type="color"
-                    value={form.cor_marca || '#1F150C'}
-                    onChange={(e) => setForm({ ...form, cor_marca: e.target.value })}
-                    className="w-12 h-11 rounded-lg border border-gray-300 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={form.cor_marca}
-                    onChange={(e) => setForm({ ...form, cor_marca: e.target.value })}
-                    placeholder="#RRGGBB"
-                    className="flex-1 h-11 px-3.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1F150C]/15 focus:border-[#1F150C] font-mono text-sm"
-                  />
-                </div>
-              </div>
 
               <div>
                 <label htmlFor="hero_titulo" className="block text-xs font-medium text-gray-700 mb-1.5">
@@ -242,8 +212,8 @@ export default function NovaLandingPagePage() {
                   type="text"
                   value={form.hero_titulo}
                   onChange={(e) => setForm({ ...form, hero_titulo: e.target.value })}
-                  placeholder="Ex: Catalogo exclusivo MEDICALVET"
-                  className="w-full h-11 px-3.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1F150C]/15 focus:border-[#1F150C] text-sm"
+                  placeholder="Ex: Catalogo exclusivo CDA"
+                  className="w-full h-11 px-3.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6] text-sm"
                 />
               </div>
 
@@ -256,10 +226,83 @@ export default function NovaLandingPagePage() {
                   type="text"
                   value={form.hero_subtitulo}
                   onChange={(e) => setForm({ ...form, hero_subtitulo: e.target.value })}
-                  placeholder="Ex: Selecionado especialmente para Pet Shop ABC"
-                  className="w-full h-11 px-3.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1F150C]/15 focus:border-[#1F150C] text-sm"
+                  placeholder="Ex: Os melhores precos pra sua loja"
+                  className="w-full h-11 px-3.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6] text-sm"
                 />
               </div>
+
+              <div>
+                <label htmlFor="descricao" className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Descricao &quot;Sobre voce&quot;
+                </label>
+                <textarea
+                  id="descricao"
+                  value={form.descricao}
+                  onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+                  rows={3}
+                  placeholder="Conte um pouco sobre seu negocio..."
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="whatsapp_contato" className="block text-xs font-medium text-gray-700 mb-1.5">
+                    WhatsApp
+                  </label>
+                  <input
+                    id="whatsapp_contato"
+                    type="tel"
+                    value={form.whatsapp_contato}
+                    onChange={(e) => setForm({ ...form, whatsapp_contato: e.target.value })}
+                    placeholder="(11) 99999-9999"
+                    className="w-full h-11 px-3.5 rounded-lg border border-gray-300 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6]"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="endereco_resumido" className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Cidade / endereco
+                  </label>
+                  <input
+                    id="endereco_resumido"
+                    type="text"
+                    value={form.endereco_resumido}
+                    onChange={(e) => setForm({ ...form, endereco_resumido: e.target.value })}
+                    placeholder="Ex: Sao Paulo / SP"
+                    className="w-full h-11 px-3.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6]"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="instagram_url" className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Instagram
+                  </label>
+                  <input
+                    id="instagram_url"
+                    type="text"
+                    value={form.instagram_url}
+                    onChange={(e) => setForm({ ...form, instagram_url: e.target.value })}
+                    placeholder="@suaempresa"
+                    className="w-full h-11 px-3.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6]"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="site_url" className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Site
+                  </label>
+                  <input
+                    id="site_url"
+                    type="text"
+                    value={form.site_url}
+                    onChange={(e) => setForm({ ...form, site_url: e.target.value })}
+                    placeholder="suaempresa.com.br"
+                    className="w-full h-11 px-3.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6]"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[11px] text-gray-500">
+                Logo e banner sao adicionados depois de criar a LP.
+              </p>
             </div>
 
             {error && (
@@ -278,13 +321,12 @@ export default function NovaLandingPagePage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-full bg-[#1F150C] hover:bg-[#2a1d12] text-white text-sm font-medium px-5 py-2.5 transition-all duration-300 active:scale-[0.98] disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full bg-[#336FB6] hover:bg-[#2660A5] text-white text-sm font-medium px-5 py-2.5 transition-all duration-300 active:scale-[0.98] disabled:opacity-50"
               >
                 {submitting ? 'Criando...' : 'Criar landing page'}
               </button>
             </div>
           </form>
-        )}
       </div>
     </FornecedorLayout>
   )

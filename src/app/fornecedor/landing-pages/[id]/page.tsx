@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { FornecedorLayout } from '@/components/layout/FornecedorLayout'
 import { Skeleton, Modal, ModalHeader, ModalTitle, ModalBody, ModalFooter, Button } from '@/components/ui'
 import { LP_MODO_LABELS, LP_MODO_DESCRIPTIONS } from '@/lib/lp-helpers'
-import { LP_COLOR_PRESETS, FLOWB2B_BLUE, resolveLpAccent } from '@/lib/colors'
+import { FLOWB2B_BLUE, FLOWB2B_ORANGE } from '@/lib/colors'
 import type { LandingPage, LpModo } from '@/types/landing-page'
 
 export default function LandingPageDetalhePage() {
@@ -25,9 +25,13 @@ export default function LandingPageDetalhePage() {
   const [form, setForm] = useState({
     nome: '',
     modo: 'todos' as LpModo,
-    cor_marca: '',
     hero_titulo: '',
     hero_subtitulo: '',
+    descricao: '',
+    whatsapp_contato: '',
+    instagram_url: '',
+    site_url: '',
+    endereco_resumido: '',
     ativa: true,
   })
 
@@ -42,9 +46,13 @@ export default function LandingPageDetalhePage() {
           setForm({
             nome: data.landing_page.nome,
             modo: data.landing_page.modo,
-            cor_marca: data.landing_page.cor_marca || '',
             hero_titulo: data.landing_page.hero_titulo || '',
             hero_subtitulo: data.landing_page.hero_subtitulo || '',
+            descricao: data.landing_page.descricao || '',
+            whatsapp_contato: data.landing_page.whatsapp_contato || '',
+            instagram_url: data.landing_page.instagram_url || '',
+            site_url: data.landing_page.site_url || '',
+            endereco_resumido: data.landing_page.endereco_resumido || '',
             ativa: data.landing_page.ativa,
           })
         } else {
@@ -74,9 +82,13 @@ export default function LandingPageDetalhePage() {
         body: JSON.stringify({
           nome: form.nome.trim(),
           modo: form.modo,
-          cor_marca: form.cor_marca || undefined,
           hero_titulo: form.hero_titulo.trim() || null,
           hero_subtitulo: form.hero_subtitulo.trim() || null,
+          descricao: form.descricao.trim() || null,
+          whatsapp_contato: form.whatsapp_contato.trim() || null,
+          instagram_url: form.instagram_url.trim() || null,
+          site_url: form.site_url.trim() || null,
+          endereco_resumido: form.endereco_resumido.trim() || null,
           ativa: form.ativa,
         }),
       })
@@ -277,60 +289,24 @@ export default function LandingPageDetalhePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                Cor da marca
-              </label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {LP_COLOR_PRESETS.map(p => (
-                  <button
-                    key={p.value}
-                    type="button"
-                    onClick={() => setForm({ ...form, cor_marca: p.value })}
-                    title={p.label}
-                    className={`w-8 h-8 rounded-full transition-all ${form.cor_marca === p.value ? 'ring-2 ring-offset-2 ring-gray-900' : 'hover:scale-110'}`}
-                    style={{ background: p.swatch }}
-                  />
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, cor_marca: '' })}
-                  title="Padrao FlowB2B"
-                  className={`h-8 px-3 rounded-full border text-xs font-medium transition-all ${
-                    !form.cor_marca ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 text-gray-700 hover:border-gray-400'
-                  }`}
-                >
-                  Padrao
-                </button>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={form.cor_marca || FLOWB2B_BLUE}
-                  onChange={(e) => setForm({ ...form, cor_marca: e.target.value })}
-                  className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer"
-                />
-                <input
-                  type="text"
-                  value={form.cor_marca}
-                  onChange={(e) => setForm({ ...form, cor_marca: e.target.value })}
-                  placeholder="#RRGGBB"
-                  className="flex-1 h-10 px-3 rounded-lg border border-gray-300 font-mono text-sm"
-                />
-              </div>
+          <div className="rounded-xl bg-gray-50 px-3 py-2.5 flex items-center gap-3 text-xs text-gray-600">
+            <div className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded-full" style={{ background: FLOWB2B_BLUE }} />
+              <span className="w-3 h-3 rounded-full" style={{ background: FLOWB2B_ORANGE }} />
             </div>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 cursor-pointer h-10">
-                <input
-                  type="checkbox"
-                  checked={form.ativa}
-                  onChange={(e) => setForm({ ...form, ativa: e.target.checked })}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm text-gray-700">LP ativa (acessivel publicamente)</span>
-              </label>
-            </div>
+            <span>A LP usa o azul e laranja FlowB2B padrao. A identidade visual fica no logo + banner.</span>
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.ativa}
+                onChange={(e) => setForm({ ...form, ativa: e.target.checked })}
+                className="w-4 h-4"
+              />
+              <span className="text-sm text-gray-700">LP ativa (acessivel publicamente)</span>
+            </label>
           </div>
 
           <div>
@@ -359,6 +335,89 @@ export default function LandingPageDetalhePage() {
             />
           </div>
 
+          {/* Sobre o fornecedor */}
+          <div className="border-t border-gray-100 pt-5">
+            <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-gray-500 mb-3">
+              Sobre voce
+            </p>
+            <div>
+              <label htmlFor="descricao" className="block text-xs font-medium text-gray-700 mb-1.5">
+                Descricao (opcional)
+              </label>
+              <textarea
+                id="descricao"
+                value={form.descricao}
+                onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+                rows={4}
+                placeholder="Conte um pouco sobre seu negocio, anos de mercado, diferenciais..."
+                className="w-full px-3.5 py-2.5 rounded-lg border border-gray-300 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6]"
+              />
+              <p className="text-[11px] text-gray-500 mt-1">Aparece em uma secao 'Sobre' na LP publica.</p>
+            </div>
+          </div>
+
+          {/* Contato */}
+          <div className="border-t border-gray-100 pt-5">
+            <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-gray-500 mb-3">
+              Contato e redes
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="whatsapp_contato" className="block text-xs font-medium text-gray-700 mb-1.5">
+                  WhatsApp (com DDD)
+                </label>
+                <input
+                  id="whatsapp_contato"
+                  type="tel"
+                  value={form.whatsapp_contato}
+                  onChange={(e) => setForm({ ...form, whatsapp_contato: e.target.value })}
+                  placeholder="(11) 99999-9999"
+                  className="w-full h-11 px-3.5 rounded-lg border border-gray-300 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6]"
+                />
+                <p className="text-[11px] text-gray-500 mt-1">Aparece como botao verde &quot;Falar agora&quot; no hero.</p>
+              </div>
+              <div>
+                <label htmlFor="endereco_resumido" className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Cidade / endereco
+                </label>
+                <input
+                  id="endereco_resumido"
+                  type="text"
+                  value={form.endereco_resumido}
+                  onChange={(e) => setForm({ ...form, endereco_resumido: e.target.value })}
+                  placeholder="Ex: Sao Paulo / SP"
+                  className="w-full h-11 px-3.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6]"
+                />
+              </div>
+              <div>
+                <label htmlFor="instagram_url" className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Instagram
+                </label>
+                <input
+                  id="instagram_url"
+                  type="text"
+                  value={form.instagram_url}
+                  onChange={(e) => setForm({ ...form, instagram_url: e.target.value })}
+                  placeholder="@suaempresa ou link completo"
+                  className="w-full h-11 px-3.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6]"
+                />
+              </div>
+              <div>
+                <label htmlFor="site_url" className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Site
+                </label>
+                <input
+                  id="site_url"
+                  type="text"
+                  value={form.site_url}
+                  onChange={(e) => setForm({ ...form, site_url: e.target.value })}
+                  placeholder="suaempresa.com.br"
+                  className="w-full h-11 px-3.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/15 focus:border-[#336FB6]"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Live preview do hero */}
           <div className="border-t border-gray-100 pt-5">
             <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-gray-500 mb-3">
@@ -367,9 +426,9 @@ export default function LandingPageDetalhePage() {
             <HeroPreview
               banner_url={lp.banner_url}
               logo_url={lp.logo_url}
-              cor_marca={form.cor_marca || null}
               hero_titulo={form.hero_titulo}
               hero_subtitulo={form.hero_subtitulo}
+              whatsapp_contato={form.whatsapp_contato}
             />
           </div>
 
@@ -534,32 +593,31 @@ function ImageUploader({
 function HeroPreview({
   banner_url,
   logo_url,
-  cor_marca,
   hero_titulo,
   hero_subtitulo,
+  whatsapp_contato,
 }: {
   banner_url: string | null
   logo_url: string | null
-  cor_marca: string | null
   hero_titulo: string
   hero_subtitulo: string
+  whatsapp_contato: string
 }) {
-  const accent = resolveLpAccent(cor_marca)
   return (
-    <div className="rounded-2xl overflow-hidden border border-gray-200 bg-white">
+    <div className="rounded-2xl overflow-hidden border border-gray-200 bg-[#F5F7FA]">
       <div
-        className="h-24 relative"
+        className="h-28 relative"
         style={
           banner_url
             ? { backgroundImage: `url(${banner_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-            : { background: `linear-gradient(135deg, ${accent} 0%, ${accent}dd 100%)` }
+            : { background: `linear-gradient(135deg, ${FLOWB2B_BLUE} 0%, #2660A5 60%, ${FLOWB2B_ORANGE} 130%)` }
         }
       >
         {banner_url && <div className="absolute inset-0 bg-black/30" />}
       </div>
-      <div className="px-4 -mt-8 pb-4">
+      <div className="px-4 -mt-10 pb-4">
         <div className="bg-white rounded-xl shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)] p-3 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+          <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
             {logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logo_url} alt="logo" className="w-full h-full object-cover" />
@@ -571,6 +629,11 @@ function HeroPreview({
             <p className="text-sm font-semibold text-gray-900 truncate">{hero_titulo || 'Titulo do hero'}</p>
             {hero_subtitulo && <p className="text-xs text-gray-500 truncate">{hero_subtitulo}</p>}
           </div>
+          {whatsapp_contato && (
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-[#25D366] text-white text-[10px] font-medium px-2 py-1 shrink-0">
+              WhatsApp
+            </span>
+          )}
         </div>
       </div>
     </div>
