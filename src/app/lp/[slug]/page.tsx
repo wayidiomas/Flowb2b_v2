@@ -305,8 +305,8 @@ export default function LandingPagePublica() {
       {/* Banner condicional (chip discreto) */}
       <ViewerStateBanner viewerState={data.viewer_state} fornecedorNome={fornecedorLabel} slug={slug} />
 
-      {/* Search bar sticky (logo abaixo da pill nav flutuante) */}
-      <div className="sticky top-20 z-20 bg-[#F5F7FA]/90 backdrop-blur-md border-b border-gray-100">
+      {/* Search bar sticky no topo (cobrindo onde a pill nav some) */}
+      <div className="sticky top-2 z-20">
         <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 py-3">
           <div className="relative">
             <input
@@ -314,7 +314,7 @@ export default function LandingPagePublica() {
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar produto, codigo ou marca..."
-              className="w-full h-12 pl-12 pr-4 rounded-2xl border border-gray-200 bg-white shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] focus:outline-none focus:border-[#336FB6] focus:ring-2 focus:ring-[#336FB6]/15 text-sm placeholder:text-gray-400 transition-all"
+              className="w-full h-12 pl-12 pr-4 rounded-2xl border border-gray-200 bg-white shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)] focus:outline-none focus:border-[#336FB6] focus:ring-2 focus:ring-[#336FB6]/15 text-sm placeholder:text-gray-400 transition-all"
             />
             <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -383,6 +383,9 @@ export default function LandingPagePublica() {
                       nome: p.nome,
                       preco: p.preco || 0,
                       itens_por_caixa: p.itens_por_caixa,
+                      imagem_url: p.imagem_url,
+                      marca: p.marca,
+                      unidade: p.unidade,
                     })
                   }}
                   onUpdateQty={(q) => updateQty(p.id, q)}
@@ -623,14 +626,29 @@ function ViewerStateBanner({
   )
 }
 
-// ─── Top nav: pill flutuante FlowB2B (mesmo estilo do site marketing) ────────
+// ─── Top nav: pill flutuante FlowB2B (some no scroll down) ───────────────────
 function LpTopNav() {
   const [scrolled, setScrolled] = useState(false)
+  const [hidden, setHidden] = useState(false)
   const [entrarOpen, setEntrarOpen] = useState(false)
   const entrarRef = useRef<HTMLDivElement>(null)
+  const lastScrollY = useRef(0)
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 80)
+    const onScroll = () => {
+      const y = window.scrollY
+      setScrolled(y > 80)
+
+      // Auto-hide: esconde ao rolar pra baixo, volta ao rolar pra cima
+      if (y < 80) {
+        setHidden(false)
+      } else if (y > lastScrollY.current + 8) {
+        setHidden(true)
+      } else if (y < lastScrollY.current - 8) {
+        setHidden(false)
+      }
+      lastScrollY.current = y
+    }
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -652,7 +670,13 @@ function LpTopNav() {
   ]
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 pointer-events-none px-4">
+    <header
+      className={[
+        'fixed top-0 left-0 right-0 z-50 pointer-events-none px-4',
+        'transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]',
+        hidden ? '-translate-y-[120%]' : 'translate-y-0',
+      ].join(' ')}
+    >
       <nav
         className={[
           'mt-4 mx-auto w-full max-w-[1680px] 2xl:max-w-[1920px]',
@@ -1006,87 +1030,239 @@ function CartDrawer({
   onRemove: (id: number) => void
   onCheckout: () => void
 }) {
+  const totalItens = items.reduce((s, i) => s + i.quantidade, 0)
+  const totalCaixas = items.reduce((s, i) => s + (i.itens_por_caixa ? i.quantidade : 0), 0)
+
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative ml-auto w-full max-w-[420px] h-full bg-white flex flex-col shadow-2xl">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-gray-500">Seu carrinho</p>
-            <h3 className="text-base font-semibold text-gray-900">{items.length} produtos</h3>
+      <style jsx>{`
+        @keyframes drawerFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes drawerSlideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+        .drawer-overlay {
+          animation: drawerFadeIn 0.2s ease-out;
+        }
+        .drawer-panel {
+          animation: drawerSlideIn 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+      `}</style>
+      <div
+        className="drawer-overlay absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="drawer-panel relative ml-auto w-full max-w-[460px] h-full bg-[#F9FAFB] flex flex-col shadow-2xl">
+        {/* Header com gradient FlowB2B */}
+        <div
+          className="px-5 py-5 text-white relative overflow-hidden"
+          style={{
+            background: `linear-gradient(135deg, ${FLOWB2B_BLUE} 0%, #2A5C9A 60%, ${FLOWB2B_ORANGE} 180%)`,
+          }}
+        >
+          <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center ring-1 ring-white/20">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs text-white/70 uppercase tracking-wider font-medium">Seu carrinho</p>
+                <h3 className="text-lg font-bold leading-tight">
+                  {items.length === 0
+                    ? 'Vazio'
+                    : `${items.length} ${items.length === 1 ? 'produto' : 'produtos'}`}
+                </h3>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/15 rounded-full transition-colors"
+              aria-label="Fechar"
+            >
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full"
-          >
-            <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+
+          {items.length > 0 && (
+            <div className="relative mt-4 grid grid-cols-3 gap-2 text-xs">
+              <div className="bg-white/10 backdrop-blur rounded-lg px-3 py-2 ring-1 ring-white/15">
+                <p className="text-white/70 text-[10px] uppercase tracking-wider">Itens</p>
+                <p className="font-bold text-base">{totalItens}</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur rounded-lg px-3 py-2 ring-1 ring-white/15">
+                <p className="text-white/70 text-[10px] uppercase tracking-wider">SKUs</p>
+                <p className="font-bold text-base">{items.length}</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur rounded-lg px-3 py-2 ring-1 ring-white/15">
+                <p className="text-white/70 text-[10px] uppercase tracking-wider">Caixas</p>
+                <p className="font-bold text-base">{totalCaixas}</p>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-2">
+        {/* Lista */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
           {items.length === 0 ? (
-            <p className="text-center text-sm text-gray-400 py-12">Carrinho vazio</p>
+            <div className="flex flex-col items-center justify-center h-full text-center px-6">
+              <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+                </svg>
+              </div>
+              <p className="text-base font-semibold text-gray-700">Carrinho vazio</p>
+              <p className="text-sm text-gray-400 mt-1">Adicione produtos do catalogo pra comecar</p>
+            </div>
           ) : (
-            <div className="divide-y divide-gray-100">
-              {items.map(item => (
-                <div key={item.produto_id} className="py-3 flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 line-clamp-2 leading-snug">{item.nome}</p>
-                    {item.codigo && (
-                      <p className="text-[10px] font-mono text-gray-400 mt-0.5">{item.codigo}</p>
-                    )}
-                    <div className="flex items-center justify-between mt-2">
-                      <div className="flex items-center gap-1 bg-gray-100 rounded-full px-1 py-0.5">
-                        <button
-                          onClick={() => onUpdateQty(item.produto_id, item.quantidade - 1)}
-                          className="w-6 h-6 rounded-full hover:bg-white flex items-center justify-center text-gray-700 text-sm font-medium"
-                        >
-                          −
-                        </button>
-                        <span className="font-mono text-sm w-5 text-center">{item.quantidade}</span>
-                        <button
-                          onClick={() => onUpdateQty(item.produto_id, item.quantidade + 1)}
-                          className="w-6 h-6 rounded-full hover:bg-white flex items-center justify-center text-gray-700 text-sm font-medium"
-                        >
-                          +
-                        </button>
+            <div className="space-y-2">
+              {items.map(item => {
+                const subtotal = item.preco * item.quantidade
+                const caixas = item.itens_por_caixa ? item.quantidade : null
+                return (
+                  <div
+                    key={item.produto_id}
+                    className="group bg-white rounded-2xl p-3 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.04)] ring-1 ring-gray-100 hover:ring-gray-200 hover:shadow-[0_4px_16px_-4px_rgba(0,0,0,0.08)] transition-all"
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Imagem */}
+                      <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 ring-1 ring-gray-100 flex items-center justify-center relative">
+                        {item.imagem_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={item.imagem_url}
+                            alt={item.nome}
+                            className="w-full h-full object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <svg className="w-7 h-7 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                          </svg>
+                        )}
                       </div>
-                      <p className="font-semibold text-sm text-gray-900">
-                        {formatBRL(item.preco * item.quantidade)}
-                      </p>
+
+                      {/* Conteudo */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">
+                              {item.nome}
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {item.marca && (
+                                <span className="text-[10px] font-medium text-[#336FB6] bg-[#336FB6]/8 px-1.5 py-0.5 rounded">
+                                  {item.marca}
+                                </span>
+                              )}
+                              {item.codigo && (
+                                <span className="text-[10px] font-mono text-gray-400">
+                                  {item.codigo}
+                                </span>
+                              )}
+                              {item.unidade && (
+                                <span className="text-[10px] text-gray-400">· {item.unidade}</span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => onRemove(item.produto_id)}
+                            className="shrink-0 p-1.5 text-gray-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                            aria-label="Remover"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between mt-2.5">
+                          <div className="inline-flex items-center bg-gray-50 ring-1 ring-gray-200 rounded-full overflow-hidden">
+                            <button
+                              onClick={() => onUpdateQty(item.produto_id, item.quantidade - 1)}
+                              className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-[#336FB6] transition-colors"
+                              aria-label="Diminuir"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
+                              </svg>
+                            </button>
+                            <span className="font-bold text-sm w-7 text-center text-gray-900">{item.quantidade}</span>
+                            <button
+                              onClick={() => onUpdateQty(item.produto_id, item.quantidade + 1)}
+                              className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-[#336FB6] transition-colors"
+                              aria-label="Aumentar"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-sm text-gray-900">{formatBRL(subtotal)}</p>
+                            {item.preco > 0 && item.quantidade > 1 && (
+                              <p className="text-[10px] text-gray-400">{formatBRL(item.preco)} cada</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {caixas !== null && item.itens_por_caixa && item.itens_por_caixa > 1 && (
+                          <p className="text-[10px] text-gray-400 mt-1.5">
+                            {caixas} {caixas === 1 ? 'caixa' : 'caixas'} · {caixas * item.itens_por_caixa} unidades
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => onRemove(item.produto_id)}
-                    className="p-1 text-gray-400 hover:text-rose-600"
-                    aria-label="Remover"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
 
         {items.length > 0 && (
-          <div className="px-5 py-4 border-t border-gray-100 bg-white">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-gray-500">Total</span>
-              <span className="font-semibold text-lg text-gray-900">{formatBRL(total)}</span>
+          <div className="px-5 py-4 border-t border-gray-100 bg-white shadow-[0_-4px_16px_-4px_rgba(0,0,0,0.06)]">
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-sm text-gray-500">Subtotal</span>
+              <span className="text-sm font-medium text-gray-700">{formatBRL(total)}</span>
+            </div>
+            <div className="flex items-baseline justify-between mb-3">
+              <span className="text-base font-semibold text-gray-900">Total</span>
+              <span
+                className="text-2xl font-bold tabular-nums"
+                style={{
+                  background: `linear-gradient(135deg, ${FLOWB2B_BLUE} 0%, ${FLOWB2B_ORANGE} 100%)`,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                {formatBRL(total)}
+              </span>
             </div>
             <button
               onClick={onCheckout}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl text-white text-sm font-semibold py-3.5 transition-all duration-300 active:scale-[0.98]"
-              style={{ background: 'var(--accent)' }}
+              className="group w-full inline-flex items-center justify-center gap-2 rounded-2xl text-white text-sm font-bold py-4 transition-all duration-300 active:scale-[0.98] hover:shadow-lg relative overflow-hidden"
+              style={{
+                background: `linear-gradient(135deg, ${FLOWB2B_BLUE} 0%, #2A5C9A 50%, ${FLOWB2B_ORANGE} 130%)`,
+              }}
             >
-              Finalizar pedido
+              <span className="relative z-10">Finalizar pedido</span>
+              <svg className="w-4 h-4 relative z-10 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+              </svg>
             </button>
-            <p className="text-[11px] text-gray-400 text-center mt-2">
+            <p className="text-[11px] text-gray-400 text-center mt-2.5 flex items-center justify-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+              </svg>
               Voce sera redirecionado pra revisar e confirmar
             </p>
           </div>

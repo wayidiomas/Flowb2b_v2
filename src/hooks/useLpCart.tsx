@@ -9,6 +9,9 @@ export interface LpCartItem {
   preco: number
   quantidade: number
   itens_por_caixa: number | null
+  imagem_url?: string | null
+  marca?: string | null
+  unidade?: string | null
 }
 
 const PREFIX = 'lp_cart_'
