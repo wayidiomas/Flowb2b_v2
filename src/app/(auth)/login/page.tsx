@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { AuthLayout } from '@/components/auth'
+import { SuporteWhatsappButton } from '@/components/auth/SuporteWhatsappButton'
 import {
   Button,
   Input,
@@ -247,8 +248,11 @@ function LoginFallback() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<LoginFallback />}>
-      <LoginForm />
-    </Suspense>
+    <>
+      <Suspense fallback={<LoginFallback />}>
+        <LoginForm />
+      </Suspense>
+      <SuporteWhatsappButton contexto="login lojista" />
+    </>
   )
 }

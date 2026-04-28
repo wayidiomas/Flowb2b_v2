@@ -426,9 +426,7 @@ function ViewerStateBanner({
     cta = { label: 'Entrar', href: `/login?redirect=/lp/${slug}` }
     bgClass = 'bg-blue-50 border-blue-200 text-blue-900'
   } else if (viewerState === 'lojista_sem_vinculo') {
-    mensagem = `Voce ainda nao e cliente de ${fornecedorNome}`
-    cta = { label: 'Solicitar atendimento', href: `/api/lp/${slug}/solicitar-vinculo` }
-    bgClass = 'bg-amber-50 border-amber-200 text-amber-900'
+    return <SolicitarVinculoBanner slug={slug} fornecedorNome={fornecedorNome} />
   } else {
     mensagem = 'Visualizacao apenas. Pra comprar use uma conta de lojista.'
   }
@@ -446,6 +444,59 @@ function ViewerStateBanner({
           </Link>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Solicitar vinculo banner (com state) ────────────────────────────────────
+function SolicitarVinculoBanner({ slug, fornecedorNome }: { slug: string; fornecedorNome: string }) {
+  const [enviando, setEnviando] = useState(false)
+  const [enviado, setEnviado] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleClick = async () => {
+    setEnviando(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/lp/${slug}/solicitar-vinculo`, { method: 'POST' })
+      const data = await res.json()
+      if (res.status === 401) {
+        window.location.href = `/login?redirect=/lp/${slug}`
+        return
+      }
+      if (!res.ok) {
+        setError(data.error || 'Erro ao enviar solicitacao')
+        return
+      }
+      setEnviado(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="max-w-[1200px] mx-auto px-4 pt-4">
+      <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+        <p className="font-medium">
+          {enviado
+            ? `Solicitacao enviada! ${fornecedorNome} vai analisar e te avisar`
+            : `Voce ainda nao e cliente de ${fornecedorNome}`}
+        </p>
+        {!enviado && (
+          <button
+            onClick={handleClick}
+            disabled={enviando}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold underline underline-offset-2 hover:no-underline shrink-0 disabled:opacity-60"
+          >
+            {enviando ? 'Enviando...' : 'Solicitar atendimento →'}
+          </button>
+        )}
+      </div>
+      {error && (
+        <p className="text-xs text-rose-600 mt-2">{error}</p>
+      )}
     </div>
   )
 }

@@ -657,11 +657,22 @@ export default function UsuariosPage() {
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Usuarios</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Gerencie todos os usuarios da plataforma: lojistas, fornecedores e representantes.
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Usuarios</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Gerencie todos os usuarios da plataforma: lojistas, fornecedores e representantes.
+            </p>
+          </div>
+          <a
+            href="/admin/lojistas/importar"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#336FB6] hover:bg-[#2660A5] text-white text-sm font-medium px-4 py-2 transition-colors shrink-0"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            Importar lojistas em massa
+          </a>
         </div>
 
         {/* Tabs */}

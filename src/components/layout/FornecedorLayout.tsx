@@ -70,6 +70,7 @@ const desktopNav: DesktopNavItem[] = [
     href: '/fornecedor/lojistas',
     children: [
       { label: 'Lojistas', href: '/fornecedor/lojistas' },
+      { label: 'Solicitacoes de vinculo', href: '/fornecedor/solicitacoes-vinculo' },
       { label: 'Representantes', href: '/fornecedor/representantes' },
       { label: 'Indicacoes', href: '/fornecedor/indicacoes' },
     ],

@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { FornecedorAuthLayout } from '@/components/auth'
+import { SuporteWhatsappButton } from '@/components/auth/SuporteWhatsappButton'
 import { Card, CardContent, Input } from '@/components/ui'
 import { useFornecedorAuth } from '@/contexts/FornecedorAuthContext'
 
@@ -172,8 +173,11 @@ function LoginFallback() {
 
 export default function FornecedorLoginPage() {
   return (
-    <Suspense fallback={<LoginFallback />}>
-      <FornecedorLoginForm />
-    </Suspense>
+    <>
+      <Suspense fallback={<LoginFallback />}>
+        <FornecedorLoginForm />
+      </Suspense>
+      <SuporteWhatsappButton contexto="login fornecedor" />
+    </>
   )
 }

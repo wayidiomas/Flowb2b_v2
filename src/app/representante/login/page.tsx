@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { RepresentanteAuthLayout } from '@/components/auth'
+import { SuporteWhatsappButton } from '@/components/auth/SuporteWhatsappButton'
 import { Card, CardContent, Input } from '@/components/ui'
 import { useRepresentanteAuth } from '@/contexts/RepresentanteAuthContext'
 
@@ -171,8 +172,11 @@ function LoginFallback() {
 
 export default function RepresentanteLoginPage() {
   return (
-    <Suspense fallback={<LoginFallback />}>
-      <RepresentanteLoginForm />
-    </Suspense>
+    <>
+      <Suspense fallback={<LoginFallback />}>
+        <RepresentanteLoginForm />
+      </Suspense>
+      <SuporteWhatsappButton contexto="login representante" />
+    </>
   )
 }
