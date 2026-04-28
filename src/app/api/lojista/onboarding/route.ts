@@ -31,7 +31,7 @@ export async function GET() {
 
     const { data: userRow } = await supabase
       .from('users')
-      .select('id, email, nome, senha_provisoria')
+      .select('id, email, nome, senha_provisoria, role')
       .eq('id', user.userId)
       .maybeSingle()
 
@@ -49,9 +49,17 @@ export async function GET() {
       return NextResponse.json({ error: 'Empresa nao encontrada' }, { status: 404 })
     }
 
+    // O onboarding so e obrigatorio pra lojistas convidados via vinculo invertido
+    // (senha_provisoria=true ou role=lojista_lp). Admins regulares com empresa real
+    // ja vinculada via Bling/CNPJ nao precisam preencher esses campos pra comprar.
+    const isLojistaConvidado =
+      !!userRow?.senha_provisoria || userRow?.role === 'lojista_lp'
+
     const precisaTrocarSenha = !!userRow?.senha_provisoria
-    const precisaCompletarDados = !empresa.razao_social || !empresa.celular_principal
-    const precisaResponderPerfil = !empresa.onboarding_completo_em
+    const precisaCompletarDados =
+      isLojistaConvidado && (!empresa.razao_social || !empresa.celular_principal)
+    const precisaResponderPerfil =
+      isLojistaConvidado && !empresa.onboarding_completo_em
 
     const status: OnboardingStatus = {
       precisa_trocar_senha: precisaTrocarSenha,
