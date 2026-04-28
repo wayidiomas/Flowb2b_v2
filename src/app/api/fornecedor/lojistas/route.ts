@@ -192,23 +192,23 @@ export async function GET() {
     const supabase = createServerSupabaseClient()
     const cnpjFornecedor = stripCnpj(user.cnpj)
 
-    // Busca id do fornecedor logado
-    const { data: fornecedor } = await supabase
+    // Busca todos os ids do fornecedor logado (mesmo CNPJ pode ter linhas em empresas diferentes)
+    const { data: fornecedores } = await supabase
       .from('fornecedores')
       .select('id')
       .eq('cnpj', cnpjFornecedor)
-      .limit(1)
-      .maybeSingle()
 
-    if (!fornecedor) {
+    if (!fornecedores || fornecedores.length === 0) {
       return NextResponse.json<ListLojistasResponse>({ lojistas: [] })
     }
 
-    // Busca empresas criadas por esse fornecedor (vinculo invertido)
+    const fornecedorIds = fornecedores.map(f => f.id)
+
+    // Busca empresas criadas por qualquer instancia do fornecedor (vinculo invertido)
     const { data: empresas, error: empErr } = await supabase
       .from('empresas')
       .select('id, razao_social, nome_fantasia, cnpj, celular_principal, created_date')
-      .eq('criado_por_fornecedor_id', fornecedor.id)
+      .in('criado_por_fornecedor_id', fornecedorIds)
       .order('created_date', { ascending: false })
 
     if (empErr) {

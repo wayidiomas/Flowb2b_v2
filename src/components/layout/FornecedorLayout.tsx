@@ -62,6 +62,7 @@ const desktopNav: DesktopNavItem[] = [
       { label: 'Catalogo', href: '/fornecedor/catalogo' },
       { label: 'Atualizacoes publicadas', href: '/fornecedor/catalogo/atualizacoes' },
       { label: 'Tabelas de Preco', href: '/fornecedor/tabelas-preco' },
+      { label: 'Landing Pages', href: '/fornecedor/landing-pages' },
     ],
   },
   {
