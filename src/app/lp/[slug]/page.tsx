@@ -670,7 +670,7 @@ function LpTopNav() {
   )
 }
 
-// ─── Floating Cart com GLOW NEON (laranja → azul) ───────────────────────────
+// ─── Floating Cart FlowB2B (icone grande, gradient azul/laranja) ────────────
 function FloatingCart({
   count,
   total,
@@ -683,73 +683,98 @@ function FloatingCart({
   const isEmpty = count === 0
 
   return (
-    <div className="fixed bottom-5 right-5 z-40">
+    <div className="fixed bottom-6 right-6 z-40">
       <style jsx>{`
-        @keyframes neonGlow {
+        @keyframes flowGlow {
           0%, 100% {
             box-shadow:
-              0 0 20px rgba(255, 170, 17, 0.5),
-              0 0 40px rgba(51, 111, 182, 0.4),
-              0 4px 24px rgba(0, 0, 0, 0.15);
+              0 8px 24px -4px rgba(51, 111, 182, 0.35),
+              0 0 0 4px rgba(255, 255, 255, 0.6),
+              0 0 24px rgba(255, 170, 17, 0.45),
+              0 0 48px rgba(51, 111, 182, 0.35);
           }
           50% {
             box-shadow:
-              0 0 30px rgba(255, 170, 17, 0.7),
-              0 0 60px rgba(51, 111, 182, 0.5),
-              0 4px 24px rgba(0, 0, 0, 0.15);
+              0 12px 32px -4px rgba(51, 111, 182, 0.45),
+              0 0 0 4px rgba(255, 255, 255, 0.6),
+              0 0 36px rgba(255, 170, 17, 0.65),
+              0 0 64px rgba(51, 111, 182, 0.5);
           }
         }
-        .neon-cart {
-          animation: neonGlow 2.5s ease-in-out infinite;
+        @keyframes badgePulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.12); }
+        }
+        .cart-glow {
+          animation: flowGlow 2.6s ease-in-out infinite;
+        }
+        .badge-pulse {
+          animation: badgePulse 1.4s ease-in-out infinite;
         }
       `}</style>
 
       <button
         onClick={onClick}
         disabled={isEmpty}
-        className={`group relative inline-flex items-center gap-3 rounded-full bg-white pl-3 pr-5 py-3 transition-all duration-300 active:scale-[0.97] ${
-          isEmpty ? 'opacity-90 cursor-not-allowed' : 'neon-cart hover:scale-[1.04]'
+        aria-label={isEmpty ? 'Carrinho vazio' : `Carrinho com ${count} itens`}
+        className={`group relative w-20 h-20 md:w-24 md:h-24 rounded-full flex flex-col items-center justify-center transition-all duration-300 active:scale-[0.95] ${
+          isEmpty ? 'opacity-95 cursor-not-allowed' : 'cart-glow hover:scale-[1.08]'
         }`}
+        style={{
+          background: `radial-gradient(circle at 30% 30%, ${FLOWB2B_ORANGE} 0%, ${FLOWB2B_BLUE} 75%)`,
+        }}
       >
-        {/* Borda gradient laranja → azul */}
+        {/* Highlight superior */}
         <span
           aria-hidden
-          className="absolute inset-0 rounded-full pointer-events-none"
+          className="absolute inset-0 rounded-full pointer-events-none opacity-50"
           style={{
-            padding: '2px',
-            background: `linear-gradient(135deg, ${FLOWB2B_ORANGE} 0%, ${FLOWB2B_BLUE} 100%)`,
-            WebkitMask:
-              'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-            WebkitMaskComposite: 'xor',
-            maskComposite: 'exclude',
+            background:
+              'radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.55) 0%, transparent 50%)',
           }}
         />
 
-        <div
-          className="relative w-10 h-10 rounded-full flex items-center justify-center text-white"
-          style={{
-            background: `linear-gradient(135deg, ${FLOWB2B_ORANGE} 0%, ${FLOWB2B_BLUE} 100%)`,
-          }}
+        {/* Icone sacola FlowB2B (premium) */}
+        <svg
+          className="relative w-10 h-10 md:w-12 md:h-12 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.2)]"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={1.8}
+          stroke="currentColor"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-          </svg>
-          {count > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-white border-2 border-[#FFAA11] text-[10px] font-bold flex items-center justify-center text-gray-900">
-              {count}
-            </span>
-          )}
-        </div>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
+          />
+        </svg>
 
-        <div className="text-left">
+        {/* Texto pequeno embaixo do icone */}
+        <span className="relative text-[9px] md:text-[10px] font-semibold uppercase tracking-[0.15em] text-white/90 mt-0.5">
+          {isEmpty ? 'Vazio' : formatBRL(total)}
+        </span>
+
+        {/* Badge contagem */}
+        {count > 0 && (
+          <span className="badge-pulse absolute -top-1 -right-1 min-w-[26px] h-[26px] px-1.5 rounded-full bg-white text-[12px] font-bold flex items-center justify-center shadow-[0_4px_12px_-2px_rgba(0,0,0,0.2)]" style={{ color: FLOWB2B_BLUE }}>
+            {count > 99 ? '99+' : count}
+          </span>
+        )}
+      </button>
+
+      {/* Etiqueta lateral (so quando ha itens) */}
+      {!isEmpty && (
+        <div
+          className="hidden md:block absolute right-full top-1/2 -translate-y-1/2 mr-3 bg-white rounded-xl shadow-[0_4px_16px_-4px_rgba(0,0,0,0.12)] px-3 py-2 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        >
           <p className="text-[10px] font-medium uppercase tracking-wider text-gray-500 leading-none">
-            Carrinho
+            {count} {count === 1 ? 'item' : 'itens'}
           </p>
           <p className="text-sm font-semibold text-gray-900 leading-tight mt-0.5">
-            {isEmpty ? 'Vazio' : formatBRL(total)}
+            Ver carrinho →
           </p>
         </div>
-      </button>
+      )}
     </div>
   )
 }
