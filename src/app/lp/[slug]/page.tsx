@@ -71,6 +71,12 @@ export default function LandingPagePublica() {
 
   const { items, addItem, updateQty, removeItem, total, count } = useLpCart(slug)
 
+  // Paginacao
+  const PAGE_SIZE = 24
+  const [page, setPage] = useState(1)
+  // Reset paginacao quando busca muda
+  useEffect(() => { setPage(1) }, [busca])
+
   useEffect(() => {
     if (!slug) return
     const load = async () => {
@@ -118,6 +124,13 @@ export default function LandingPagePublica() {
     )
   }, [data, busca])
 
+  const totalPages = Math.max(1, Math.ceil(produtosFiltrados.length / PAGE_SIZE))
+  const pageClamped = Math.min(page, totalPages)
+  const produtosPaginados = useMemo(
+    () => produtosFiltrados.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE),
+    [produtosFiltrados, pageClamped]
+  )
+
   const handleFinalizar = () => {
     if (!data) return
     // Persiste carrinho pra /compras/pedidos/novo ler depois
@@ -147,9 +160,9 @@ export default function LandingPagePublica() {
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] bg-[#F5F7FA]">
+      <div className="min-h-[100dvh] bg-[#F5F7FA] pt-24">
         <LpTopNav />
-        <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 pt-6 pb-6">
+        <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 pt-2 pb-6">
           <div className="bg-white rounded-2xl shadow-sm p-5 md:p-6 flex items-center gap-4 animate-pulse">
             <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-gray-200 shrink-0" />
             <div className="flex-1 space-y-2">
@@ -201,8 +214,8 @@ export default function LandingPagePublica() {
   const fornecedorLabel = lp.fornecedor.nome_fantasia || lp.fornecedor.nome
 
   return (
-    <div style={cssVars} className="min-h-[100dvh] bg-[#F5F7FA] pb-24 md:pb-0">
-      {/* Top nav: logo FlowB2B + botao Entrar */}
+    <div style={cssVars} className="min-h-[100dvh] bg-[#F5F7FA] pt-20 pb-24 md:pb-0">
+      {/* Top nav: pill flutuante FlowB2B */}
       <LpTopNav />
 
       {/* Header — banner customizado ou nada (hero limpo) */}
@@ -292,8 +305,8 @@ export default function LandingPagePublica() {
       {/* Banner condicional (chip discreto) */}
       <ViewerStateBanner viewerState={data.viewer_state} fornecedorNome={fornecedorLabel} slug={slug} />
 
-      {/* Search bar sticky */}
-      <div className="sticky top-12 z-20 bg-[#F5F7FA]/90 backdrop-blur-md border-b border-gray-100">
+      {/* Search bar sticky (logo abaixo da pill nav flutuante) */}
+      <div className="sticky top-20 z-20 bg-[#F5F7FA]/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 py-3">
           <div className="relative">
             <input
@@ -354,27 +367,40 @@ export default function LandingPagePublica() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 md:gap-4">
-            {produtosFiltrados.map(p => (
-              <ProdutoCard
-                key={p.id}
-                produto={p}
-                podeComprar={podeComprar}
-                noCarrinho={items.find(i => i.produto_id === p.id)?.quantidade || 0}
-                onAdd={() => {
-                  if (!podeComprar) return
-                  addItem({
-                    produto_id: p.id,
-                    codigo: p.codigo,
-                    nome: p.nome,
-                    preco: p.preco || 0,
-                    itens_por_caixa: p.itens_por_caixa,
-                  })
-                }}
-                onUpdateQty={(q) => updateQty(p.id, q)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 md:gap-4">
+              {produtosPaginados.map(p => (
+                <ProdutoCard
+                  key={p.id}
+                  produto={p}
+                  podeComprar={podeComprar}
+                  noCarrinho={items.find(i => i.produto_id === p.id)?.quantidade || 0}
+                  onAdd={() => {
+                    if (!podeComprar) return
+                    addItem({
+                      produto_id: p.id,
+                      codigo: p.codigo,
+                      nome: p.nome,
+                      preco: p.preco || 0,
+                      itens_por_caixa: p.itens_por_caixa,
+                    })
+                  }}
+                  onUpdateQty={(q) => updateQty(p.id, q)}
+                />
+              ))}
+            </div>
+
+            <Pagination
+              page={pageClamped}
+              totalPages={totalPages}
+              total={produtosFiltrados.length}
+              pageSize={PAGE_SIZE}
+              onChange={(p) => {
+                setPage(p)
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+            />
+          </>
         )}
       </main>
 
@@ -597,19 +623,27 @@ function ViewerStateBanner({
   )
 }
 
-// ─── Top nav (logo FlowB2B + dropdown Entrar) ────────────────────────────────
+// ─── Top nav: pill flutuante FlowB2B (mesmo estilo do site marketing) ────────
 function LpTopNav() {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [scrolled, setScrolled] = useState(false)
+  const [entrarOpen, setEntrarOpen] = useState(false)
+  const entrarRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!open) return
+    const onScroll = () => setScrolled(window.scrollY > 80)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  useEffect(() => {
+    if (!entrarOpen) return
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (entrarRef.current && !entrarRef.current.contains(e.target as Node)) setEntrarOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  }, [entrarOpen])
 
   const loginOptions = [
     { label: 'Lojista', href: '/login' },
@@ -618,55 +652,80 @@ function LpTopNav() {
   ]
 
   return (
-    <nav className="bg-[#336FB6] h-12 w-full sticky top-0 z-30 shadow-sm">
-      <div className="max-w-[1680px] 2xl:max-w-[1920px] mx-auto px-4 h-full flex items-center justify-between">
-        <Link href="/" className="flex items-center">
-          <Image
-            src="/assets/branding/logo-white.png"
-            alt="FlowB2B"
-            width={96}
-            height={28}
-            priority
-            className="object-contain"
-          />
-        </Link>
+    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center pointer-events-none">
+      <nav
+        className={[
+          'mt-4 mx-auto rounded-full px-2 py-2 pointer-events-auto ring-1',
+          'transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]',
+          scrolled
+            ? 'bg-[#2660A5]/95 backdrop-blur-2xl ring-white/10 shadow-[0_8px_32px_-4px_rgba(0,0,0,0.18)]'
+            : 'bg-[#336FB6]/85 backdrop-blur-xl ring-white/15 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.15)]',
+        ].join(' ')}
+      >
+        <div className="flex items-center gap-1">
+          {/* Logo */}
+          <Link href="/" className="pl-3 pr-3 md:pr-4 shrink-0">
+            <Image
+              src="/assets/branding/logo-white.png"
+              alt="FlowB2B"
+              width={110}
+              height={34}
+              priority
+              className="object-contain"
+            />
+          </Link>
 
-        <div className="relative" ref={ref}>
-          <button
-            onClick={() => setOpen(!open)}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition-colors duration-300"
-          >
-            Entrar
-            <svg
-              className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {open && (
-            <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-lg py-1.5 min-w-[180px] z-50 ring-1 ring-black/5">
-              <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-gray-500 px-4 pt-2 pb-1">
-                Tipo de conta
-              </p>
-              {loginOptions.map(opt => (
-                <Link
-                  key={opt.label}
-                  href={opt.href}
-                  onClick={() => setOpen(false)}
-                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          {/* Separator */}
+          <div className="w-px h-5 bg-white/20" />
+
+          {/* Direita: Entrar + CTA */}
+          <div className="flex items-center gap-1 md:gap-2 pl-2">
+            <div className="relative" ref={entrarRef}>
+              <button
+                onClick={() => setEntrarOpen(!entrarOpen)}
+                className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-full text-white/85 hover:text-white hover:bg-white/10 transition-colors duration-300"
+              >
+                Entrar
+                <svg
+                  className={`w-3 h-3 transition-transform ${entrarOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
                 >
-                  {opt.label}
-                </Link>
-              ))}
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {entrarOpen && (
+                <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-[0_8px_32px_-4px_rgba(0,0,0,0.15)] py-1.5 min-w-[180px] z-50 ring-1 ring-black/5">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-gray-500 px-4 pt-2 pb-1">
+                    Tipo de conta
+                  </p>
+                  {loginOptions.map(opt => (
+                    <Link
+                      key={opt.label}
+                      href={opt.href}
+                      onClick={() => setEntrarOpen(false)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      {opt.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+
+            {/* CTA Testar gratis */}
+            <Link
+              href="/register"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#FFAA11] hover:bg-[#FFB733] text-white text-sm font-semibold px-4 py-2 shadow-[0_4px_14px_-2px_rgba(255,170,17,0.4)] hover:shadow-[0_6px_20px_-2px_rgba(255,170,17,0.5)] active:scale-[0.97] transition-all duration-300"
+            >
+              Testar gratis
+            </Link>
+          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+    </header>
   )
 }
 
@@ -786,6 +845,96 @@ function FloatingCart({
           </span>
         )}
       </button>
+    </div>
+  )
+}
+
+// ─── Paginacao ───────────────────────────────────────────────────────────────
+function Pagination({
+  page,
+  totalPages,
+  total,
+  pageSize,
+  onChange,
+}: {
+  page: number
+  totalPages: number
+  total: number
+  pageSize: number
+  onChange: (p: number) => void
+}) {
+  if (totalPages <= 1) return null
+
+  // Constroi lista de paginas com ellipses pra economizar espaco
+  // Ex: 1, ..., 4, 5, 6, ..., 50
+  const items: (number | '...')[] = []
+  const window = 1 // qts paginas mostrar antes/depois da atual
+  const add = (v: number | '...') => {
+    if (items[items.length - 1] !== v) items.push(v)
+  }
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= page - window && i <= page + window)) {
+      add(i)
+    } else if (items[items.length - 1] !== '...') {
+      add('...')
+    }
+  }
+
+  const start = (page - 1) * pageSize + 1
+  const end = Math.min(page * pageSize, total)
+
+  return (
+    <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <p className="text-xs text-gray-500">
+        Mostrando <strong className="text-gray-900">{start}–{end}</strong> de{' '}
+        <strong className="text-gray-900">{total}</strong>
+      </p>
+
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onChange(page - 1)}
+          disabled={page === 1}
+          className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 bg-white text-gray-700 hover:border-[#336FB6] hover:text-[#336FB6] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+          aria-label="Pagina anterior"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+
+        {items.map((it, idx) =>
+          it === '...' ? (
+            <span key={`e-${idx}`} className="w-9 h-9 inline-flex items-center justify-center text-gray-400 text-sm">
+              …
+            </span>
+          ) : (
+            <button
+              key={it}
+              onClick={() => onChange(it)}
+              aria-current={it === page ? 'page' : undefined}
+              className={`inline-flex items-center justify-center min-w-9 h-9 px-3 rounded-full text-sm font-medium transition-all duration-200 ${
+                it === page
+                  ? 'bg-[#336FB6] text-white shadow-[0_4px_12px_-2px_rgba(51,111,182,0.35)]'
+                  : 'border border-gray-200 bg-white text-gray-700 hover:border-[#336FB6] hover:text-[#336FB6]'
+              }`}
+            >
+              {it}
+            </button>
+          )
+        )}
+
+        <button
+          onClick={() => onChange(page + 1)}
+          disabled={page === totalPages}
+          className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 bg-white text-gray-700 hover:border-[#336FB6] hover:text-[#336FB6] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+          aria-label="Proxima pagina"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }
