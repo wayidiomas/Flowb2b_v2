@@ -27,6 +27,7 @@ const publicRoutes = [
   '/publico',
   '/fornecedores',
   '/catalogo',
+  '/lp',
 ]
 
 // Rotas de API publicas
@@ -47,6 +48,7 @@ const publicApiRoutes = [
   '/api/cron/',
   '/api/diagnostico/',
   '/api/catalogo/',
+  '/api/lp/',
 ]
 
 // Padroes de API publicas (com regex)
