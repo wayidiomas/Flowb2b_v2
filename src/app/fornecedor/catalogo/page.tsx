@@ -1741,7 +1741,6 @@ export default function FornecedorCatalogoPage() {
   // Import Excel state
   const [showImportModal, setShowImportModal] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
-  const [importEmpresaId, setImportEmpresaId] = useState<number | null>(null)
   const [importando, setImportando] = useState(false)
   const [importPreview, setImportPreview] = useState<ImportPreviewResponse | null>(null)
   const [importStep, setImportStep] = useState<'upload' | 'preview' | 'done'>('upload')
@@ -2184,13 +2183,12 @@ export default function FornecedorCatalogoPage() {
   const buildImportFormData = (mode: 'preview' | 'confirm') => {
     const fd = new FormData()
     fd.append('file', importFile!)
-    fd.append('empresa_id', String(importEmpresaId))
     fd.append('mode', mode)
     return fd
   }
 
   const handleImportPreview = async () => {
-    if (!importFile || !importEmpresaId) return
+    if (!importFile) return
     setImportando(true)
     try {
       const res = await fetch('/api/fornecedor/catalogo/importar', { method: 'POST', body: buildImportFormData('preview') })
@@ -2209,7 +2207,7 @@ export default function FornecedorCatalogoPage() {
   }
 
   const handleImportConfirm = async () => {
-    if (!importFile || !importEmpresaId) return
+    if (!importFile) return
     setImportando(true)
     try {
       const res = await fetch('/api/fornecedor/catalogo/importar', { method: 'POST', body: buildImportFormData('confirm') })
@@ -2637,7 +2635,7 @@ export default function FornecedorCatalogoPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setToolbarMenuOpen(false); setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null); setImportEmpresaId(null) }}
+                    onClick={() => { setToolbarMenuOpen(false); setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null) }}
                     className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
                   >
                     <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
@@ -2688,7 +2686,7 @@ export default function FornecedorCatalogoPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null); setImportEmpresaId(null) }}
+              onClick={() => { setShowImportModal(true); setImportStep('upload'); setImportFile(null); setImportPreview(null); setImportResult(null) }}
               leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>}
             >
               Importar Excel
@@ -3166,24 +3164,9 @@ export default function FornecedorCatalogoPage() {
                     </div>
                   </div>
 
-                  {/* Step 3: Select lojista */}
+                  {/* Step 3: File upload */}
                   <div>
-                    <p className="text-sm font-medium text-gray-700 mb-2">3. Selecione o lojista:</p>
-                    <select
-                      value={importEmpresaId || ''}
-                      onChange={(e) => setImportEmpresaId(e.target.value ? Number(e.target.value) : null)}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
-                    >
-                      <option value="">Selecione...</option>
-                      {empresasVinculadas.map(emp => (
-                        <option key={emp.empresaId} value={emp.empresaId}>{emp.nomeFantasia || emp.razaoSocial}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Step 4: File upload */}
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-2">4. Envie a planilha preenchida:</p>
+                    <p className="text-sm font-medium text-gray-700 mb-2">3. Envie a planilha preenchida:</p>
                     <div className="relative">
                       <input
                         type="file"
@@ -3291,7 +3274,7 @@ export default function FornecedorCatalogoPage() {
                     size="sm"
                     loading={importando}
                     onClick={handleImportPreview}
-                    disabled={!importFile || !importEmpresaId}
+                    disabled={!importFile}
                   >
                     Verificar planilha
                   </Button>

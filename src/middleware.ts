@@ -200,6 +200,7 @@ export async function middleware(request: NextRequest) {
         '/api/lp/',
         '/api/notifications',
         '/api/empresas/',
+        '/api/lojista/',
       ]
       const isAllowed = allowedPrefixes.some(prefix => pathname.startsWith(prefix))
       if (!isAllowed) {

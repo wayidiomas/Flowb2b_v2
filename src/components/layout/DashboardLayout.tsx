@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { TrialExpiredModal } from '@/components/trial'
 import { BlingRevokeModal } from '@/components/bling'
 import OnboardingModal from '@/components/onboarding/OnboardingModal'
+import { LojistaInviteOnboardingGate } from '@/components/onboarding/LojistaInviteOnboarding'
 import { AtualizacoesPendentesModalGlobal } from '@/components/compras/AtualizacoesPendentesModalGlobal'
 import { useShowAtualizacoesPendentesModal } from '@/hooks/useShowAtualizacoesPendentesModal'
 
@@ -65,6 +66,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {showOnboarding && (
         <OnboardingModal onComplete={refreshUser} />
       )}
+
+      {/* Onboarding pos-vinculo invertido (lojista_lp): trocar senha + completar dados + perfil */}
+      {!showOnboarding && <LojistaInviteOnboardingGate />}
 
       {/* Modal de trial expirado - bloqueante */}
       {!showOnboarding && (
