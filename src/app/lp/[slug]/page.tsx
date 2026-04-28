@@ -1031,7 +1031,6 @@ function CartDrawer({
   onCheckout: () => void
 }) {
   const totalItens = items.reduce((s, i) => s + i.quantidade, 0)
-  const totalCaixas = items.reduce((s, i) => s + (i.itens_por_caixa ? i.quantidade : 0), 0)
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -1056,23 +1055,22 @@ function CartDrawer({
         onClick={onClose}
       />
       <div className="drawer-panel relative ml-auto w-full max-w-[460px] h-full bg-[#F9FAFB] flex flex-col shadow-2xl">
-        {/* Header com gradient FlowB2B */}
-        <div
-          className="px-5 py-5 text-white relative overflow-hidden"
-          style={{
-            background: `linear-gradient(135deg, ${FLOWB2B_BLUE} 0%, #2A5C9A 60%, ${FLOWB2B_ORANGE} 180%)`,
-          }}
-        >
-          <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
-          <div className="relative flex items-center justify-between">
+        {/* Header solido azul FlowB2B com accent laranja */}
+        <div className="px-5 py-5 text-white relative" style={{ background: FLOWB2B_BLUE }}>
+          {/* Faixa laranja no topo */}
+          <div className="absolute top-0 left-0 right-0 h-1" style={{ background: FLOWB2B_ORANGE }} />
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center ring-1 ring-white/20">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <div
+                className="w-11 h-11 rounded-xl flex items-center justify-center shadow-[0_4px_12px_-2px_rgba(255,170,17,0.5)]"
+                style={{ background: FLOWB2B_ORANGE }}
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
                 </svg>
               </div>
               <div>
-                <p className="text-xs text-white/70 uppercase tracking-wider font-medium">Seu carrinho</p>
+                <p className="text-[10px] text-white/60 uppercase tracking-[0.18em] font-semibold">Seu carrinho</p>
                 <h3 className="text-lg font-bold leading-tight">
                   {items.length === 0
                     ? 'Vazio'
@@ -1082,7 +1080,7 @@ function CartDrawer({
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-white/15 rounded-full transition-colors"
+              className="p-2 hover:bg-white/10 rounded-full transition-colors"
               aria-label="Fechar"
             >
               <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -1092,18 +1090,18 @@ function CartDrawer({
           </div>
 
           {items.length > 0 && (
-            <div className="relative mt-4 grid grid-cols-3 gap-2 text-xs">
-              <div className="bg-white/10 backdrop-blur rounded-lg px-3 py-2 ring-1 ring-white/15">
-                <p className="text-white/70 text-[10px] uppercase tracking-wider">Itens</p>
-                <p className="font-bold text-base">{totalItens}</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="bg-white rounded-lg px-3 py-2.5">
+                <p className="text-gray-400 text-[9px] uppercase tracking-wider font-semibold">Itens</p>
+                <p className="font-bold text-lg leading-none mt-1" style={{ color: FLOWB2B_ORANGE }}>
+                  {totalItens}
+                </p>
               </div>
-              <div className="bg-white/10 backdrop-blur rounded-lg px-3 py-2 ring-1 ring-white/15">
-                <p className="text-white/70 text-[10px] uppercase tracking-wider">SKUs</p>
-                <p className="font-bold text-base">{items.length}</p>
-              </div>
-              <div className="bg-white/10 backdrop-blur rounded-lg px-3 py-2 ring-1 ring-white/15">
-                <p className="text-white/70 text-[10px] uppercase tracking-wider">Caixas</p>
-                <p className="font-bold text-base">{totalCaixas}</p>
+              <div className="bg-white rounded-lg px-3 py-2.5">
+                <p className="text-gray-400 text-[9px] uppercase tracking-wider font-semibold">SKUs</p>
+                <p className="font-bold text-lg leading-none mt-1" style={{ color: FLOWB2B_BLUE }}>
+                  {items.length}
+                </p>
               </div>
             </div>
           )}
@@ -1125,7 +1123,6 @@ function CartDrawer({
             <div className="space-y-2">
               {items.map(item => {
                 const subtotal = item.preco * item.quantidade
-                const caixas = item.itens_por_caixa ? item.quantidade : null
                 return (
                   <div
                     key={item.produto_id}
@@ -1158,7 +1155,10 @@ function CartDrawer({
                             </p>
                             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                               {item.marca && (
-                                <span className="text-[10px] font-medium text-[#336FB6] bg-[#336FB6]/8 px-1.5 py-0.5 rounded">
+                                <span
+                                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+                                  style={{ color: FLOWB2B_ORANGE, background: 'rgba(255,170,17,0.12)' }}
+                                >
                                   {item.marca}
                                 </span>
                               )}
@@ -1187,7 +1187,7 @@ function CartDrawer({
                           <div className="inline-flex items-center bg-gray-50 ring-1 ring-gray-200 rounded-full overflow-hidden">
                             <button
                               onClick={() => onUpdateQty(item.produto_id, item.quantidade - 1)}
-                              className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-[#336FB6] transition-colors"
+                              className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-[#FFAA11] transition-colors"
                               aria-label="Diminuir"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
@@ -1197,7 +1197,7 @@ function CartDrawer({
                             <span className="font-bold text-sm w-7 text-center text-gray-900">{item.quantidade}</span>
                             <button
                               onClick={() => onUpdateQty(item.produto_id, item.quantidade + 1)}
-                              className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-[#336FB6] transition-colors"
+                              className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-[#FFAA11] transition-colors"
                               aria-label="Aumentar"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
@@ -1213,11 +1213,6 @@ function CartDrawer({
                           </div>
                         </div>
 
-                        {caixas !== null && item.itens_por_caixa && item.itens_por_caixa > 1 && (
-                          <p className="text-[10px] text-gray-400 mt-1.5">
-                            {caixas} {caixas === 1 ? 'caixa' : 'caixas'} · {caixas * item.itens_por_caixa} unidades
-                          </p>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -1229,33 +1224,19 @@ function CartDrawer({
 
         {items.length > 0 && (
           <div className="px-5 py-4 border-t border-gray-100 bg-white shadow-[0_-4px_16px_-4px_rgba(0,0,0,0.06)]">
-            <div className="flex items-baseline justify-between mb-1">
-              <span className="text-sm text-gray-500">Subtotal</span>
-              <span className="text-sm font-medium text-gray-700">{formatBRL(total)}</span>
-            </div>
             <div className="flex items-baseline justify-between mb-3">
               <span className="text-base font-semibold text-gray-900">Total</span>
-              <span
-                className="text-2xl font-bold tabular-nums"
-                style={{
-                  background: `linear-gradient(135deg, ${FLOWB2B_BLUE} 0%, ${FLOWB2B_ORANGE} 100%)`,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
+              <span className="text-2xl font-bold tabular-nums" style={{ color: FLOWB2B_BLUE }}>
                 {formatBRL(total)}
               </span>
             </div>
             <button
               onClick={onCheckout}
-              className="group w-full inline-flex items-center justify-center gap-2 rounded-2xl text-white text-sm font-bold py-4 transition-all duration-300 active:scale-[0.98] hover:shadow-lg relative overflow-hidden"
-              style={{
-                background: `linear-gradient(135deg, ${FLOWB2B_BLUE} 0%, #2A5C9A 50%, ${FLOWB2B_ORANGE} 130%)`,
-              }}
+              className="group w-full inline-flex items-center justify-center gap-2 rounded-2xl text-white text-sm font-bold py-4 transition-all duration-300 active:scale-[0.98] hover:brightness-110 shadow-[0_8px_20px_-6px_rgba(255,170,17,0.55)]"
+              style={{ background: FLOWB2B_ORANGE }}
             >
-              <span className="relative z-10">Finalizar pedido</span>
-              <svg className="w-4 h-4 relative z-10 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+              <span>Finalizar pedido</span>
+              <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
               </svg>
             </button>
