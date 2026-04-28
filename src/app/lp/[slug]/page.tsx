@@ -218,8 +218,8 @@ export default function LandingPagePublica() {
       {/* Top nav: pill flutuante FlowB2B */}
       <LpTopNav />
 
-      {/* Header — banner customizado ou nada (hero limpo) */}
-      <header className="bg-white border-b border-gray-100">
+      {/* Header — banner customizado ou nada (hero limpo, sem fundo branco) */}
+      <header>
         {lp.banner_url && (
           <div
             className="h-40 md:h-56 relative overflow-hidden"
@@ -652,17 +652,18 @@ function LpTopNav() {
   ]
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center pointer-events-none">
+    <header className="fixed top-0 left-0 right-0 z-50 pointer-events-none px-4">
       <nav
         className={[
-          'mt-4 mx-auto rounded-full px-2 py-2 pointer-events-auto ring-1',
+          'mt-4 mx-auto w-full max-w-[1680px] 2xl:max-w-[1920px]',
+          'rounded-full px-2 py-2 pointer-events-auto ring-1',
           'transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]',
           scrolled
             ? 'bg-[#2660A5]/95 backdrop-blur-2xl ring-white/10 shadow-[0_8px_32px_-4px_rgba(0,0,0,0.18)]'
             : 'bg-[#336FB6]/85 backdrop-blur-xl ring-white/15 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.15)]',
         ].join(' ')}
       >
-        <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between gap-1">
           {/* Logo */}
           <Link href="/" className="pl-3 pr-3 md:pr-4 shrink-0">
             <Image
@@ -675,11 +676,8 @@ function LpTopNav() {
             />
           </Link>
 
-          {/* Separator */}
-          <div className="w-px h-5 bg-white/20" />
-
           {/* Direita: Entrar + CTA */}
-          <div className="flex items-center gap-1 md:gap-2 pl-2">
+          <div className="flex items-center gap-1 md:gap-2 pr-1">
             <div className="relative" ref={entrarRef}>
               <button
                 onClick={() => setEntrarOpen(!entrarOpen)}
