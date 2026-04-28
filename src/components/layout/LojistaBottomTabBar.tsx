@@ -191,8 +191,9 @@ const moreMenuItemsDef: MoreMenuItem[] = [
 
 export function LojistaBottomTabBar() {
   const pathname = usePathname()
-  const { hasPermission } = usePermissions()
+  const { hasPermission, role } = usePermissions()
   const { user, empresa } = useAuth()
+  const lojistaLp = role === 'lojista_lp'
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const moreMenuRef = useRef<HTMLDivElement>(null)
 
@@ -213,13 +214,22 @@ export function LojistaBottomTabBar() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [moreMenuOpen])
 
-  // Filtrar tabs e menu items por permissao
-  const visibleTabs = bottomTabItems.filter(
-    (item) => !item.permission || hasPermission(item.permission)
-  )
+  // Whitelist de paths permitidos pra lojista_lp (mantém alinhado com middleware/role-guards)
+  const isAllowedForLojistaLp = (href: string) =>
+    href === '/dashboard' ||
+    href.startsWith('/compras/catalogo') ||
+    href.startsWith('/compras/pedidos') ||
+    href.startsWith('/lp/') ||
+    href.startsWith('/perfil')
+
+  // Filtrar tabs e menu items por permissao (e role)
+  const visibleTabs = bottomTabItems.filter((item) => {
+    if (lojistaLp && !isAllowedForLojistaLp(item.href)) return false
+    return !item.permission || hasPermission(item.permission)
+  })
 
   const visibleMoreItems = moreMenuItemsDef.filter(
-    (item) => hasPermission(item.permission)
+    (item) => (!lojistaLp || isAllowedForLojistaLp(item.href)) && hasPermission(item.permission)
   )
 
   // Verifica se algum item do menu "Mais" esta ativo

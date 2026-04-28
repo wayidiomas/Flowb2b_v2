@@ -65,6 +65,23 @@ export async function POST(request: NextRequest) {
     // Determinar tipo baseado no role
     const tipo: UserType = user.role === 'superadmin' ? 'superadmin' : 'lojista'
 
+    // Buscar role efetivo na empresa ativa (users_empresas).
+    // Se for lojista_lp (cadastrado pelo fornecedor via vinculo invertido),
+    // sobrescreve o role no JWT pra middleware/permissoes funcionarem.
+    let effectiveRole = user.role
+    if (user.empresa_id) {
+      const { data: vinculo } = await supabase
+        .from('users_empresas')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('empresa_id', user.empresa_id)
+        .eq('ativo', true)
+        .maybeSingle()
+      if (vinculo?.role === 'lojista_lp') {
+        effectiveRole = 'lojista_lp'
+      }
+    }
+
     // Track login activity (fire-and-forget)
     void Promise.all([
       updateLastLogin('users', user.id),
@@ -87,7 +104,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       empresaId: user.empresa_id,
       email: user.email,
-      role: user.role,
+      role: effectiveRole,
       tipo,
     })
 

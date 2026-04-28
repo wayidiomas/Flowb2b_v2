@@ -178,6 +178,33 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
+    // Lojista_lp (cadastrado por fornecedor): so acessa LP, catalogo, pedidos, perfil
+    const userRole = String(payload.role || 'user')
+    if (userTipo === 'lojista' && userRole === 'lojista_lp') {
+      const allowedPrefixes = [
+        '/dashboard',
+        '/compras/catalogo',
+        '/compras/pedidos',
+        '/lp/',
+        '/perfil',
+        '/trocar-senha',
+        '/configuracoes/perfil',
+        // APIs necessarias
+        '/api/auth/',
+        '/api/compras/catalogo',
+        '/api/pedidos-compra',
+        '/api/produtos',
+        '/api/fornecedores',
+        '/api/lp/',
+        '/api/notifications',
+        '/api/empresas/',
+      ]
+      const isAllowed = allowedPrefixes.some(prefix => pathname.startsWith(prefix))
+      if (!isAllowed) {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+      }
+    }
+
     // Adicionar informacoes do usuario nos headers para uso nas API routes
     const requestHeaders = new Headers(request.headers)
     requestHeaders.set('x-user-id', String(payload.userId))

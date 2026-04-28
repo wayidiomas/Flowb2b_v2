@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { usePermissions, Permissoes } from '@/hooks/usePermissions'
+import { isLojistaLp, isUiPathAllowedForLojistaLp } from '@/lib/role-guards'
 
 // Interface de notificacao
 interface Notificacao {
@@ -95,7 +96,8 @@ const navigation: NavItem[] = [
 export function MainHeader() {
   const pathname = usePathname()
   const { user, empresa, logout } = useAuth()
-  const { hasPermission, isAdmin } = usePermissions()
+  const { hasPermission, isAdmin, role } = usePermissions()
+  const lojistaLp = isLojistaLp(role)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [notificacoesOpen, setNotificacoesOpen] = useState(false)
@@ -155,17 +157,23 @@ export function MainHeader() {
     return () => clearInterval(interval)
   }, [fetchNotificacoes])
 
-  // Filtrar navegacao baseado em permissoes
+  // Filtrar navegacao baseado em permissoes (e role)
   const filteredNavigation = useMemo(() => {
     return navigation.map(item => {
+      // Lojista_lp: aplica whitelist explicita por path (UI restrita)
+      if (lojistaLp && !isUiPathAllowedForLojistaLp(item.href)) {
+        if (!item.children) return null
+      }
+
       // Se o item principal requer permissao e usuario nao tem, esconder
       if (item.permission && !hasPermission(item.permission)) {
         return null
       }
 
-      // Filtrar filhos baseado em permissoes
+      // Filtrar filhos baseado em permissoes (e whitelist de lojista_lp)
       if (item.children) {
         const filteredChildren = item.children.filter(child => {
+          if (lojistaLp && !isUiPathAllowedForLojistaLp(child.href)) return false
           if (!child.permission) return true
           return hasPermission(child.permission)
         })
@@ -178,7 +186,7 @@ export function MainHeader() {
 
       return item
     }).filter(Boolean) as NavItem[]
-  }, [hasPermission])
+  }, [hasPermission, lojistaLp])
 
   // Fecha dropdowns ao clicar fora
   useEffect(() => {

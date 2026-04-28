@@ -18,6 +18,8 @@ export const DEFAULT_PERMISSOES: Permissoes = {
   estoque: true,
 }
 
+export type Role = 'admin' | 'user' | 'viewer' | 'lojista_lp'
+
 export const ROLE_PERMISSOES: Record<string, Permissoes> = {
   admin: {
     cadastros: true,
@@ -39,6 +41,16 @@ export const ROLE_PERMISSOES: Record<string, Permissoes> = {
     cadastros: false,
     pedidos: false,
     relatorios: true,
+    configuracoes: false,
+    financeiro: false,
+    estoque: false,
+  },
+  // Lojista limitado: cadastrado pelo fornecedor via vinculo invertido,
+  // so acessa LP, catalogo do fornecedor e seus pedidos
+  lojista_lp: {
+    cadastros: false,
+    pedidos: true,
+    relatorios: false,
     configuracoes: false,
     financeiro: false,
     estoque: false,
