@@ -478,7 +478,13 @@ function NovoPedidoContent() {
         .eq('empresa_id', empresaId)
 
       if (search) {
-        query = query.or(`produtos.nome.ilike.%${search}%,produtos.codigo.ilike.%${search}%`)
+        const term = search.replace(/[(),%]/g, '').trim()
+        if (term) {
+          query = query.or(
+            `nome.ilike.%${term}%,codigo.ilike.%${term}%,gtin.ilike.%${term}%`,
+            { referencedTable: 'produtos' }
+          )
+        }
       }
 
       const { data, error } = await query.limit(50)
@@ -801,6 +807,7 @@ function NovoPedidoContent() {
         valor: item.valor,
         quantidade: item.quantidade,
         aliquotaIPI: item.aliquota_ipi,
+        ean: item.ean || undefined,
         produto_id: item.produto_id,  // ID interno Supabase para FK
         produto: item.id_produto_bling ? {
           id: item.id_produto_bling,

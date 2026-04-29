@@ -15,6 +15,7 @@ interface ItemPedidoRequest {
   valor: number
   quantidade: number
   aliquotaIPI?: number
+  ean?: string
   produto_id?: number  // ID interno do Supabase (para FK em itens_pedido_compra)
   produto?: {
     id: number  // id_produto_bling (para API Bling)
@@ -564,6 +565,7 @@ export async function POST(request: NextRequest) {
       valor: item.valor,
       quantidade: item.quantidade,
       aliquotaIPI: item.aliquotaIPI || 0,
+      ean: item.ean || null,
       produto_id: item.produto_id || null, // ID interno para FK
       produto: item.produto ? {
         id: item.produto.id, // id_produto_bling

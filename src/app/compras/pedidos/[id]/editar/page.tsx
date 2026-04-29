@@ -168,7 +168,8 @@ export default function EditarPedidoCompraPage() {
               quantidade: item.quantidade || 0,
               valor: item.valor || 0,
               aliquota_ipi: item.aliquota_ipi || 0,
-              estoque_atual: item.estoque_atual || 0
+              estoque_atual: item.estoque_atual || 0,
+              ean: item.ean || undefined
             }))
             setItens(itensFormatados)
           }
@@ -265,7 +266,13 @@ export default function EditarPedidoCompraPage() {
         .eq('empresa_id', empresaId)
 
       if (search) {
-        query = query.or(`produtos.nome.ilike.%${search}%,produtos.codigo.ilike.%${search}%`)
+        const term = search.replace(/[(),%]/g, '').trim()
+        if (term) {
+          query = query.or(
+            `nome.ilike.%${term}%,codigo.ilike.%${term}%,gtin.ilike.%${term}%`,
+            { referencedTable: 'produtos' }
+          )
+        }
       }
 
       const { data, error } = await query.limit(50)
@@ -476,6 +483,7 @@ export default function EditarPedidoCompraPage() {
         valor: item.valor,
         quantidade: item.quantidade,
         aliquotaIPI: item.aliquota_ipi,
+        ean: item.ean || undefined,
         produto_id: item.produto_id || undefined,
         produto: item.id_produto_bling ? {
           id: item.id_produto_bling,
