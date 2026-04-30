@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, use } from 'react'
+import React, { useState, useEffect, useMemo, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useFornecedorAuth } from '@/contexts/FornecedorAuthContext'
 import { FornecedorLayout } from '@/components/layout/FornecedorLayout'
@@ -103,6 +103,7 @@ interface ItemSugestao {
   produto_nome_original?: string | null  // nome do item original (para mostrar riscado)
   preco_unitario?: number | null          // preco do produto (novo ou substituto)
   preco_catalogo?: number | null          // preco do catalogo para comparacao na validacao
+  preco_espelho?: number | null           // preco extraido do espelho do lojista (preco praticado atual)
 }
 
 // Condicoes comerciais gerais da sugestao
@@ -168,6 +169,12 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1)
   const [sugestoes, setSugestoes] = useState<ItemSugestao[]>([])
   const [observacao, setObservacao] = useState('')
+  // Busca + paginacao da tabela principal de itens (step 3)
+  const [itensSearch, setItensSearch] = useState('')
+  const [itensPage, setItensPage] = useState(1)
+  const ITENS_PER_PAGE = 5
+  // Reset pagina quando muda search
+  useEffect(() => { setItensPage(1) }, [itensSearch])
   const [condicoesComerciais, setCondicoesComerciais] = useState<CondicoesComerciais>({
     valor_minimo_pedido: 0,
     desconto_geral: 0,
@@ -275,22 +282,24 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           if (sugGtin && viGtin && sugGtin === viGtin) return true
           return false
         })
-        if (valItem?.status === 'faltando') return { ...sug, status_item: 'ruptura' as const }
         const precoCat = sug.preco_catalogo ?? 0
         const precoEsp = valItem?.item_espelho?.preco_unitario ?? 0
-        if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
-          return { ...sug, status_item: 'divergente' as const }
+        // Espelho eh fonte de verdade quando presente: praticado atual > tabela base
+        const precoEspelhoNovo = precoEsp > 0 ? precoEsp : (sug.preco_espelho ?? null)
+        if (valItem?.status === 'faltando') {
+          return { ...sug, status_item: 'ruptura' as const, preco_espelho: precoEspelhoNovo }
         }
+        // Quantidade divergente: lojista pediu X e espelho tem Y diferente
         const qtyPed = Number(sug.quantidade_sugerida) || 0
         const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
         if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
-          const totalCat = precoCat * qtyPed
-          const totalEsp = precoEsp * qtyEsp
-          if (totalCat > 0 && totalEsp > 0 && Math.abs(totalCat - totalEsp) / totalCat > 0.05) {
-            return { ...sug, status_item: 'divergente' as const }
-          }
+          return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
         }
-        return { ...sug, status_item: 'ok' as const }
+        // Preco espelho absurdamente diferente do catalogo (>50%) — provavel erro de leitura da IA
+        if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.5) {
+          return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
+        }
+        return { ...sug, status_item: 'ok' as const, preco_espelho: precoEspelhoNovo }
       })
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -327,22 +336,22 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   if (sugGtin && viGtin && sugGtin === viGtin) return true
                   return false
                 })
-                if (valItem?.status === 'faltando') return { ...sug, status_item: 'ruptura' as const }
                 const precoCat = sug.preco_catalogo ?? 0
                 const precoEsp = valItem?.item_espelho?.preco_unitario ?? 0
-                if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
-                  return { ...sug, status_item: 'divergente' as const }
+                // Espelho eh fonte de verdade quando presente: praticado atual > tabela base
+                const precoEspelhoNovo = precoEsp > 0 ? precoEsp : (sug.preco_espelho ?? null)
+                if (valItem?.status === 'faltando') {
+                  return { ...sug, status_item: 'ruptura' as const, preco_espelho: precoEspelhoNovo }
                 }
                 const qtyPed = Number(sug.quantidade_sugerida) || 0
                 const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
                 if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
-                  const totalCat = precoCat * qtyPed
-                  const totalEsp = precoEsp * qtyEsp
-                  if (totalCat > 0 && totalEsp > 0 && Math.abs(totalCat - totalEsp) / totalCat > 0.05) {
-                    return { ...sug, status_item: 'divergente' as const }
-                  }
+                  return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
                 }
-                return { ...sug, status_item: 'ok' as const }
+                if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.5) {
+                  return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
+                }
+                return { ...sug, status_item: 'ok' as const, preco_espelho: precoEspelhoNovo }
               }))
             }
           }
@@ -549,33 +558,30 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   return false
                 })
 
-                // Item faltando no espelho = ruptura
-                if (valItem?.status === 'faltando') {
-                  return { ...sug, status_item: 'ruptura' as const }
-                }
-
-                // Pra items encontrados: checar preco catalogo vs espelho
+                // Espelho eh fonte de verdade. Popula preco_espelho na sug pra cascata usar.
                 const precoCat = sug.preco_catalogo ?? 0
                 const precoEsp = valItem?.item_espelho?.preco_unitario ?? 0
+                const precoEspelhoNovo = precoEsp > 0 ? precoEsp : (sug.preco_espelho ?? null)
+
+                // Item faltando no espelho = ruptura
+                if (valItem?.status === 'faltando') {
+                  return { ...sug, status_item: 'ruptura' as const, preco_espelho: precoEspelhoNovo }
+                }
+
                 const qtyPed = Number(sug.quantidade_sugerida) || 0
                 const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
 
-                // Divergente se preco catalogo difere >2% do espelho
-                if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {
-                  return { ...sug, status_item: 'divergente' as const }
-                }
-
-                // Divergente se qty difere significativamente (e nao eh conversao embalagem)
+                // Divergente se quantidade do espelho difere do pedido
                 if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
-                  const totalCat = precoCat * qtyPed
-                  const totalEsp = precoEsp * qtyEsp
-                  // Se total da linha NAO bate (>5%), eh divergencia de qty real
-                  if (totalCat > 0 && totalEsp > 0 && Math.abs(totalCat - totalEsp) / totalCat > 0.05) {
-                    return { ...sug, status_item: 'divergente' as const }
-                  }
+                  return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
                 }
 
-                return { ...sug, status_item: 'ok' as const }
+                // Divergente se preco espelho absurdamente diferente do catalogo (>50%) — provavel erro IA
+                if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.5) {
+                  return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
+                }
+
+                return { ...sug, status_item: 'ok' as const, preco_espelho: precoEspelhoNovo }
               }))
             }
           }
@@ -647,6 +653,38 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     }
   }
 
+  // Lookup do preco do espelho a partir do validacaoResult (deriva, sem depender de state)
+  const precoEspelhoLookup = (() => {
+    const map = new Map<string, number>()
+    const list = validacaoResult?.itens
+    if (!Array.isArray(list)) return map
+    for (const vi of list) {
+      const preco = vi.item_espelho?.preco_unitario
+      if (!preco || preco <= 0) continue
+      const codPed = (vi.item_pedido?.codigo || '').replace(/^0+/, '')
+      const codEsp = (vi.item_espelho?.codigo || '').replace(/^0+/, '')
+      const gtin = vi.item_pedido?.gtin || ''
+      if (codPed) map.set(`cod:${codPed}`, preco)
+      if (codEsp) map.set(`cod:${codEsp}`, preco)
+      if (gtin) map.set(`gtin:${gtin}`, preco)
+    }
+    return map
+  })()
+  const getPrecoEspelho = (sug?: ItemSugestao | null, item?: { codigo_fornecedor?: string | null; ean?: string | null }): number | null => {
+    if (!precoEspelhoLookup.size) return null
+    const codSug = (sug?.codigo_fornecedor || '').replace(/^0+/, '')
+    const codItem = (item?.codigo_fornecedor || '').replace(/^0+/, '')
+    const gtinSug = sug?.gtin || ''
+    const gtinItem = item?.ean || ''
+    return (
+      (codSug && precoEspelhoLookup.get(`cod:${codSug}`)) ||
+      (codItem && precoEspelhoLookup.get(`cod:${codItem}`)) ||
+      (gtinSug && precoEspelhoLookup.get(`gtin:${gtinSug}`)) ||
+      (gtinItem && precoEspelhoLookup.get(`gtin:${gtinItem}`)) ||
+      null
+    )
+  }
+
   // Calculo em tempo real dos valores sugeridos
   const calcularTotaisSugeridos = () => {
     if (!data) return null
@@ -662,8 +700,14 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     data.itens.forEach(item => {
       const sug = sugestoes.find(s => s.item_id === item.id)
       if (sug) {
-        // Prioridade: preco_editado > preco_unitario (substituicao) > item.preco_catalogo (original)
-        const valorUnit = sug.preco_editado != null ? sug.preco_editado : (sug.is_substituicao && sug.preco_unitario != null ? sug.preco_unitario : (item.preco_catalogo ?? 0))
+        // Prioridade: preco_editado > preco_unitario (substituicao) > preco_espelho > item.preco_catalogo
+        const valorUnit = sug.preco_editado != null
+          ? sug.preco_editado
+          : (sug.is_substituicao && sug.preco_unitario != null
+              ? sug.preco_unitario
+              : ((getPrecoEspelho(sug, item) ?? sug.preco_espelho ?? null) != null
+                  ? (getPrecoEspelho(sug, item) ?? sug.preco_espelho ?? 0)
+                  : (item.preco_catalogo ?? 0)))
         const subtotalOriginal = valorUnit * sug.quantidade_sugerida
         const descontoItem = subtotalOriginal * (sug.desconto_percentual / 100)
         const subtotalComDesconto = subtotalOriginal - descontoItem
@@ -813,7 +857,25 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           is_substituicao: s.is_substituicao || false,
           is_novo: s.is_novo || false,
           produto_nome: s.produto_nome || null,
-          preco_unitario: s.preco_editado ?? s.preco_unitario ?? null,
+          preco_unitario: (() => {
+            if (s.preco_editado != null) return s.preco_editado
+            if (s.preco_unitario != null) return s.preco_unitario
+            // Lookup espelho a partir de validacaoResult
+            const cod = (s.codigo_fornecedor || '').replace(/^0+/, '')
+            const gtin = s.gtin || ''
+            const valItem = validacaoResult?.itens?.find((vi) => {
+              const viCod = (vi.item_pedido?.codigo || '').replace(/^0+/, '')
+              const viEspCod = (vi.item_espelho?.codigo || '').replace(/^0+/, '')
+              const viGtin = vi.item_pedido?.gtin || ''
+              if (cod && viCod && cod === viCod) return true
+              if (cod && viEspCod && cod === viEspCod) return true
+              if (gtin && viGtin && gtin === viGtin) return true
+              return false
+            })
+            const precoEsp = valItem?.item_espelho?.preco_unitario
+            if (precoEsp && precoEsp > 0) return precoEsp
+            return s.preco_espelho ?? null
+          })(),
         })),
         observacao: observacao || undefined,
         condicoes_comerciais: {
@@ -928,6 +990,24 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const hasPendingSugestao = lastSugestao?.status === 'pendente' && lastSugestao?.autor_tipo !== 'lojista'
   const canCancel = !ESTADOS_FINAIS.includes(pedido.status_interno)
   const isStepper = pedido.status_interno === 'enviado_fornecedor'
+
+  // Filtro + paginacao para a tabela principal do step 3
+  const itensFiltrados = (() => {
+    const term = itensSearch.toLowerCase().trim()
+    if (!term) return itens
+    return itens.filter((item) =>
+      (item.descricao || '').toLowerCase().includes(term) ||
+      (item.codigo_produto || '').toLowerCase().includes(term) ||
+      (item.codigo_fornecedor || '').toLowerCase().includes(term) ||
+      (item.ean || '').toLowerCase().includes(term)
+    )
+  })()
+  const totalPagesItens = Math.max(1, Math.ceil(itensFiltrados.length / ITENS_PER_PAGE))
+  const itensPaginaCorrigida = Math.min(itensPage, totalPagesItens)
+  const itensPaginados = itensFiltrados.slice(
+    (itensPaginaCorrigida - 1) * ITENS_PER_PAGE,
+    itensPaginaCorrigida * ITENS_PER_PAGE
+  )
 
   return (
     <FornecedorLayout>
@@ -1701,7 +1781,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         {isStepper && currentStep === 4 && canSuggest && (() => {
           const totalSugerido = sugestoes.reduce((sum, sug) => {
             const item = itens.find(i => i.id === sug.item_id)
-            const preco = sug.preco_editado ?? sug.preco_unitario ?? (item?.preco_catalogo ?? 0)
+            const preco = sug.preco_editado ?? sug.preco_unitario ?? getPrecoEspelho(sug, item) ?? sug.preco_espelho ?? (item?.preco_catalogo ?? 0)
             const desc = sug.desconto_percentual || 0
             return sum + preco * (1 - desc / 100) * sug.quantidade_sugerida
           }, 0)
@@ -1802,7 +1882,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   <tbody className="divide-y divide-gray-100">
                     {sugestoes.map((sug, idx) => {
                       const item = itens.find(i => i.id === sug.item_id)
-                      const preco = sug.preco_editado ?? sug.preco_unitario ?? (item?.preco_catalogo ?? 0)
+                      const preco = sug.preco_editado ?? sug.preco_unitario ?? getPrecoEspelho(sug, item) ?? sug.preco_espelho ?? (item?.preco_catalogo ?? 0)
                       const desc = sug.desconto_percentual || 0
                       const subtotal = preco * (1 - desc / 100) * sug.quantidade_sugerida
                       return (
@@ -1920,8 +2000,50 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             </div>
           </div>
 
+          {/* Busca + contador (desktop) */}
+          <div className="hidden md:flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 bg-gray-50">
+            <div className="relative flex-1 max-w-md">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+              </svg>
+              <input
+                type="text"
+                value={itensSearch}
+                onChange={(e) => setItensSearch(e.target.value)}
+                placeholder="Buscar por nome, codigo ou EAN..."
+                className="w-full pl-9 pr-9 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6]/40 focus:border-[#336FB6]"
+              />
+              {itensSearch && (
+                <button
+                  type="button"
+                  onClick={() => setItensSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label="Limpar busca"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <div className="text-xs text-gray-500 whitespace-nowrap">
+              {itensSearch
+                ? `${itensFiltrados.length} de ${itens.length} itens`
+                : `${itens.length} ${itens.length === 1 ? 'item' : 'itens'}`}
+              {' '}- Pagina {itensPaginaCorrigida} de {totalPagesItens}
+            </div>
+          </div>
+
           {/* Desktop: tabela completa */}
-          <div className="hidden md:block overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto
+            [&::-webkit-scrollbar]:h-2.5
+            [&::-webkit-scrollbar-track]:bg-gray-100
+            [&::-webkit-scrollbar-track]:rounded-full
+            [&::-webkit-scrollbar-thumb]:bg-[#FFAA11]
+            [&::-webkit-scrollbar-thumb]:rounded-full
+            [&::-webkit-scrollbar-thumb:hover]:bg-[#e6960e]
+            [scrollbar-color:#FFAA11_#f3f4f6]
+            [scrollbar-width:thin]">
             <table className="w-full">
               <thead>
                 <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
@@ -1961,9 +2083,22 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {itens.map((item) => {
+                {itensPaginados.length === 0 && (
+                  <tr>
+                    <td colSpan={20} className="px-4 py-8 text-center text-sm text-gray-500">
+                      Nenhum item encontrado para &quot;{itensSearch}&quot;.
+                    </td>
+                  </tr>
+                )}
+                {itensPaginados.map((item) => {
                   const sug = sugestoes.find(s => s.item_id === item.id)
-                  const valorUnitarioEfetivo = sug?.preco_editado != null ? sug.preco_editado : (sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : (item.preco_catalogo ?? 0))
+                  const valorUnitarioEfetivo = sug?.preco_editado != null
+                    ? sug.preco_editado
+                    : (sug?.is_substituicao && sug?.preco_unitario != null
+                        ? sug.preco_unitario
+                        : ((getPrecoEspelho(sug ?? null, item) ?? sug?.preco_espelho ?? null) != null
+                    ? (getPrecoEspelho(sug ?? null, item) ?? sug?.preco_espelho ?? 0)
+                    : (item.preco_catalogo ?? 0)))
                   return (
                     <tr key={item.id} className="hover:bg-gray-50">
                       {canSuggest && sug && (<>
@@ -2134,7 +2269,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                value={sug.preco_editado ?? (item.preco_catalogo ?? 0)}
+                                value={sug.preco_editado ?? getPrecoEspelho(sug, item) ?? sug.preco_espelho ?? (item.preco_catalogo ?? 0)}
                                 onChange={(e) => updateSugestao(item.id, 'preco_editado', parseFloat(e.target.value) || 0)}
                                 className={`w-20 px-2 py-1 text-sm text-right border rounded-md focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== (item.preco_catalogo ?? 0) ? 'border-[#FFAA11]' : 'border-gray-300'}`}
                               />
@@ -2373,12 +2508,68 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             </table>
           </div>
 
+          {/* Paginacao (desktop) */}
+          {totalPagesItens > 1 && (
+            <div className="hidden md:flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 bg-gray-50">
+              <div className="text-xs text-gray-600">
+                Mostrando {(itensPaginaCorrigida - 1) * ITENS_PER_PAGE + 1}
+                -
+                {Math.min(itensPaginaCorrigida * ITENS_PER_PAGE, itensFiltrados.length)}
+                {' '}de {itensFiltrados.length}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setItensPage(p => Math.max(1, p - 1))}
+                  disabled={itensPaginaCorrigida <= 1}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <div className="flex items-center gap-1.5 text-sm text-gray-700 px-2">
+                  <span>Pagina</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={totalPagesItens}
+                    value={itensPaginaCorrigida}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10)
+                      if (Number.isFinite(n)) {
+                        setItensPage(Math.min(totalPagesItens, Math.max(1, n)))
+                      } else if (e.target.value === '') {
+                        // permite limpar temporariamente
+                        setItensPage(1)
+                      }
+                    }}
+                    className="w-14 px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-1 focus:ring-[#336FB6]/40 focus:border-[#336FB6]"
+                  />
+                  <span>de {totalPagesItens}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setItensPage(p => Math.min(totalPagesItens, p + 1))}
+                  disabled={itensPaginaCorrigida >= totalPagesItens}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Proximo
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Mobile: cards por item */}
           <div className="md:hidden divide-y divide-gray-200">
             {itens.map((item) => {
               const sug = sugestoes.find(s => s.item_id === item.id)
               const subtotalOriginal = (item.preco_catalogo ?? 0) * item.quantidade
-              const valorUnitMobile = sug?.preco_editado != null ? sug.preco_editado : (sug?.is_substituicao && sug?.preco_unitario != null ? sug.preco_unitario : (item.preco_catalogo ?? 0))
+              const valorUnitMobile = sug?.preco_editado != null
+                ? sug.preco_editado
+                : (sug?.is_substituicao && sug?.preco_unitario != null
+                    ? sug.preco_unitario
+                    : ((getPrecoEspelho(sug ?? null, item) ?? sug?.preco_espelho ?? null) != null
+                    ? (getPrecoEspelho(sug ?? null, item) ?? sug?.preco_espelho ?? 0)
+                    : (item.preco_catalogo ?? 0)))
 
               // Calculo do subtotal sugerido
               let subtotalSugerido = subtotalOriginal
@@ -2458,7 +2649,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                             type="number"
                             step="0.01"
                             min="0"
-                            value={sug.preco_editado ?? (item.preco_catalogo ?? 0)}
+                            value={sug.preco_editado ?? getPrecoEspelho(sug, item) ?? sug.preco_espelho ?? (item.preco_catalogo ?? 0)}
                             onChange={(e) => updateSugestao(item.id, 'preco_editado', parseFloat(e.target.value) || 0)}
                             className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-[#FFAA11] focus:border-[#FFAA11] bg-[#FFAA11]/5 ${sug.preco_editado != null && sug.preco_editado !== (item.preco_catalogo ?? 0) ? 'border-[#FFAA11]' : 'border-gray-300'}`}
                           />
