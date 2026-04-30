@@ -40,7 +40,7 @@ interface BlingJob {
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ catalogo_id: string }> }
 ) {
   try {
@@ -54,6 +54,15 @@ export async function POST(
     const catalogoId = Number(catalogoIdStr)
     if (!catalogoId || isNaN(catalogoId)) {
       return NextResponse.json({ error: 'catalogo_id invalido' }, { status: 400 })
+    }
+
+    // Body opcional: { atualizar_bling?: boolean } (default true)
+    let atualizarBling = true
+    try {
+      const body = await req.json()
+      if (typeof body?.atualizar_bling === 'boolean') atualizarBling = body.atualizar_bling
+    } catch {
+      // Sem body ou JSON invalido — mantem default true
     }
 
     const supabase = createServerSupabaseClient()
@@ -156,8 +165,9 @@ export async function POST(
       .eq('empresa_id', empresaId)
 
     // 7. Enfileira jobs Bling (best-effort, não bloqueia)
+    // Pulado quando atualizar_bling=false (lojista quer manter o Bling intocado)
     let blingEnfileirados = 0
-    if (blingJobs.length > 0) {
+    if (atualizarBling && blingJobs.length > 0) {
       const apiUrl = process.env.FLOWB2BAPI_URL
       const secret = process.env.INTERNAL_QUEUE_SECRET
       if (apiUrl && secret) {
@@ -192,6 +202,7 @@ export async function POST(
       success: true,
       total_pendentes: pendentes.length,
       aplicados,
+      atualizar_bling: atualizarBling,
       bling_enfileirados: blingEnfileirados,
       erros
     })

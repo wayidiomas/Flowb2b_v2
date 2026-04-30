@@ -28,6 +28,7 @@ export function ModalSincronizarCatalogo({
 }: ModalSincronizarCatalogoProps) {
   const { sincronizar, loading, error, result } = useSincronizarCatalogo()
   const [autoCerrouViaSucesso, setAutoCerrouViaSucesso] = useState(false)
+  const [atualizarBling, setAtualizarBling] = useState(false)
 
   // Após sincronizar com sucesso, fecha automaticamente após 1.2s
   useEffect(() => {
@@ -40,7 +41,7 @@ export function ModalSincronizarCatalogo({
 
   const handleSincronizar = async () => {
     try {
-      await sincronizar(catalogo.catalogo_id)
+      await sincronizar(catalogo.catalogo_id, { atualizarBling })
     } catch {
       // erro já está em error state
     }
@@ -88,6 +89,26 @@ export function ModalSincronizarCatalogo({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
                 </Link>
+
+                <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={atualizarBling}
+                      onChange={(e) => setAtualizarBling(e.target.checked)}
+                      disabled={loading}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6] disabled:opacity-50"
+                    />
+                    <span className="text-sm text-gray-700">
+                      <span className="font-medium">Replicar no meu Bling</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        {atualizarBling
+                          ? 'Os preços e produtos novos vão para o Bling automaticamente.'
+                          : 'Atualiza apenas localmente. O Bling fica como está — você atualiza manualmente se quiser.'}
+                      </span>
+                    </span>
+                  </label>
+                </div>
               </>
             )}
 
@@ -115,6 +136,11 @@ export function ModalSincronizarCatalogo({
                 {result.erros.length > 0 && (
                   <p className="mt-2 text-amber-700">
                     {result.erros.length} mudança{result.erros.length > 1 ? 's' : ''} com erro — registrado para revisão
+                  </p>
+                )}
+                {result.atualizar_bling === false && (
+                  <p className="mt-2 text-emerald-800/80 text-xs">
+                    Bling não foi alterado — atualize manualmente se precisar.
                   </p>
                 )}
               </div>

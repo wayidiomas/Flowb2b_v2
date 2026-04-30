@@ -6,8 +6,14 @@ export interface SincronizarResult {
   success: boolean
   total_pendentes: number
   aplicados: { precos: number; novos: number; dados: number; removidos: number }
+  atualizar_bling: boolean
   bling_enfileirados: number
   erros: Array<{ atualizacao_id: number; tipo: string; erro: string }>
+}
+
+export interface SincronizarOpts {
+  /** Se false, atualiza apenas localmente (Supabase) sem replicar no Bling do lojista. Default true. */
+  atualizarBling?: boolean
 }
 
 /**
@@ -19,7 +25,8 @@ export function useSincronizarCatalogo() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SincronizarResult | null>(null)
 
-  const sincronizar = useCallback(async (catalogoId: number) => {
+  const sincronizar = useCallback(async (catalogoId: number, opts: SincronizarOpts = {}) => {
+    const atualizarBling = opts.atualizarBling !== false // default true
     setLoading(true)
     setError(null)
     setResult(null)
@@ -27,7 +34,7 @@ export function useSincronizarCatalogo() {
       const r = await fetch(`/api/compras/catalogo-fornecedor/${catalogoId}/sincronizar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({ atualizar_bling: atualizarBling })
       })
       const json = await r.json()
       if (!r.ok) {
