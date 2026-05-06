@@ -114,15 +114,40 @@ export async function GET(
           .maybeSingle()
 
         if (catFor) {
-          const { data: itens } = await supabase
-            .from('catalogo_itens')
-            .select('id, codigo, ean, nome, marca, unidade, itens_por_caixa, preco_base, imagem_url, ativo')
-            .eq('catalogo_id', catFor.id)
-            .eq('ativo', true)
-            .order('nome', { ascending: true })
-            .limit(500)
+          // PostgREST capa em 1000 linhas por padrao; paginamos com .range()
+          // pra trazer o catalogo inteiro (alguns fornecedores tem milhares).
+          type CatItemRow = {
+            id: number
+            codigo: string | null
+            ean: string | null
+            nome: string | null
+            marca: string | null
+            unidade: string | null
+            itens_por_caixa: number | null
+            preco_base: number | null
+            imagem_url: string | null
+            ativo: boolean | null
+          }
+          const itens: CatItemRow[] = []
+          const PAGE = 1000
+          for (let from = 0; ; from += PAGE) {
+            const { data: chunk, error: chunkErr } = await supabase
+              .from('catalogo_itens')
+              .select('id, codigo, ean, nome, marca, unidade, itens_por_caixa, preco_base, imagem_url, ativo')
+              .eq('catalogo_id', catFor.id)
+              .eq('ativo', true)
+              .order('nome', { ascending: true })
+              .range(from, from + PAGE - 1)
+            if (chunkErr) {
+              console.error('Erro ao paginar catalogo_itens (LP modo=todos):', chunkErr)
+              break
+            }
+            if (!chunk || chunk.length === 0) break
+            itens.push(...chunk)
+            if (chunk.length < PAGE) break
+          }
 
-          produtos = (itens || []).map(it => ({
+          produtos = itens.map(it => ({
             id: it.id,
             codigo: it.codigo || null,
             nome: it.nome || '',
