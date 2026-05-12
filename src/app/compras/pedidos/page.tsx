@@ -646,24 +646,68 @@ export default function PedidoCompraPage() {
   }
 
   // Excluir pedidos (soft delete via API)
+  // Backend cancela no Bling automaticamente quando o pedido ainda está em estado aberto.
+  // Quando o pedido já está em estado avançado (finalizado / com NF), só oculta no FlowB2B.
   const handleExcluir = async (ids?: number[]) => {
     const pedidoIds = ids || selectedPedidos
     if (pedidoIds.length === 0) return
-    if (!confirm(`Deseja realmente excluir ${pedidoIds.length} pedido(s)?`)) return
+
+    // Classificar pelos status que temos em memoria (statusInternoMap) pra montar a confirmação
+    const estadoAvancado: StatusInterno[] = ['finalizado', 'cancelado']
+    let qtdAvancados = 0
+    let qtdAbertos = 0
+    for (const pid of pedidoIds) {
+      const st = statusInternoMap[pid]
+      if (st && estadoAvancado.includes(st)) qtdAvancados++
+      else qtdAbertos++
+    }
+
+    let mensagem = `Deseja realmente excluir ${pedidoIds.length} pedido(s)?`
+    if (qtdAbertos > 0 && qtdAvancados === 0) {
+      mensagem += `\n\nEle(s) será(ão) também cancelado(s) no Bling.`
+    } else if (qtdAbertos === 0 && qtdAvancados > 0) {
+      mensagem += `\n\nComo já está(ão) em estado avançado (recebido/finalizado), o pedido só será ocultado do FlowB2B. O Bling será preservado.`
+    } else if (qtdAbertos > 0 && qtdAvancados > 0) {
+      mensagem += `\n\n${qtdAbertos} em aberto será(ão) cancelado(s) no Bling.\n${qtdAvancados} em estado avançado será(ão) apenas ocultado(s) (Bling preservado).`
+    }
+
+    if (!confirm(mensagem)) return
 
     setActionLoading(true)
-    try {
-      const results = await Promise.all(
-        pedidoIds.map(id =>
-          fetch(`/api/pedidos-compra/${id}/excluir`, { method: 'POST' })
-            .then(res => res.json())
-        )
-      )
+    const resumo = { cancelados: 0, ocultados: 0, falhas: 0, erros: [] as string[] }
 
-      const erros = results.filter(r => !r.success)
-      if (erros.length > 0) {
-        console.error('Erros ao excluir pedidos:', erros)
-        alert(`${erros.length} pedido(s) nao puderam ser excluidos: ${erros.map(e => e.error).join(', ')}`)
+    try {
+      // Loop sequencial: evita estouro do rate-limit do Bling (300 req/min)
+      // e permite reportar progresso/feedback claro
+      for (const id of pedidoIds) {
+        try {
+          const res = await fetch(`/api/pedidos-compra/${id}/excluir`, { method: 'POST' })
+          const json = await res.json()
+          if (!res.ok || !json.success) {
+            resumo.falhas++
+            resumo.erros.push(json.error || `Pedido ${id}: erro`)
+            continue
+          }
+          if (json.bling_canceled) {
+            resumo.cancelados++
+          } else {
+            resumo.ocultados++
+          }
+        } catch (e) {
+          resumo.falhas++
+          resumo.erros.push(`Pedido ${id}: ${e instanceof Error ? e.message : 'erro de rede'}`)
+        }
+      }
+
+      // Mensagem consolidada
+      const partes: string[] = []
+      if (resumo.cancelados > 0) partes.push(`${resumo.cancelados} cancelado(s) no Bling`)
+      if (resumo.ocultados > 0) partes.push(`${resumo.ocultados} ocultado(s) apenas no FlowB2B`)
+      if (resumo.falhas > 0) partes.push(`${resumo.falhas} falha(s)`)
+
+      if (resumo.falhas > 0) {
+        console.error('Erros ao excluir pedidos:', resumo.erros)
+        alert(`Resumo: ${partes.join(', ')}.\n\nFalhas:\n${resumo.erros.slice(0, 5).join('\n')}`)
       }
 
       await fetchPedidos()

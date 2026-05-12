@@ -2,8 +2,60 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { requirePermission } from '@/lib/permissions'
+import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
+import { blingFetch, BlingRateLimitError } from '@/lib/bling-fetch'
+import { ESTADOS_FINAIS, type StatusInterno } from '@/types/pedido-compra'
 
-// POST - Soft delete pedido de compra (marca is_excluded = true)
+// Estados que ainda permitem cancelar no Bling (situação Bling vira "Cancelado" = 2)
+const STATUS_CANCELAVEIS: StatusInterno[] = [
+  'rascunho',
+  'enviado_fornecedor',
+  'sugestao_pendente',
+  'contra_proposta_pendente',
+  'aceito',
+]
+
+type BlingOutcome =
+  | 'cancelado'             // PUT situacoes/2 OK
+  | 'ja_cancelado'          // situação Bling já era 2 (idempotente)
+  | 'nao_encontrado_bling'  // 404 no Bling — pedido já não existe lá
+  | 'sem_bling_id'          // pedido local nunca foi enviado pro Bling
+  | 'sem_token_bling'       // empresa sem token configurado
+  | 'estado_avancado'       // finalizado/atendido/com NF — não cancela
+  | 'falha_bling'           // erro 4xx/5xx do Bling (soft-delete mantido, fica órfão)
+
+async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeof createServerSupabaseClient>) {
+  const { data: tokens, error } = await supabase
+    .from('bling_tokens')
+    .select('access_token, refresh_token, expires_at')
+    .eq('empresa_id', empresaId)
+    .single()
+
+  if (error || !tokens) return null
+
+  const expiresAt = new Date(tokens.expires_at)
+  if (expiresAt < new Date(Date.now() + 5 * 60 * 1000)) {
+    try {
+      const newTokens = await refreshBlingTokens(tokens.refresh_token)
+      await supabase
+        .from('bling_tokens')
+        .update({
+          access_token: newTokens.access_token,
+          refresh_token: newTokens.refresh_token,
+          expires_at: new Date(Date.now() + newTokens.expires_in * 1000).toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('empresa_id', empresaId)
+      return newTokens.access_token
+    } catch {
+      return null
+    }
+  }
+
+  return tokens.access_token
+}
+
+// POST - Soft delete pedido (marca is_excluded=true) e, se possível, cancela no Bling
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -21,10 +73,9 @@ export async function POST(
     const supabase = createServerSupabaseClient()
     const empresaId = user.empresaId
 
-    // Buscar pedido
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
-      .select('id, numero, situacao, status_interno, is_excluded')
+      .select('id, numero, bling_id, situacao, status_interno, is_excluded, nota_fiscal_id')
       .eq('id', pedidoId)
       .eq('empresa_id', empresaId)
       .single()
@@ -37,13 +88,10 @@ export async function POST(
       return NextResponse.json({ error: 'Pedido ja foi excluido' }, { status: 400 })
     }
 
-    // Soft delete: marcar como excluido
+    // 1. Soft-delete primeiro (sempre)
     const { error: updateError } = await supabase
       .from('pedidos_compra')
-      .update({
-        is_excluded: true,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ is_excluded: true, updated_at: new Date().toISOString() })
       .eq('id', pedidoId)
       .eq('empresa_id', empresaId)
 
@@ -52,19 +100,104 @@ export async function POST(
       return NextResponse.json({ error: 'Erro ao excluir pedido' }, { status: 500 })
     }
 
-    // Registrar na timeline
+    // 2. Decidir se cancela no Bling
+    let outcome: BlingOutcome
+    let blingErrorMsg: string | undefined
+
+    const statusInterno = pedido.status_interno as StatusInterno | null
+    const estaCancelavel =
+      statusInterno != null &&
+      STATUS_CANCELAVEIS.includes(statusInterno) &&
+      !ESTADOS_FINAIS.includes(statusInterno) &&
+      !pedido.nota_fiscal_id &&
+      pedido.situacao !== 1 &&
+      pedido.situacao !== 2
+
+    if (!pedido.bling_id) {
+      outcome = 'sem_bling_id'
+    } else if (!estaCancelavel) {
+      outcome = 'estado_avancado'
+    } else {
+      const accessToken = await getBlingAccessToken(empresaId, supabase)
+      if (!accessToken) {
+        outcome = 'sem_token_bling'
+      } else {
+        try {
+          // Endpoint correto (descoberto via SDK oficial Bling):
+          // PATCH /pedidos/compras/{id}/situacoes  body: { valor: 2 } onde 2 = Cancelado
+          const result = await blingFetch(
+            `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes`,
+            {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({ valor: 2 }),
+            },
+            { context: 'cancelar pedido (excluir)', maxRetries: 3 }
+          )
+
+          if (result.response.ok) {
+            outcome = 'cancelado'
+            // Refletir cancelamento no DB tambem
+            await supabase
+              .from('pedidos_compra')
+              .update({ situacao: 2, status_interno: 'cancelado', updated_at: new Date().toISOString() })
+              .eq('id', pedidoId)
+              .eq('empresa_id', empresaId)
+          } else if (result.response.status === 404) {
+            outcome = 'nao_encontrado_bling'
+          } else {
+            const errorText = await result.response.text().catch(() => '')
+            // Idempotencia: Bling devolve erro especifico quando ja esta cancelado
+            if (errorText.toLowerCase().includes('cancelad')) {
+              outcome = 'ja_cancelado'
+            } else {
+              outcome = 'falha_bling'
+              blingErrorMsg = errorText.slice(0, 300)
+              console.error('Erro ao cancelar no Bling:', result.response.status, errorText)
+            }
+          }
+        } catch (err) {
+          outcome = 'falha_bling'
+          blingErrorMsg = err instanceof BlingRateLimitError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : 'Erro desconhecido'
+          console.error('Erro na chamada Bling (cancelar via excluir):', err)
+        }
+      }
+    }
+
+    // 3. Timeline
+    const descricaoBase = `Pedido #${pedido.numero || pedidoId} excluido pelo lojista`
+    const sufixoOutcome: Record<BlingOutcome, string> = {
+      cancelado: ' (cancelado no Bling)',
+      ja_cancelado: ' (Bling ja estava cancelado)',
+      nao_encontrado_bling: ' (pedido nao existe mais no Bling)',
+      sem_bling_id: ' (sem vinculo Bling)',
+      sem_token_bling: ' (Bling nao conectado — apenas oculto no FlowB2B)',
+      estado_avancado: ' (estado avancado — apenas oculto no FlowB2B; Bling preservado)',
+      falha_bling: ' (falha ao cancelar no Bling — apenas oculto no FlowB2B)',
+    }
+
     await supabase
       .from('pedido_timeline')
       .insert({
         pedido_compra_id: parseInt(pedidoId),
         evento: 'excluido',
-        descricao: `Pedido #${pedido.numero || pedidoId} excluido pelo lojista`,
+        descricao: descricaoBase + sufixoOutcome[outcome],
         autor_tipo: 'lojista',
         autor_nome: user.email,
       })
 
     return NextResponse.json({
       success: true,
+      outcome,
+      bling_canceled: outcome === 'cancelado' || outcome === 'ja_cancelado',
+      bling_error: blingErrorMsg,
       message: 'Pedido excluido com sucesso',
     })
 
