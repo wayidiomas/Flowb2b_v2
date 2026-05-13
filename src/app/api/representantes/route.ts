@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
         telefone: body.telefone || null,
         ativo: true,
       })
-      .select('id')
+      .select('id, nome, telefone, codigo_acesso')
       .single()
 
     if (repError) {
@@ -225,6 +225,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      representante: {
+        id: representante.id,
+        nome: representante.nome,
+        telefone: representante.telefone,
+        codigo_acesso: representante.codigo_acesso,
+      },
+      // Campos legacy mantidos pra compat com callers antigos
       representante_id: representante.id,
       codigo_acesso: codigoAcesso,
       message: 'Representante criado com sucesso',
