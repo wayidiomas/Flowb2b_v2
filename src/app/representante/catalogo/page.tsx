@@ -1,0 +1,4827 @@
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRepresentanteAuth } from '@/contexts/RepresentanteAuthContext'
+import { RepresentanteLayout } from '@/components/layout/RepresentanteLayout'
+import { Skeleton } from '@/components/ui'
+import { Button } from '@/components/ui/Button'
+import {
+  Modal,
+  ModalHeader,
+  ModalTitle,
+  ModalDescription,
+  ModalBody,
+  ModalFooter,
+} from '@/components/ui/Modal'
+import { CATEGORIAS_PET } from '@/lib/categorias-pet'
+
+// Module-level state: fornecedor_id ativo do representante.
+// Setado pelo componente principal e lido pelos helpers abaixo,
+// que sao chamados por TODOS os componentes (ProductCard, modais, etc).
+//
+// Multi-fornecedor:
+// - _currentFornecedorIds: lista (para LEITURA agregada)
+// - _currentFornecedorId: id "ativo" (usado pra ESCRITA quando o caller nao informa explicitamente)
+let _currentFornecedorId: number | null = null
+let _currentFornecedorIds: number[] = []
+
+function setCurrentFornecedorId(id: number | null) {
+  _currentFornecedorId = id
+}
+
+function setCurrentFornecedorIds(ids: number[]) {
+  _currentFornecedorIds = ids
+}
+
+/**
+ * Anexa fornecedor_id (single) na URL.
+ * Usado para todas as operacoes de ESCRITA (POST/PUT/DELETE/PATCH).
+ * Quando o caller fornecer um `id` explicito (ex.: item.fornecedor_id), ele tem prioridade.
+ */
+function appendForn(url: string, id?: number | null): string {
+  const fid = id ?? _currentFornecedorId
+  if (!fid) return url
+  return url.includes('?')
+    ? `${url}&fornecedor_id=${fid}`
+    : `${url}?fornecedor_id=${fid}`
+}
+
+/**
+ * Anexa fornecedor_ids[] (CSV) na URL.
+ * Usado para operacoes de LEITURA (GET) agregadas multi-fornecedor.
+ * Se nenhum estiver selecionado, retorna a URL sem filtro (a API default = todos vinculados).
+ */
+function appendForns(url: string): string {
+  if (!_currentFornecedorIds || _currentFornecedorIds.length === 0) return url
+  const csv = _currentFornecedorIds.join(',')
+  return url.includes('?')
+    ? `${url}&fornecedor_ids=${csv}`
+    : `${url}?fornecedor_ids=${csv}`
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface CatalogoItem {
+  id: number
+  catalogo_id: number
+  produto_id: number
+  empresa_id: number
+  codigo: string | null
+  nome: string
+  marca: string | null
+  unidade: string | null
+  itens_por_caixa: number | null
+  preco_base: number | null
+  ativo: boolean
+  ordem: number | null
+  imagem_url: string | null
+  categoria: string | null
+  descricao_produto: string | null
+  destaque: boolean
+  preco_customizado?: number | null
+  desconto_percentual?: number | null
+  ativo_lojista?: boolean | null
+  preco_lojista_id?: number | null
+  // Anotado pelo backend no fluxo multi-fornecedor (representante).
+  // Mapeado a partir do CNPJ do catalogo do item, para que operacoes de WRITE
+  // saibam qual fornecedor enviar via fornecedor_id.
+  fornecedor_id?: number | null
+}
+
+interface Catalogo {
+  id: number
+  fornecedor_id: number
+}
+
+interface ImportPreviewRow {
+  linha: number
+  codigo: string | null
+  ean: string | null
+  nome: string | null
+  preco: number | null
+}
+
+interface ImportError {
+  linha: number
+  campo: string
+  mensagem: string
+}
+
+interface ImportResumo {
+  total: number
+  novos: number
+  atualizados: number
+  erros: number
+}
+
+interface ImportPreviewResponse {
+  success: boolean
+  resumo: ImportResumo
+  novos: ImportPreviewRow[]
+  atualizados: ImportPreviewRow[]
+  erros: ImportError[]
+}
+
+interface ImportConfirmResponse {
+  success: boolean
+  resumo: ImportResumo
+}
+
+interface ImportJobStatus {
+  id: number
+  status: 'pending' | 'processing' | 'completed' | 'error'
+  totalLinhas: number
+  processados: number
+  novos: number
+  atualizados: number
+  erros: number
+  errorMessage: string | null
+  resumo: { total: number; novos: number; atualizados: number; erros: unknown[] } | null
+}
+
+interface ProdutoExtraido {
+  codigo_fornecedor: string | null
+  codigo_fabricante: string | null
+  nome: string
+  ean: string | null
+  marca: string | null
+  ncm: string | null
+  unidade: string | null
+  itens_por_caixa: number | null
+  preco_base: number
+  preco_com_impostos: number | null
+  bonificacao: number | null
+  categoria: string | null
+  _curacao?: 'corrigido' | 'nao_encontrado' | null
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const formatCurrency = (value: number | null | undefined) => {
+  if (value == null) return 'R$ 0,00'
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+}
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+  return debounced
+}
+
+// ---------------------------------------------------------------------------
+// Icons
+// ---------------------------------------------------------------------------
+
+function SearchIcon() {
+  return (
+    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+  )
+}
+
+function SyncIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className || 'w-4 h-4'} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M2.985 19.644l3.181-3.182" />
+    </svg>
+  )
+}
+
+function TagIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className || 'w-8 h-8'} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+    </svg>
+  )
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+    </svg>
+  )
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Toast
+// ---------------------------------------------------------------------------
+
+interface ToastState {
+  message: string
+  type: 'success' | 'error' | 'warning'
+}
+
+interface SyncResult {
+  empresa_id: number
+  empresa_nome: string
+  supabase: boolean
+  bling: boolean
+}
+
+function Toast({ toast, onDismiss }: { toast: ToastState | null; onDismiss: () => void }) {
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(onDismiss, 3000)
+    return () => clearTimeout(timer)
+  }, [toast, onDismiss])
+
+  if (!toast) return null
+
+  return (
+    <div className="fixed top-4 right-4 z-[100] animate-in fade-in slide-in-from-top-2 duration-200">
+      <div
+        className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium ${
+          toast.type === 'success'
+            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+            : toast.type === 'warning'
+            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+            : 'bg-red-50 text-red-800 border border-red-200'
+        }`}
+      >
+        {toast.type === 'success' ? (
+          <svg className="w-5 h-5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        ) : toast.type === 'warning' ? (
+          <svg className="w-5 h-5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+        )}
+        <span>{toast.message}</span>
+        <button onClick={onDismiss} className="ml-2 text-current opacity-60 hover:opacity-100">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Inline Price Editor
+// ---------------------------------------------------------------------------
+
+function InlinePriceEditor({
+  value,
+  onSave,
+  saving,
+}: {
+  value: number | null
+  onSave: (newValue: number) => void
+  saving?: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [editValue, setEditValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const startEdit = () => {
+    if (saving) return
+    setEditValue(value != null ? value.toFixed(2).replace('.', ',') : '0,00')
+    setEditing(true)
+  }
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [editing])
+
+  const commit = () => {
+    const parsed = parseFloat(editValue.replace(',', '.'))
+    if (!isNaN(parsed) && parsed >= 0) {
+      onSave(parsed)
+    }
+    setEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') commit()
+    if (e.key === 'Escape') setEditing(false)
+  }
+
+  if (saving) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm text-gray-400">
+        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+        <span>Sincronizando...</span>
+      </span>
+    )
+  }
+
+  if (editing) {
+    return (
+      <div className="inline-flex items-center gap-1">
+        <span className="text-sm text-gray-500">R$</span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={commit}
+          onKeyDown={handleKeyDown}
+          className="w-24 px-2 py-1 text-sm border border-[#336FB6] rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 text-right"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <button
+      onClick={startEdit}
+      className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900 hover:text-[#336FB6] transition-colors group"
+    >
+      <span>{formatCurrency(value)}</span>
+      <svg className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#336FB6] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+      </svg>
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Toggle Switch
+// ---------------------------------------------------------------------------
+
+function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean
+  onChange: (val: boolean) => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+        checked ? 'bg-[#336FB6]' : 'bg-gray-200'
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Personalizar Precos Modal
+// ---------------------------------------------------------------------------
+
+interface PrecoLojista {
+  empresaId: number
+  nomeFantasia: string
+  razaoSocial: string
+  precoCustomizado: string
+  descontoPercentual: string
+  ativo: boolean
+  hasOverride: boolean
+  precoLojistaId: number | null
+  changed: boolean
+  removed: boolean
+}
+
+function ModalImageSection({
+  item,
+  onImageUploaded,
+}: {
+  item: CatalogoItem
+  onImageUploaded: (id: number, url: string | null) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [urlInput, setUrlInput] = useState('')
+  const [showUrlField, setShowUrlField] = useState(false)
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch(appendForn(`/api/representante/catalogo/itens/${item.id}/imagem`, item.fornecedor_id), {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      if (res.ok && data.imagem_url) {
+        onImageUploaded(item.id, data.imagem_url)
+      } else {
+        alert(data.error || 'Erro ao enviar imagem')
+      }
+    } catch {
+      alert('Erro ao enviar imagem')
+    } finally {
+      setUploading(false)
+    }
+    e.target.value = ''
+  }
+
+  const handleSaveUrl = async () => {
+    const url = urlInput.trim()
+    if (!url) return
+    setUploading(true)
+    try {
+      const res = await fetch(appendForn(`/api/representante/catalogo/itens/${item.id}/imagem`, item.fornecedor_id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imagem_url: url }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        onImageUploaded(item.id, url)
+        setUrlInput('')
+        setShowUrlField(false)
+      } else {
+        alert(data.error || 'Erro ao salvar URL')
+      }
+    } catch {
+      alert('Erro ao salvar URL')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleRemove = async () => {
+    setUploading(true)
+    try {
+      const res = await fetch(appendForn(`/api/representante/catalogo/itens/${item.id}/imagem`, item.fornecedor_id), { method: 'DELETE' })
+      if (res.ok) onImageUploaded(item.id, null)
+    } catch {
+      alert('Erro ao remover imagem')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="mb-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Imagem do produto</p>
+      <div className="flex items-start gap-4">
+        {/* Preview */}
+        <div className="w-24 h-24 shrink-0 rounded-lg overflow-hidden bg-white border border-gray-200 flex items-center justify-center">
+          {item.imagem_url ? (
+            <img src={item.imagem_url} alt={item.nome} className="w-full h-full object-contain" />
+          ) : (
+            <div className="flex flex-col items-center text-gray-300">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+              </svg>
+              <span className="text-[10px] mt-1">Sem imagem</span>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex-1 space-y-2">
+          {/* Upload file */}
+          <div className={`relative flex items-center gap-2 px-3 py-2 text-xs font-medium border border-gray-300 rounded-lg cursor-pointer hover:bg-white hover:border-[#336FB6] transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              onChange={handleFileChange}
+            />
+            {uploading ? (
+              <svg className="w-4 h-4 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+            )}
+            <span className="text-gray-600">{uploading ? 'Enviando...' : 'Enviar do computador'}</span>
+          </div>
+
+          {/* URL externa */}
+          {showUrlField ? (
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="https://..."
+                className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveUrl()}
+              />
+              <button
+                onClick={handleSaveUrl}
+                disabled={uploading || !urlInput.trim()}
+                className="px-3 py-2 text-xs font-medium bg-[#336FB6] text-white rounded-lg hover:bg-[#2b5e9e] disabled:opacity-50"
+              >
+                Salvar
+              </button>
+              <button
+                onClick={() => { setShowUrlField(false); setUrlInput('') }}
+                className="px-2 py-2 text-xs text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowUrlField(true)}
+              className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-white hover:border-[#336FB6] transition-colors w-full"
+            >
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+              </svg>
+              Colar URL externa
+            </button>
+          )}
+
+          {/* Remover */}
+          {item.imagem_url && (
+            <button
+              onClick={handleRemove}
+              disabled={uploading}
+              className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+              Remover imagem
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PersonalizarPrecosModal({
+  isOpen,
+  onClose,
+  item,
+  empresasVinculadas,
+  onSaved,
+  onImageUploaded,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  item: CatalogoItem | null
+  empresasVinculadas: { empresaId: number; fornecedorId: number; razaoSocial: string; nomeFantasia: string }[]
+  onSaved: () => void
+  onImageUploaded: (id: number, url: string | null) => void
+}) {
+  const [lojistas, setLojistas] = useState<PrecoLojista[]>([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen || !item) return
+
+    const loadOverrides = async () => {
+      setLoading(true)
+      try {
+        // Fetch item details per lojista to get existing overrides
+        const results: PrecoLojista[] = []
+        for (const emp of empresasVinculadas) {
+          const res = await fetch(appendForn(`/api/representante/catalogo/itens?search=${encodeURIComponent(item.codigo || '')}&empresa_id=${emp.empresaId}&limit=1`, item.fornecedor_id)
+          )
+          let override: { preco_customizado?: number | null; desconto_percentual?: number | null; ativo_lojista?: boolean | null; preco_lojista_id?: number | null } = {}
+          if (res.ok) {
+            const data = await res.json()
+            const found = data.itens?.find((i: CatalogoItem) => i.id === item.id)
+            if (found) {
+              override = {
+                preco_customizado: found.preco_customizado,
+                desconto_percentual: found.desconto_percentual,
+                ativo_lojista: found.ativo_lojista,
+                preco_lojista_id: found.preco_lojista_id,
+              }
+            }
+          }
+
+          const hasOverride = override.preco_customizado != null
+          results.push({
+            empresaId: emp.empresaId,
+            nomeFantasia: emp.nomeFantasia,
+            razaoSocial: emp.razaoSocial,
+            precoCustomizado: hasOverride
+              ? (override.preco_customizado!).toFixed(2).replace('.', ',')
+              : '',
+            descontoPercentual: override.desconto_percentual != null
+              ? override.desconto_percentual.toFixed(1).replace('.', ',')
+              : '',
+            ativo: override.ativo_lojista ?? true,
+            hasOverride,
+            precoLojistaId: override.preco_lojista_id ?? null,
+            changed: false,
+            removed: false,
+          })
+        }
+        setLojistas(results)
+      } catch (err) {
+        console.error('Erro ao carregar overrides:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadOverrides()
+  }, [isOpen, item, empresasVinculadas])
+
+  const precoBase = item?.preco_base ?? 0
+
+  const updateLojista = (index: number, changes: Partial<PrecoLojista>) => {
+    setLojistas((prev) => {
+      const updated = [...prev]
+      updated[index] = { ...updated[index], ...changes, changed: true }
+      return updated
+    })
+  }
+
+  const handlePrecoChange = (index: number, valor: string) => {
+    const parsed = parseFloat(valor.replace(',', '.'))
+    let desc = ''
+    if (!isNaN(parsed) && precoBase > 0 && parsed < precoBase) {
+      desc = (((precoBase - parsed) / precoBase) * 100).toFixed(1).replace('.', ',')
+    }
+    updateLojista(index, { precoCustomizado: valor, descontoPercentual: desc, hasOverride: true })
+  }
+
+  const handleDescontoChange = (index: number, valor: string) => {
+    const parsed = parseFloat(valor.replace(',', '.'))
+    let preco = ''
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+      preco = (precoBase * (1 - parsed / 100)).toFixed(2).replace('.', ',')
+    }
+    updateLojista(index, { descontoPercentual: valor, precoCustomizado: preco, hasOverride: true })
+  }
+
+  const handleRemoveOverride = (index: number) => {
+    updateLojista(index, {
+      precoCustomizado: '',
+      descontoPercentual: '',
+      hasOverride: false,
+      removed: true,
+    })
+  }
+
+  const handleSetOverride = (index: number) => {
+    updateLojista(index, {
+      precoCustomizado: precoBase.toFixed(2).replace('.', ','),
+      descontoPercentual: '0,0',
+      hasOverride: true,
+      removed: false,
+    })
+  }
+
+  const handleSave = async () => {
+    if (!item) return
+    setSaving(true)
+    try {
+      const promises: Promise<Response>[] = []
+
+      for (const lojista of lojistas) {
+        if (!lojista.changed) continue
+
+        if (lojista.removed && lojista.precoLojistaId) {
+          promises.push(
+            fetch(appendForn(`/api/representante/catalogo/precos-lojista?id=${lojista.precoLojistaId}`, item.fornecedor_id), {
+              method: 'DELETE',
+            })
+          )
+        } else if (lojista.hasOverride && !lojista.removed) {
+          const preco = parseFloat(lojista.precoCustomizado.replace(',', '.'))
+          const desconto = lojista.descontoPercentual
+            ? parseFloat(lojista.descontoPercentual.replace(',', '.'))
+            : undefined
+          if (!isNaN(preco)) {
+            promises.push(
+              fetch(appendForn('/api/representante/catalogo/precos-lojista', item.fornecedor_id), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  catalogo_item_id: item.id,
+                  empresa_id: lojista.empresaId,
+                  preco_customizado: preco,
+                  desconto_percentual: desconto,
+                  ativo: lojista.ativo,
+                }),
+              })
+            )
+          }
+        }
+      }
+
+      await Promise.all(promises)
+      onSaved()
+      onClose()
+    } catch (err) {
+      console.error('Erro ao salvar precos:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="lg">
+      <ModalHeader onClose={onClose}>
+        <ModalTitle>Personalizar Precos</ModalTitle>
+        {item && (
+          <ModalDescription>
+            {item.nome} {item.codigo ? `(${item.codigo})` : ''}
+            {' - Preco base: '}
+            {formatCurrency(item.preco_base)}
+          </ModalDescription>
+        )}
+      </ModalHeader>
+      <ModalBody>
+        {/* Imagem do produto */}
+        {item && (
+          <ModalImageSection item={item} onImageUploaded={onImageUploaded} />
+        )}
+
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
+        ) : (
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {lojistas.map((lojista, index) => (
+              <div
+                key={lojista.empresaId}
+                className="p-4 bg-gray-50 rounded-xl border border-gray-200"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {lojista.nomeFantasia || lojista.razaoSocial}
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span>Ativo</span>
+                    <ToggleSwitch
+                      checked={lojista.ativo}
+                      onChange={(val) => updateLojista(index, { ativo: val })}
+                      disabled={!lojista.hasOverride}
+                    />
+                  </div>
+                </div>
+
+                {lojista.hasOverride && !lojista.removed ? (
+                  <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-500 mb-1">Preco</label>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm text-gray-500">R$</span>
+                        <input
+                          type="text"
+                          value={lojista.precoCustomizado}
+                          onChange={(e) => handlePrecoChange(index, e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                        />
+                      </div>
+                    </div>
+                    <div className="w-24">
+                      <label className="block text-xs text-gray-500 mb-1">Desconto %</label>
+                      <input
+                        type="text"
+                        value={lojista.descontoPercentual}
+                        onChange={(e) => handleDescontoChange(index, e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                      />
+                    </div>
+                    <button
+                      onClick={() => handleRemoveOverride(index)}
+                      className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap pb-2"
+                    >
+                      Remover override
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-400">
+                      {formatCurrency(precoBase)} (preco base)
+                    </p>
+                    <button
+                      onClick={() => handleSetOverride(index)}
+                      className="text-xs text-[#336FB6] hover:text-[#2660a5] font-medium"
+                    >
+                      Definir preco customizado
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {lojistas.length === 0 && (
+              <p className="text-sm text-gray-500 text-center py-4">
+                Nenhum lojista vinculado encontrado.
+              </p>
+            )}
+          </div>
+        )}
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="outline" size="md" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button
+          variant="primary"
+          size="md"
+          loading={saving}
+          onClick={handleSave}
+          disabled={!lojistas.some((l) => l.changed)}
+        >
+          Salvar
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Lojista Filter Dropdown (simplified inline dropdown)
+// ---------------------------------------------------------------------------
+
+function LojistaFilterDropdown({
+  empresasVinculadas,
+  selected,
+  onSelect,
+}: {
+  empresasVinculadas: { empresaId: number; nomeFantasia: string; razaoSocial: string }[]
+  selected: number | null
+  onSelect: (id: number | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const selectedEmpresa = empresasVinculadas.find((e) => e.empresaId === selected)
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm hover:border-[#336FB6]/40 focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-colors"
+      >
+        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z" />
+        </svg>
+        <span className="text-gray-700 truncate max-w-[120px]">
+          {selected ? (selectedEmpresa?.nomeFantasia || 'Lojista') : 'Lojista'}
+        </span>
+        <svg
+          className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-1.5 w-56 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+          <button
+            onClick={() => { onSelect(null); setOpen(false) }}
+            className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+              !selected ? 'bg-[#336FB6]/5 text-[#336FB6] font-medium' : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            Todos os lojistas
+          </button>
+          {empresasVinculadas.map((emp) => (
+            <button
+              key={emp.empresaId}
+              onClick={() => { onSelect(emp.empresaId); setOpen(false) }}
+              className={`w-full text-left px-4 py-2.5 text-sm transition-colors truncate ${
+                selected === emp.empresaId
+                  ? 'bg-[#336FB6]/5 text-[#336FB6] font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {emp.nomeFantasia || emp.razaoSocial}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Marca Filter Dropdown
+// ---------------------------------------------------------------------------
+
+function MarcaFilterDropdown({
+  marcas,
+  selected,
+  onSelect,
+}: {
+  marcas: string[]
+  selected: string | null
+  onSelect: (marca: string | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm hover:border-[#336FB6]/40 focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-colors"
+      >
+        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+        </svg>
+        <span className="text-gray-700 truncate max-w-[120px]">
+          {selected || 'Marca'}
+        </span>
+        <svg
+          className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-1.5 w-48 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg">
+          <button
+            onClick={() => { onSelect(null); setOpen(false) }}
+            className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+              !selected ? 'bg-[#336FB6]/5 text-[#336FB6] font-medium' : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            Todas as marcas
+          </button>
+          {marcas.map((marca) => (
+            <button
+              key={marca}
+              onClick={() => { onSelect(marca); setOpen(false) }}
+              className={`w-full text-left px-4 py-2.5 text-sm transition-colors truncate ${
+                selected === marca
+                  ? 'bg-[#336FB6]/5 text-[#336FB6] font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {marca}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Product Card (mobile)
+// ---------------------------------------------------------------------------
+
+function ProductImageUpload({
+  item,
+  onUploaded,
+}: {
+  item: CatalogoItem
+  onUploaded: (id: number, url: string | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [urlInput, setUrlInput] = useState('')
+  const [tab, setTab] = useState<'upload' | 'url'>('upload')
+  const popoverRef = useRef<HTMLDivElement>(null)
+
+  // Fechar ao clicar fora
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch(appendForn(`/api/representante/catalogo/itens/${item.id}/imagem`, item.fornecedor_id), {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      if (res.ok && data.imagem_url) {
+        onUploaded(item.id, data.imagem_url)
+        setOpen(false)
+      } else {
+        alert(data.error || 'Erro ao enviar imagem')
+      }
+    } catch {
+      alert('Erro ao enviar imagem')
+    } finally {
+      setUploading(false)
+    }
+    // Reset input para permitir reupload do mesmo arquivo
+    e.target.value = ''
+  }
+
+  const handleSaveUrl = async () => {
+    const url = urlInput.trim()
+    if (!url) return
+
+    setUploading(true)
+    try {
+      const res = await fetch(appendForn(`/api/representante/catalogo/itens/${item.id}/imagem`, item.fornecedor_id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imagem_url: url }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        onUploaded(item.id, url)
+        setOpen(false)
+        setUrlInput('')
+      } else {
+        alert(data.error || 'Erro ao salvar URL')
+      }
+    } catch {
+      alert('Erro ao salvar URL')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleRemove = async () => {
+    setUploading(true)
+    try {
+      const res = await fetch(appendForn(`/api/representante/catalogo/itens/${item.id}/imagem`, item.fornecedor_id), {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        onUploaded(item.id, null)
+        setOpen(false)
+      }
+    } catch {
+      alert('Erro ao remover imagem')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="relative w-16 h-16 shrink-0">
+
+      {/* Thumbnail / Placeholder */}
+      <button
+        onClick={() => { setOpen(!open); setTab(item.imagem_url ? 'url' : 'upload') }}
+        className="w-full h-full rounded-lg overflow-hidden bg-gray-100 border border-gray-200 hover:border-[#336FB6] transition-colors flex items-center justify-center"
+      >
+        {item.imagem_url ? (
+          <img src={item.imagem_url} alt={item.nome} className="w-full h-full object-cover" />
+        ) : (
+          <div className="flex flex-col items-center text-gray-400">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+            </svg>
+            <span className="text-[9px] mt-0.5">Foto</span>
+          </div>
+        )}
+      </button>
+
+      {/* Popover */}
+      {open && (
+        <div
+          ref={popoverRef}
+          className="absolute top-full left-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-200 z-50 p-4"
+        >
+          {/* Preview */}
+          {item.imagem_url && (
+            <div className="mb-3 relative">
+              <img src={item.imagem_url} alt={item.nome} className="w-full h-32 object-contain rounded-lg bg-gray-50 border border-gray-100" />
+              <button
+                onClick={handleRemove}
+                disabled={uploading}
+                className="absolute top-1 right-1 p-1 bg-white rounded-full shadow border border-gray-200 text-red-500 hover:bg-red-50 disabled:opacity-50"
+                title="Remover imagem"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-3 bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setTab('upload')}
+              className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors ${tab === 'upload' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Enviar arquivo
+            </button>
+            <button
+              onClick={() => setTab('url')}
+              className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors ${tab === 'url' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              URL externa
+            </button>
+          </div>
+
+          {tab === 'upload' ? (
+            <div
+              className={`relative w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-[#336FB6] hover:text-[#336FB6] transition-colors flex items-center justify-center gap-2 cursor-pointer ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+            >
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                onChange={handleFileChange}
+              />
+              {uploading ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  Clique para selecionar (JPEG, PNG, WebP)
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="https://exemplo.com/imagem.jpg"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+              <button
+                onClick={handleSaveUrl}
+                disabled={uploading || !urlInput.trim()}
+                className="w-full py-2 text-sm font-medium bg-[#336FB6] text-white rounded-lg hover:bg-[#2b5e9e] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {uploading ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Salvando...
+                  </>
+                ) : 'Salvar URL'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProductCard({
+  item,
+  lojistaFilter,
+  onToggleAtivo,
+  onUpdatePreco,
+  onPersonalizar,
+  onImageUploaded,
+  onCategoriaChange,
+  onDestaqueToggle,
+  saving,
+  isSelected,
+  onToggleSelect,
+}: {
+  item: CatalogoItem
+  lojistaFilter: number | null
+  onToggleAtivo: (id: number, ativo: boolean) => void
+  onUpdatePreco: (id: number, preco: number) => void
+  onPersonalizar: (item: CatalogoItem) => void
+  onImageUploaded: (id: number, url: string | null) => void
+  onCategoriaChange: (id: number, categoria: string | null) => void
+  onDestaqueToggle: (id: number, destaque: boolean) => void
+  saving?: boolean
+  isSelected?: boolean
+  onToggleSelect?: (id: number) => void
+}) {
+  const hasCustomPrice = lojistaFilter && item.preco_customizado != null
+
+  return (
+    <div className={`p-4 ${!item.ativo ? 'opacity-60' : ''}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          {onToggleSelect && (
+            <input
+              type="checkbox"
+              checked={!!isSelected}
+              onChange={() => onToggleSelect(item.id)}
+              className="mt-1 w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20 shrink-0"
+            />
+          )}
+          <ProductImageUpload item={item} onUploaded={onImageUploaded} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-gray-900 line-clamp-2 flex-1">{item.nome}</p>
+              <button
+                onClick={() => onDestaqueToggle(item.id, !item.destaque)}
+                className={`p-1 rounded-lg transition-colors shrink-0 ${item.destaque ? 'text-amber-500 bg-amber-50' : 'text-gray-300 hover:text-amber-400'}`}
+                title={item.destaque ? 'Remover destaque' : 'Destacar produto'}
+              >
+                <svg className="w-4 h-4" fill={item.destaque ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+              <span className="font-mono">{item.codigo || '-'}</span>
+              {item.marca && (
+                <>
+                  <span className="text-gray-300">|</span>
+                  <span>{item.marca}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        <ToggleSwitch
+          checked={item.ativo}
+          onChange={(val) => onToggleAtivo(item.id, val)}
+        />
+      </div>
+
+      <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
+        <span>UN: {item.unidade || '-'}</span>
+        {item.itens_por_caixa && (
+          <>
+            <span className="text-gray-300">|</span>
+            <span>Cx: {item.itens_por_caixa} un</span>
+          </>
+        )}
+      </div>
+
+      <div className="mt-2">
+        <select
+          value={item.categoria || ''}
+          onChange={(e) => onCategoriaChange(item.id, e.target.value || null)}
+          className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white w-full"
+        >
+          <option value="">Sem categoria</option>
+          {CATEGORIAS_PET.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between">
+        <div>
+          <p className="text-[10px] uppercase text-gray-400 font-medium">Preco base</p>
+          <InlinePriceEditor
+            value={item.preco_base}
+            onSave={(val) => onUpdatePreco(item.id, val)}
+            saving={saving}
+          />
+        </div>
+        <div className="text-right">
+          {lojistaFilter ? (
+            <div>
+              <p className="text-[10px] uppercase text-gray-400 font-medium">Lojista</p>
+              {hasCustomPrice ? (
+                <p className="text-sm font-semibold text-[#336FB6]">
+                  {formatCurrency(item.preco_customizado)}
+                  {item.desconto_percentual != null && item.desconto_percentual > 0 && (
+                    <span className="text-xs text-emerald-600 ml-1">
+                      (-{item.desconto_percentual.toFixed(1)}%)
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-400">Preco base</p>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <button
+        onClick={() => onPersonalizar(item)}
+        className="mt-3 w-full text-center text-xs text-[#336FB6] hover:text-[#2660a5] font-medium py-2 border border-[#336FB6]/20 rounded-lg hover:bg-[#336FB6]/5 transition-colors"
+      >
+        Personalizar precos por lojista
+      </button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Personalizar Multi Modal (bulk price customization for selected items)
+// ---------------------------------------------------------------------------
+
+interface MultiModalItem {
+  catalogo_item_id: number
+  nome: string
+  codigo: string | null
+  preco_base: number | null
+  preco_lojista: string
+  desconto_percentual: string
+}
+
+type MultiAjusteTipo = 'acrescimo' | 'desconto'
+
+function PersonalizarMultiModal({
+  isOpen,
+  onClose,
+  items,
+  empresaId,
+  empresaNome,
+  onSaved,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  items: CatalogoItem[]
+  empresaId: number
+  empresaNome: string
+  onSaved: () => void
+}) {
+  const [modalItens, setModalItens] = useState<MultiModalItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [ajustePercentual, setAjustePercentual] = useState('')
+  const [ajusteTipo, setAjusteTipo] = useState<MultiAjusteTipo>('desconto')
+
+  // Load existing overrides when modal opens
+  useEffect(() => {
+    if (!isOpen || items.length === 0 || !empresaId) return
+
+    const loadOverrides = async () => {
+      setLoading(true)
+      try {
+        // Fetch all items with empresa_id to get existing overrides
+        const res = await fetch(appendForns(`/api/representante/catalogo/itens?empresa_id=${empresaId}&limit=9999`))
+        let overrideMap: Record<number, { preco_customizado?: number | null; desconto_percentual?: number | null }> = {}
+        if (res.ok) {
+          const data = await res.json()
+          const allItens: CatalogoItem[] = data.itens || []
+          for (const i of allItens) {
+            overrideMap[i.id] = {
+              preco_customizado: i.preco_customizado,
+              desconto_percentual: i.desconto_percentual,
+            }
+          }
+        }
+
+        setModalItens(
+          items.map((item) => {
+            const override = overrideMap[item.id]
+            const hasOverride = override?.preco_customizado != null
+            const precoBase = item.preco_base ?? 0
+            return {
+              catalogo_item_id: item.id,
+              nome: item.nome,
+              codigo: item.codigo,
+              preco_base: item.preco_base,
+              preco_lojista: hasOverride
+                ? override!.preco_customizado!.toFixed(2)
+                : precoBase.toFixed(2),
+              desconto_percentual: hasOverride && override!.desconto_percentual != null
+                ? override!.desconto_percentual.toFixed(2)
+                : '0.00',
+            }
+          })
+        )
+      } catch (err) {
+        console.error('Erro ao carregar overrides em lote:', err)
+        // Fallback: initialize from item base prices
+        setModalItens(
+          items.map((item) => ({
+            catalogo_item_id: item.id,
+            nome: item.nome,
+            codigo: item.codigo,
+            preco_base: item.preco_base,
+            preco_lojista: (item.preco_base ?? 0).toFixed(2),
+            desconto_percentual: '0.00',
+          }))
+        )
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadOverrides()
+  }, [isOpen, items, empresaId])
+
+  // Reset bulk adjustment fields when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setAjustePercentual('')
+      setAjusteTipo('desconto')
+    }
+  }, [isOpen])
+
+  const updateItem = (index: number, field: 'preco_lojista' | 'desconto_percentual', value: string) => {
+    setModalItens((prev) => {
+      const updated = [...prev]
+      const item = { ...updated[index] }
+      const precoBase = item.preco_base ?? 0
+
+      if (field === 'preco_lojista') {
+        item.preco_lojista = value
+        const parsed = parseFloat(value)
+        if (!isNaN(parsed) && precoBase > 0) {
+          const desc = ((precoBase - parsed) / precoBase) * 100
+          item.desconto_percentual = desc.toFixed(2)
+        }
+      } else {
+        item.desconto_percentual = value
+        const parsed = parseFloat(value)
+        if (!isNaN(parsed)) {
+          const novoPreco = Math.max(0, precoBase * (1 - parsed / 100))
+          item.preco_lojista = novoPreco.toFixed(2)
+        }
+      }
+
+      updated[index] = item
+      return updated
+    })
+  }
+
+  const aplicarAjusteTodos = () => {
+    const pct = parseFloat(ajustePercentual)
+    if (isNaN(pct) || pct <= 0) return
+
+    setModalItens((prev) =>
+      prev.map((item) => {
+        const precoBase = item.preco_base ?? 0
+        if (precoBase <= 0) return item
+
+        let novoPreco: number
+        let novoDesconto: number
+        if (ajusteTipo === 'acrescimo') {
+          novoPreco = precoBase * (1 + pct / 100)
+          novoDesconto = -pct
+        } else {
+          novoPreco = precoBase * (1 - pct / 100)
+          novoDesconto = pct
+        }
+
+        return {
+          ...item,
+          preco_lojista: Math.max(0, novoPreco).toFixed(2),
+          desconto_percentual: novoDesconto.toFixed(2),
+        }
+      })
+    )
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      // Only send items where price differs from preco_base
+      const changedItens = modalItens.filter((item) => {
+        const precoBase = item.preco_base ?? 0
+        const precoLojista = parseFloat(item.preco_lojista) || 0
+        return Math.abs(precoLojista - precoBase) > 0.001
+      })
+
+      if (changedItens.length === 0) {
+        onSaved()
+        onClose()
+        return
+      }
+
+      // Agrupar por fornecedor_id (catalogo eh por CNPJ; backend valida por fornecedor)
+      const grupos = new Map<number, typeof changedItens>()
+      for (const it of changedItens) {
+        // Encontrar fornecedor_id do item correspondente em `items` (passado como prop)
+        const orig = items.find((x) => x.id === it.catalogo_item_id)
+        const fid = orig?.fornecedor_id ?? null
+        if (!fid) continue
+        const arr = grupos.get(fid) || []
+        arr.push(it)
+        grupos.set(fid, arr)
+      }
+
+      const results = await Promise.all(
+        Array.from(grupos.entries()).map(([fid, lista]) =>
+          fetch(appendForn('/api/representante/catalogo/precos-lojista/batch', fid), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              empresa_id: empresaId,
+              itens: lista.map((item) => ({
+                catalogo_item_id: item.catalogo_item_id,
+                preco_customizado: parseFloat(item.preco_lojista) || 0,
+                desconto_percentual: parseFloat(item.desconto_percentual) || 0,
+                ativo: true,
+              })),
+            }),
+          })
+        )
+      )
+
+      const allOk = results.every((r) => r.ok)
+      if (allOk) {
+        onSaved()
+        onClose()
+      } else {
+        console.error('Erro ao salvar precos em lote (algum fornecedor falhou)')
+      }
+    } catch (err) {
+      console.error('Erro ao salvar precos em lote:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="xl">
+      <ModalHeader onClose={onClose}>
+        <ModalTitle>Personalizar Precos em Lote</ModalTitle>
+        <ModalDescription>
+          {items.length} produto(s) selecionado(s) para {empresaNome}
+        </ModalDescription>
+      </ModalHeader>
+      <ModalBody>
+        {/* Bulk adjustment bar */}
+        <div className="mb-4 p-4 bg-[#336FB6]/5 border border-[#336FB6]/20 rounded-xl">
+          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-3">Reajuste em massa</p>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex-shrink-0">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Percentual</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={ajustePercentual}
+                  onChange={(e) => setAjustePercentual(e.target.value)}
+                  placeholder="0.0"
+                  className="w-28 px-3 py-2 pr-7 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="multi-ajuste-tipo"
+                  checked={ajusteTipo === 'acrescimo'}
+                  onChange={() => setAjusteTipo('acrescimo')}
+                  className="w-4 h-4 text-[#336FB6] focus:ring-[#336FB6]/20"
+                />
+                <span className="text-gray-700">Acrescimo</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="multi-ajuste-tipo"
+                  checked={ajusteTipo === 'desconto'}
+                  onChange={() => setAjusteTipo('desconto')}
+                  className="w-4 h-4 text-[#336FB6] focus:ring-[#336FB6]/20"
+                />
+                <span className="text-gray-700">Desconto</span>
+              </label>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={aplicarAjusteTodos}
+              disabled={!ajustePercentual || parseFloat(ajustePercentual) <= 0}
+            >
+              Aplicar em todos
+            </Button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+          </div>
+        ) : (
+          <div className="max-h-[60vh] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                  <th className="px-3 py-3">Produto</th>
+                  <th className="px-3 py-3 text-right">Preco Base</th>
+                  <th className="px-3 py-3 text-right">Preco Lojista</th>
+                  <th className="px-3 py-3 text-right">Desconto %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {modalItens.map((item, index) => (
+                  <tr key={item.catalogo_item_id} className="hover:bg-gray-50">
+                    <td className="px-3 py-3">
+                      <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">{item.nome}</p>
+                      {item.codigo && (
+                        <p className="text-xs text-gray-400 font-mono">{item.codigo}</p>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right text-sm text-gray-500 whitespace-nowrap">
+                      {formatCurrency(item.preco_base)}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <span className="text-xs text-gray-400">R$</span>
+                        <input
+                          type="text"
+                          value={item.preco_lojista}
+                          onChange={(e) => updateItem(index, 'preco_lojista', e.target.value)}
+                          className="w-24 px-2 py-1.5 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                        />
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={item.desconto_percentual}
+                          onChange={(e) => updateItem(index, 'desconto_percentual', e.target.value)}
+                          className="w-20 px-2 py-1.5 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                        />
+                        <span className="text-xs text-gray-400">%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="outline" size="md" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button
+          variant="primary"
+          size="md"
+          loading={saving}
+          onClick={handleSave}
+        >
+          Salvar precos
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Multi-fornecedor: seletor de fornecedores no topo da pagina
+// ---------------------------------------------------------------------------
+
+interface FornecedorMiniInfo {
+  id: number
+  nome: string
+  cnpj?: string
+}
+
+function FornecedoresMultiSelect({
+  fornecedores,
+  selectedIds,
+  onChange,
+}: {
+  fornecedores: FornecedorMiniInfo[]
+  selectedIds: number[]
+  onChange: (ids: number[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [open])
+
+  const allSelected = fornecedores.length > 0 && selectedIds.length === fornecedores.length
+  const noneSelected = selectedIds.length === 0
+
+  const toggleAll = () => {
+    if (allSelected) onChange([])
+    else onChange(fornecedores.map((f) => f.id))
+  }
+
+  const toggleOne = (id: number) => {
+    if (selectedIds.includes(id)) onChange(selectedIds.filter((x) => x !== id))
+    else onChange([...selectedIds, id])
+  }
+
+  const label = (() => {
+    if (fornecedores.length === 0) return 'Sem fornecedores'
+    if (allSelected) return `Todos os fornecedores (${fornecedores.length})`
+    if (noneSelected) return 'Nenhum fornecedor selecionado'
+    if (selectedIds.length === 1) {
+      const f = fornecedores.find((x) => x.id === selectedIds[0])
+      return f?.nome || `Fornecedor ${selectedIds[0]}`
+    }
+    return `${selectedIds.length} de ${fornecedores.length} fornecedores`
+  })()
+
+  return (
+    <div className="mb-4 bg-violet-50 border border-violet-200 rounded-lg px-4 py-3 relative" ref={ref}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="text-sm">
+          <span className="text-gray-500">Fornecedores: </span>
+          <span className="font-semibold text-gray-900">{label}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="px-3 py-1.5 text-xs font-medium text-violet-700 bg-white border border-violet-300 rounded hover:bg-violet-100 transition-colors self-start sm:self-auto"
+        >
+          {open ? 'Fechar' : 'Filtrar fornecedores'}
+        </button>
+      </div>
+
+      {open && (
+        <div className="mt-3 bg-white border border-violet-200 rounded-lg p-3 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Selecione os fornecedores
+            </p>
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-xs text-violet-700 hover:text-violet-900 underline"
+            >
+              {allSelected ? 'Desmarcar todos' : 'Marcar todos'}
+            </button>
+          </div>
+          <div className="max-h-64 overflow-y-auto space-y-1">
+            {fornecedores.map((f) => {
+              const checked = selectedIds.includes(f.id)
+              return (
+                <label
+                  key={f.id}
+                  className="flex items-start gap-2 p-2 rounded hover:bg-violet-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleOne(f.id)}
+                    className="mt-0.5 w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500/20"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">{f.nome || `Fornecedor ${f.id}`}</div>
+                    {f.cnpj && (
+                      <div className="text-xs text-gray-500 mt-0.5">CNPJ: {f.cnpj}</div>
+                    )}
+                  </div>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Multi-fornecedor: modal para escolher fornecedor em acoes single
+// ---------------------------------------------------------------------------
+
+function EscolherFornecedorModal({
+  isOpen,
+  titulo,
+  fornecedores,
+  initialId,
+  onCancel,
+  onConfirm,
+}: {
+  isOpen: boolean
+  titulo: string
+  fornecedores: FornecedorMiniInfo[]
+  initialId?: number
+  onCancel: () => void
+  onConfirm: (id: number) => void
+}) {
+  const [selected, setSelected] = useState<number | null>(initialId ?? null)
+
+  useEffect(() => {
+    if (isOpen) {
+      // pre-selecionar o primeiro fornecedor quando o modal abre
+      setSelected(initialId ?? fornecedores[0]?.id ?? null)
+    }
+  }, [isOpen, initialId, fornecedores])
+
+  if (!isOpen) return null
+
+  return (
+    <Modal isOpen={isOpen} onClose={onCancel} size="md">
+      <ModalHeader onClose={onCancel}>
+        <ModalTitle>{titulo}</ModalTitle>
+        <ModalDescription>Esta acao opera em apenas 1 fornecedor por vez.</ModalDescription>
+      </ModalHeader>
+      <ModalBody>
+        <div className="space-y-2">
+          {fornecedores.map((f) => (
+            <label
+              key={f.id}
+              className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                selected === f.id
+                  ? 'border-violet-500 bg-violet-50'
+                  : 'border-gray-200 hover:border-violet-300'
+              }`}
+            >
+              <input
+                type="radio"
+                checked={selected === f.id}
+                onChange={() => setSelected(f.id)}
+                className="mt-0.5 w-4 h-4 text-violet-600 focus:ring-violet-500/20"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-gray-900">{f.nome || `Fornecedor ${f.id}`}</div>
+                {f.cnpj && (
+                  <div className="text-xs text-gray-500 mt-0.5">CNPJ: {f.cnpj}</div>
+                )}
+              </div>
+            </label>
+          ))}
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="outline" size="md" onClick={onCancel}>
+          Cancelar
+        </Button>
+        <Button
+          variant="primary"
+          size="md"
+          disabled={!selected}
+          onClick={() => selected && onConfirm(selected)}
+        >
+          Continuar
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main Page
+// ---------------------------------------------------------------------------
+
+export default function RepresentanteCatalogoPage() {
+  const { loading: authLoading, fornecedoresVinculados } = useRepresentanteAuth()
+
+  // ------ Lista deduplicada de fornecedores (por fornecedor_id) ------
+  const fornecedoresDisponiveis = (() => {
+    const seen = new Set<number>()
+    const out: typeof fornecedoresVinculados = []
+    for (const f of fornecedoresVinculados) {
+      if (seen.has(f.fornecedor_id)) continue
+      seen.add(f.fornecedor_id)
+      out.push(f)
+    }
+    return out
+  })()
+
+  // Selecao MULTI: ids selecionados (default = todos)
+  const [selectedFornecedorIds, setSelectedFornecedorIds] = useState<number[]>([])
+  // Hydration guard: so persistimos no localStorage depois do primeiro hydrate
+  const hydratedRef = useRef(false)
+
+  // Hidratar do localStorage no mount (ou usar TODOS se vazio)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (fornecedoresDisponiveis.length === 0) return
+    if (hydratedRef.current) return
+    const stored = window.localStorage.getItem('representante:catalogo_fornecedores_selecionados')
+    let parsedIds: number[] = []
+    if (stored) {
+      try {
+        const arr = JSON.parse(stored)
+        if (Array.isArray(arr)) {
+          parsedIds = arr.map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0)
+        }
+      } catch {
+        parsedIds = []
+      }
+    }
+    // Filtrar apenas os que ainda estao vinculados
+    const validIds = parsedIds.filter((id) => fornecedoresDisponiveis.some((f) => f.fornecedor_id === id))
+    if (validIds.length > 0) {
+      setSelectedFornecedorIds(validIds)
+    } else {
+      // Default: todos selecionados
+      setSelectedFornecedorIds(fornecedoresDisponiveis.map((f) => f.fornecedor_id))
+    }
+    hydratedRef.current = true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fornecedoresDisponiveis.length])
+
+  // Persistir selecao
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!hydratedRef.current) return
+    window.localStorage.setItem(
+      'representante:catalogo_fornecedores_selecionados',
+      JSON.stringify(selectedFornecedorIds)
+    )
+  }, [selectedFornecedorIds])
+
+  // "Fornecedor ativo" (single) para operacoes que dependem de 1 fornecedor mas nao
+  // possuem item: primeiro dos selecionados.
+  const fornecedorAtivoId = selectedFornecedorIds[0] ?? null
+  // Mantem o estado module-level sincronizado para os helpers appendForn/appendForns
+  useEffect(() => {
+    setCurrentFornecedorId(fornecedorAtivoId)
+    setCurrentFornecedorIds(selectedFornecedorIds)
+  }, [fornecedorAtivoId, selectedFornecedorIds])
+
+  // Mapa fornecedor_id -> info (para coluna "Fornecedor" na tabela)
+  const fornecedoresById = (() => {
+    const m = new Map<number, { id: number; nome: string; cnpj?: string }>()
+    for (const f of fornecedoresDisponiveis) {
+      m.set(f.fornecedor_id, {
+        id: f.fornecedor_id,
+        nome: f.fornecedor_nome || '',
+        cnpj: f.fornecedor_cnpj,
+      })
+    }
+    return m
+  })()
+
+  // Empresas vinculadas filtradas: somente as dos fornecedores selecionados (dedup por empresa_id)
+  const empresasVinculadas = (() => {
+    const out: { empresaId: number; fornecedorId: number; razaoSocial: string; nomeFantasia: string }[] = []
+    const seen = new Set<number>()
+    for (const f of fornecedoresVinculados) {
+      if (!selectedFornecedorIds.includes(f.fornecedor_id)) continue
+      if (seen.has(f.empresa_id)) continue
+      seen.add(f.empresa_id)
+      out.push({
+        empresaId: f.empresa_id,
+        fornecedorId: f.fornecedor_id,
+        razaoSocial: f.empresa_nome || '',
+        nomeFantasia: f.empresa_nome || '',
+      })
+    }
+    return out
+  })()
+
+  // Modal: escolher fornecedor para acoes single (novo item / importar / sync / etc.)
+  const [escolherFornecedorOpen, setEscolherFornecedorOpen] = useState(false)
+  const [escolherFornecedorAction, setEscolherFornecedorAction] = useState<((id: number) => void) | null>(null)
+  const [escolherFornecedorTitulo, setEscolherFornecedorTitulo] = useState('Selecionar fornecedor')
+
+  // Fornecedor "pinado" para o fluxo de importacao em andamento (escolhido no modal antes do upload).
+  // Usado por todas as chamadas write durante o fluxo de importar/sync/etc.
+  const [importFornecedorId, setImportFornecedorId] = useState<number | null>(null)
+
+  // Helpers que abrem os modais (Importar Excel/PDF/etc) APOS escolher fornecedor (se houver mais de 1 selecionado).
+  const openImportExcelFlow = () => {
+    runWithFornecedor('Importar planilha para qual fornecedor?', (fid) => {
+      setImportFornecedorId(fid)
+      setShowImportModal(true)
+      setImportStep('upload')
+      setImportFile(null)
+      setImportPreview(null)
+      setImportResult(null)
+      setImportJobId(null)
+      setImportJobStatus(null)
+    })
+  }
+  const openImportPdfFlow = () => {
+    runWithFornecedor('Importar PDF para qual fornecedor?', (fid) => {
+      setImportFornecedorId(fid)
+      setShowPdfImportModal(true)
+      setPdfStep('upload')
+      setPdfFile(null)
+      setPdfProdutos([])
+      setPdfCuracao(null)
+      setPdfError(null)
+      setPdfResult(null)
+      setPdfJobId(null)
+    })
+  }
+  const openSyncFlow = () => {
+    runWithFornecedor('Sincronizar qual fornecedor?', (fid) => {
+      handleSync(fid)
+    })
+  }
+  const openBuscarImagensFlow = () => {
+    runWithFornecedor('Buscar imagens para qual fornecedor?', (fid) => {
+      handleBuscarImagens(fid)
+    })
+  }
+  const openNovoItemFlow = () => {
+    runWithFornecedor('Adicionar produto para qual fornecedor?', (fid) => {
+      openItemForm(undefined, fid)
+    })
+  }
+
+  // Helper que abre o modal de selecao quando ha mais de 1 fornecedor selecionado;
+  // quando ha apenas 1, executa direto.
+  const runWithFornecedor = (titulo: string, action: (id: number) => void) => {
+    const selecionados = selectedFornecedorIds
+    if (selecionados.length === 0) return
+    if (selecionados.length === 1) {
+      action(selecionados[0])
+      return
+    }
+    setEscolherFornecedorTitulo(titulo)
+    setEscolherFornecedorAction(() => (id: number) => action(id))
+    setEscolherFornecedorOpen(true)
+  }
+
+
+
+  // Catalog state
+  const [catalogo, setCatalogo] = useState<Catalogo | null>(null)
+  const [catalogoExists, setCatalogoExists] = useState<boolean | null>(null)
+  const [itens, setItens] = useState<CatalogoItem[]>([])
+  const [totalItens, setTotalItens] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearch = useDebounce(searchQuery, 300)
+  const [lojistaFilter, setLojistaFilter] = useState<number | null>(null)
+  const [marcaFilter, setMarcaFilter] = useState<string | null>(null)
+  const [showInativos, setShowInativos] = useState(false)
+  const [marcas, setMarcas] = useState<string[]>([])
+
+  // Pagination
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const LIMIT = 50
+
+  // Toast
+  const [toast, setToast] = useState<ToastState | null>(null)
+
+  // Sync Bling toggle
+  const [syncBling, setSyncBling] = useState(true)
+
+  // Track which item is currently saving price (for loading indicator)
+  const [savingItemId, setSavingItemId] = useState<number | null>(null)
+
+  // Modal
+  const [modalItem, setModalItem] = useState<CatalogoItem | null>(null)
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [multiModalEmpresaId, setMultiModalEmpresaId] = useState<number | null>(null)
+  const [showMultiModal, setShowMultiModal] = useState(false)
+
+  // Mobile toolbar kebab menu
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false)
+  const toolbarMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!toolbarMenuOpen) return
+    const onClick = (e: MouseEvent) => {
+      if (toolbarMenuRef.current && !toolbarMenuRef.current.contains(e.target as Node)) {
+        setToolbarMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [toolbarMenuOpen])
+
+  // Profile modal state
+  const [showPerfilModal, setShowPerfilModal] = useState(false)
+  const [perfilData, setPerfilData] = useState<{
+    nome: string
+    slug: string
+    logo_url: string
+    banner_url: string
+    cor_primaria: string
+    descricao: string
+    whatsapp: string
+    publico: boolean
+  } | null>(null)
+  const [salvandoPerfil, setSalvandoPerfil] = useState(false)
+
+  // Category filter
+  const [categoriaFilter, setCategoriaFilter] = useState('')
+
+  // Import Excel state
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importando, setImportando] = useState(false)
+  const [importPreview, setImportPreview] = useState<ImportPreviewResponse | null>(null)
+  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'processing' | 'done'>('upload')
+  const [importResult, setImportResult] = useState<ImportConfirmResponse | null>(null)
+  const [importJobId, setImportJobId] = useState<number | null>(null)
+  const [importJobStatus, setImportJobStatus] = useState<ImportJobStatus | null>(null)
+
+  // Import PDF state
+  const [showPdfImportModal, setShowPdfImportModal] = useState(false)
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const pdfInputRef = useRef<HTMLInputElement>(null)
+  const [pdfImporting, setPdfImporting] = useState(false)
+  const [pdfStep, setPdfStep] = useState<'upload' | 'processing' | 'review' | 'saving' | 'scraping' | 'done'>('upload')
+  const [pdfProdutos, setPdfProdutos] = useState<ProdutoExtraido[]>([])
+  const [pdfError, setPdfError] = useState<string | null>(null)
+  const [pdfSaving, setPdfSaving] = useState(false)
+  const [pdfJobId, setPdfJobId] = useState<number | null>(null)
+  const [pdfResult, setPdfResult] = useState<{total: number, novos: number, atualizados: number} | null>(null)
+  const [pdfProgress, setPdfProgress] = useState<{current: number, total: number, products: number}>({current: 0, total: 0, products: 0})
+  const [pdfCuracao, setPdfCuracao] = useState<{ flagados: number; corrigidos: number; naoCorrigidos: number } | null>(null)
+  const [imgProgress, setImgProgress] = useState<{processed: number, total: number, found: number}>({processed: 0, total: 0, found: 0})
+  const [showImgSyncModal, setShowImgSyncModal] = useState(false)
+  const [imgSyncStartedAt, setImgSyncStartedAt] = useState<number | null>(null)
+  const [imgSyncElapsed, setImgSyncElapsed] = useState(0)
+  const [imgSyncDone, setImgSyncDone] = useState(false)
+  const [imgSyncRunning, setImgSyncRunning] = useState(false)
+  const imgSyncAbortRef = useRef<AbortController | null>(null)
+  const imgSyncCancelRef = useRef(false)
+
+  const cancelarSyncImagens = () => {
+    imgSyncCancelRef.current = true
+    if (imgSyncAbortRef.current) {
+      imgSyncAbortRef.current.abort()
+    }
+  }
+
+  // CRUD modal de item
+  const [showItemModal, setShowItemModal] = useState(false)
+  const [itemFormMode, setItemFormMode] = useState<'create' | 'edit'>('create')
+  const [itemFormSaving, setItemFormSaving] = useState(false)
+  const [itemFormError, setItemFormError] = useState<string | null>(null)
+  const [itemFormImageFile, setItemFormImageFile] = useState<File | null>(null)
+  const [itemFormImageUrl, setItemFormImageUrl] = useState('')
+  const [itemFormCurrentImage, setItemFormCurrentImage] = useState<string | null>(null)
+  const itemImageInputRef = useRef<HTMLInputElement>(null)
+  const [itemFormData, setItemFormData] = useState<{
+    id?: number
+    fornecedor_id: number | null
+    nome: string
+    codigo: string
+    ean: string
+    marca: string
+    ncm: string
+    unidade: string
+    itens_por_caixa: number
+    preco_base: number
+    bonificacao: number | null
+    categoria: string
+    descricao_produto: string
+  }>({
+    fornecedor_id: null,
+    nome: '',
+    codigo: '',
+    ean: '',
+    marca: '',
+    ncm: '',
+    unidade: 'UN',
+    itens_por_caixa: 1,
+    preco_base: 0,
+    bonificacao: null,
+    categoria: '',
+    descricao_produto: '',
+  })
+
+  const openItemForm = (item?: CatalogoItem, fornecedorIdParam?: number) => {
+    setItemFormError(null)
+    setItemFormImageFile(null)
+    setItemFormImageUrl('')
+    if (item) {
+      setItemFormMode('edit')
+      setItemFormData({
+        id: item.id,
+        fornecedor_id: item.fornecedor_id ?? fornecedorIdParam ?? fornecedorAtivoId ?? null,
+        nome: item.nome || '',
+        codigo: item.codigo || '',
+        ean: (item as CatalogoItem & { ean?: string }).ean || '',
+        marca: item.marca || '',
+        ncm: (item as CatalogoItem & { ncm?: string }).ncm || '',
+        unidade: item.unidade || 'UN',
+        itens_por_caixa: item.itens_por_caixa || 1,
+        preco_base: item.preco_base || 0,
+        bonificacao: (item as CatalogoItem & { bonificacao?: number | null }).bonificacao ?? null,
+        categoria: item.categoria || '',
+        descricao_produto: item.descricao_produto || '',
+      })
+      setItemFormCurrentImage(item.imagem_url || null)
+    } else {
+      setItemFormMode('create')
+      setItemFormData({
+        fornecedor_id: fornecedorIdParam ?? fornecedorAtivoId ?? null,
+        nome: '',
+        codigo: '',
+        ean: '',
+        marca: '',
+        ncm: '',
+        unidade: 'UN',
+        itens_por_caixa: 1,
+        preco_base: 0,
+        bonificacao: null,
+        categoria: '',
+        descricao_produto: '',
+      })
+      setItemFormCurrentImage(null)
+    }
+    setShowItemModal(true)
+  }
+
+  const uploadItemImage = async (itemId: number) => {
+    const fid = itemFormData.fornecedor_id ?? undefined
+    if (itemFormImageFile) {
+      const fd = new FormData()
+      fd.append('file', itemFormImageFile)
+      await fetch(appendForn(`/api/representante/catalogo/itens/${itemId}/imagem`, fid), {
+        method: 'POST',
+        body: fd,
+      })
+    } else if (itemFormImageUrl.trim()) {
+      await fetch(appendForn(`/api/representante/catalogo/itens/${itemId}/imagem`, fid), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imagem_url: itemFormImageUrl.trim() }),
+      })
+    }
+  }
+
+  const removeItemImage = async () => {
+    if (itemFormMode !== 'edit' || !itemFormData.id) {
+      setItemFormCurrentImage(null)
+      return
+    }
+    if (!confirm('Remover a imagem deste produto?')) return
+    try {
+      await fetch(appendForn(`/api/representante/catalogo/itens/${itemFormData.id}/imagem`, itemFormData.fornecedor_id), { method: 'DELETE' })
+      setItemFormCurrentImage(null)
+    } catch {
+      alert('Erro ao remover imagem')
+    }
+  }
+
+  const handleItemSave = async () => {
+    if (!itemFormData.nome.trim()) {
+      setItemFormError('Nome eh obrigatorio')
+      return
+    }
+    setItemFormSaving(true)
+    setItemFormError(null)
+    try {
+      const payload = {
+        nome: itemFormData.nome.trim(),
+        codigo: itemFormData.codigo.trim() || null,
+        ean: itemFormData.ean.trim() || null,
+        marca: itemFormData.marca.trim() || null,
+        ncm: itemFormData.ncm.trim() || null,
+        unidade: itemFormData.unidade.trim() || 'UN',
+        itens_por_caixa: itemFormData.itens_por_caixa,
+        preco_base: itemFormData.preco_base,
+        bonificacao: itemFormData.bonificacao,
+        categoria: itemFormData.categoria || null,
+        descricao_produto: itemFormData.descricao_produto.trim() || null,
+      }
+
+      const url = itemFormMode === 'edit' && itemFormData.id
+        ? `/api/representante/catalogo/itens/${itemFormData.id}`
+        : '/api/representante/catalogo/itens'
+      const method = itemFormMode === 'edit' ? 'PUT' : 'POST'
+
+      const res = await fetch(appendForn(url, itemFormData.fornecedor_id), {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setItemFormError(data.error || 'Erro ao salvar')
+        return
+      }
+
+      // Upload de imagem (se houver) - usa o id retornado em create, ou o existente em edit
+      const targetId = itemFormMode === 'edit' ? itemFormData.id : data.item?.id
+      if (targetId && (itemFormImageFile || itemFormImageUrl.trim())) {
+        try {
+          await uploadItemImage(targetId)
+        } catch (err) {
+          console.error('Erro upload imagem:', err)
+        }
+      }
+
+      setShowItemModal(false)
+      fetchItens()
+      checkCatalogo()
+    } catch {
+      setItemFormError('Erro de conexao')
+    } finally {
+      setItemFormSaving(false)
+    }
+  }
+
+  const handleItemDelete = async (item: CatalogoItem) => {
+    if (!confirm(`Apagar "${item.nome}" do catalogo? Essa acao nao pode ser desfeita.`)) return
+    try {
+      const res = await fetch(appendForn(`/api/representante/catalogo/itens/${item.id}`, item.fornecedor_id), { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Erro ao deletar')
+        return
+      }
+      fetchItens()
+      checkCatalogo()
+    } catch {
+      alert('Erro de conexao ao deletar')
+    }
+  }
+
+  // Timer do sync de imagens (continua rodando mesmo com modal fechado)
+  useEffect(() => {
+    if (imgSyncDone || !imgSyncStartedAt || !imgSyncRunning) return
+    const id = setInterval(() => {
+      setImgSyncElapsed(Math.floor((Date.now() - imgSyncStartedAt) / 1000))
+    }, 1000)
+    return () => clearInterval(id)
+  }, [imgSyncDone, imgSyncStartedAt, imgSyncRunning])
+
+  // Respostas dos Lojistas state
+  const [respostas, setRespostas] = useState<any[]>([])
+  const [showRespostasModal, setShowRespostasModal] = useState(false)
+  const [loadingRespostas, setLoadingRespostas] = useState(false)
+
+  // ------ Check if catalog exists ------
+  const checkCatalogo = useCallback(async () => {
+    if (!fornecedorAtivoId) {
+      setCatalogoExists(null)
+      setCatalogo(null)
+      setTotalItens(0)
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch(appendForns('/api/representante/catalogo'))
+      if (res.ok) {
+        const data = await res.json()
+        setCatalogoExists(data.exists)
+        if (data.exists && data.catalogo) {
+          setCatalogo(data.catalogo)
+          setTotalItens(data.total_itens || 0)
+          setPerfilData({
+            nome: data.catalogo.nome || '',
+            slug: data.catalogo.slug || '',
+            logo_url: data.catalogo.logo_url || '',
+            banner_url: data.catalogo.banner_url || '',
+            cor_primaria: data.catalogo.cor_primaria || '#336FB6',
+            descricao: data.catalogo.descricao || '',
+            whatsapp: data.catalogo.whatsapp || '',
+            publico: data.catalogo.publico ?? false,
+          })
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao verificar catalogo:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [fornecedorAtivoId])
+
+  useEffect(() => {
+    if (!authLoading) {
+      checkCatalogo()
+    }
+  }, [authLoading, checkCatalogo, fornecedorAtivoId])
+
+  // ------ Fetch items ------
+  const fetchItens = useCallback(async () => {
+    if (!catalogoExists) return
+    if (!fornecedorAtivoId) return
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (debouncedSearch) params.set('search', debouncedSearch)
+      if (lojistaFilter) params.set('empresa_id', String(lojistaFilter))
+      if (marcaFilter) params.set('marca', marcaFilter)
+      if (categoriaFilter) params.set('categoria', categoriaFilter)
+      if (!showInativos) params.set('ativo', 'true')
+      params.set('page', String(page))
+      params.set('limit', String(LIMIT))
+
+      const res = await fetch(appendForns(`/api/representante/catalogo/itens?${params.toString()}`))
+      if (res.ok) {
+        const data = await res.json()
+        setItens(data.itens || [])
+        // totalItens vem do checkCatalogo (RPC, sem limite PostgREST)
+        // data.total aqui eh paginacao (pode estar capped em 1000), usar so pra pages
+        setTotalPages(Math.max(1, Math.ceil((data.total || 0) / LIMIT)))
+      }
+    } catch (err) {
+      console.error('Erro ao carregar itens:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [catalogoExists, fornecedorAtivoId, debouncedSearch, lojistaFilter, marcaFilter, categoriaFilter, showInativos, page])
+
+  useEffect(() => {
+    if (catalogoExists) {
+      fetchItens()
+    }
+  }, [fetchItens, catalogoExists])
+
+  // ------ Extract brands from loaded items ------
+  useEffect(() => {
+    if (itens.length > 0) {
+      const uniqueMarcas = Array.from(
+        new Set(itens.map((i) => i.marca).filter((m): m is string => !!m))
+      ).sort()
+      setMarcas((prev) => {
+        // Merge with existing to accumulate from multiple pages
+        const merged = Array.from(new Set([...prev, ...uniqueMarcas])).sort()
+        return merged
+      })
+    }
+  }, [itens])
+
+  // Reset page and selection when filters change
+  useEffect(() => {
+    setPage(1)
+    setSelectedIds(new Set())
+  }, [debouncedSearch, lojistaFilter, marcaFilter, categoriaFilter, showInativos])
+
+  // ------ Create catalog ------
+  const handleCreateCatalogo = async (fornecedorIdArg?: number | null) => {
+    const fid = fornecedorIdArg ?? fornecedorAtivoId
+    if (!fid) return
+    setCreating(true)
+    try {
+      const res = await fetch(appendForn('/api/representante/catalogo', fid), { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        setCatalogo(data.catalogo)
+        setCatalogoExists(true)
+        setTotalItens(data.total_itens || 0)
+        setToast({ message: `Catalogo criado com ${data.total_itens || 0} produtos importados!`, type: 'success' })
+      } else {
+        setToast({ message: 'Erro ao criar catalogo. Tente novamente.', type: 'error' })
+      }
+    } catch (err) {
+      console.error('Erro ao criar catalogo:', err)
+      setToast({ message: 'Erro de conexao ao criar catalogo.', type: 'error' })
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  // ------ Sync catalog ------
+  const handleBuscarImagens = async (fornecedorIdArg?: number | null) => {
+    if (!catalogo?.id) return
+    if (imgSyncRunning) {
+      setShowImgSyncModal(true)
+      return
+    }
+    const fid = fornecedorIdArg ?? fornecedorAtivoId
+    const catalogoId = catalogo.id
+    setImgProgress({ processed: 0, total: 0, found: 0 })
+    setImgSyncDone(false)
+    setImgSyncStartedAt(Date.now())
+    setImgSyncElapsed(0)
+    setImgSyncRunning(true)
+    imgSyncCancelRef.current = false
+    setShowImgSyncModal(true)
+
+    let done = false
+    let totalProcessed = 0
+    let totalFound = 0
+    let currentOffset = 0
+    let initialTotal = 0
+    let consecutiveFailures = 0
+    const MAX_CONSECUTIVE_FAILURES = 5
+
+    while (!done && !imgSyncCancelRef.current) {
+      const ctrl = new AbortController()
+      imgSyncAbortRef.current = ctrl
+      try {
+        const imgRes = await fetch(appendForn('/api/representante/catalogo/processar-imagens', fid), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ catalogo_id: catalogoId, offset: currentOffset }),
+          signal: ctrl.signal,
+        })
+
+        // 5xx ou parsing inesperado nao devem matar o loop — pula 1 item e continua
+        if (!imgRes.ok) {
+          console.warn(`[ImgSync] HTTP ${imgRes.status} no offset ${currentOffset} — pulando 1 e continuando`)
+          consecutiveFailures++
+          currentOffset++
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            console.error('[ImgSync] muitas falhas seguidas, abortando')
+            done = true
+          }
+          continue
+        }
+
+        let imgData: {
+          processed?: number; com_imagem?: number; next_offset?: number;
+          total_sem_imagem?: number; done?: boolean; remaining?: number
+        }
+        try {
+          imgData = await imgRes.json()
+        } catch (parseErr) {
+          console.warn('[ImgSync] resposta nao-JSON (provavel recompile dev) — pulando 1', parseErr)
+          consecutiveFailures++
+          currentOffset++
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) done = true
+          continue
+        }
+
+        consecutiveFailures = 0 // sucesso reseta
+        totalProcessed += imgData.processed || 0
+        totalFound += imgData.com_imagem || 0
+        currentOffset = imgData.next_offset ?? (currentOffset + (imgData.processed || 0))
+        if (initialTotal === 0 && imgData.total_sem_imagem != null) {
+          initialTotal = (imgData.total_sem_imagem || 0) + totalFound
+        }
+        setImgProgress({
+          processed: totalProcessed,
+          total: initialTotal || totalProcessed,
+          found: totalFound,
+        })
+        // processed==0 aqui significa nao ha mais itens com EAN sem imagem
+        done = imgData.done === true || (imgData.remaining ?? 1) === 0 || (imgData.processed ?? 0) === 0
+      } catch (err) {
+        // AbortError do cancelarSyncImagens encerra de fato; demais sao retryable
+        if (err instanceof Error && err.name === 'AbortError' && imgSyncCancelRef.current) {
+          done = true
+          break
+        }
+        console.warn('[ImgSync] erro de rede — retry', err)
+        consecutiveFailures++
+        currentOffset++
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          console.error('[ImgSync] muitas falhas seguidas, abortando')
+          done = true
+        }
+      }
+    }
+    imgSyncAbortRef.current = null
+    setImgSyncDone(true)
+    setImgSyncRunning(false)
+    fetchItens()
+  }
+
+  const handleSync = async (fornecedorIdArg?: number | null) => {
+    const fid = fornecedorIdArg ?? fornecedorAtivoId
+    if (!fid) return
+    setSyncing(true)
+    try {
+      const res = await fetch(appendForn('/api/representante/catalogo/sync', fid), { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        setToast({
+          message: `Sincronizado! ${data.novos_itens || 0} novos, ${data.atualizados || 0} atualizados.`,
+          type: 'success',
+        })
+        fetchItens()
+        // Refresh total
+        checkCatalogo()
+      } else {
+        setToast({ message: 'Erro ao sincronizar catalogo.', type: 'error' })
+      }
+    } catch (err) {
+      console.error('Erro ao sincronizar:', err)
+      setToast({ message: 'Erro de conexao ao sincronizar.', type: 'error' })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // ------ Fetch respostas dos lojistas ------
+  const fetchRespostas = async () => {
+    setLoadingRespostas(true)
+    try {
+      const res = await fetch(appendForns('/api/representante/catalogo/respostas'))
+      if (res.ok) {
+        const data = await res.json()
+        setRespostas(data.respostas || [])
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setLoadingRespostas(false)
+    }
+  }
+
+  // ------ Import Excel handlers ------
+  const buildImportFormData = (mode: 'preview' | 'confirm') => {
+    const fd = new FormData()
+    fd.append('file', importFile!)
+    fd.append('mode', mode)
+    return fd
+  }
+
+  const handleImportPreview = async () => {
+    if (!importFile) return
+    setImportando(true)
+    try {
+      const res = await fetch(appendForn('/api/representante/catalogo/importar', importFornecedorId ?? fornecedorAtivoId), { method: 'POST', body: buildImportFormData('preview') })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setImportPreview(data)
+        setImportStep('preview')
+      } else {
+        setToast({ message: data.error || 'Erro ao processar planilha', type: 'error' })
+      }
+    } catch {
+      setToast({ message: 'Erro ao processar planilha', type: 'error' })
+    } finally {
+      setImportando(false)
+    }
+  }
+
+  // Polling do import job (a cada 2s) ate status final
+  useEffect(() => {
+    if (!importJobId || importStep !== 'processing') return
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const res = await fetch(appendForn(`/api/representante/catalogo/importar/job?id=${importJobId}`, importFornecedorId ?? fornecedorAtivoId))
+        if (!res.ok) return
+        const data: ImportJobStatus = await res.json()
+        if (cancelled) return
+        setImportJobStatus(data)
+        if (data.status === 'completed') {
+          setImportResult({
+            success: true,
+            resumo: {
+              total: data.totalLinhas,
+              novos: data.novos,
+              atualizados: data.atualizados,
+              erros: data.erros,
+            },
+          })
+          setImportStep('done')
+          fetchItens()
+        } else if (data.status === 'error') {
+          setToast({ message: data.errorMessage || 'Erro na importacao', type: 'error' })
+          setImportStep('done')
+          fetchItens()
+        }
+      } catch {
+        // silencia falha pontual de polling — proxima tentativa retoma
+      }
+    }
+    tick() // primeira chamada imediata
+    const interval = setInterval(tick, 2000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [importJobId, importStep, fetchItens])
+
+  const handleImportConfirm = async () => {
+    if (!importFile) return
+    setImportando(true)
+    try {
+      const res = await fetch(appendForn('/api/representante/catalogo/importar', importFornecedorId ?? fornecedorAtivoId), { method: 'POST', body: buildImportFormData('confirm') })
+      const data = await res.json()
+      if (res.ok && data.success && data.jobId) {
+        setImportJobId(data.jobId)
+        setImportJobStatus({
+          id: data.jobId,
+          status: 'pending',
+          totalLinhas: data.total ?? 0,
+          processados: 0,
+          novos: 0,
+          atualizados: 0,
+          erros: 0,
+          errorMessage: null,
+          resumo: null,
+        })
+        setImportStep('processing')
+      } else {
+        setToast({ message: data.error || 'Erro ao iniciar importacao', type: 'error' })
+      }
+    } catch {
+      setToast({ message: 'Erro ao iniciar importacao', type: 'error' })
+    } finally {
+      setImportando(false)
+    }
+  }
+
+  // ------ Import PDF handlers ------
+  const handlePdfUpload = async () => {
+    if (!pdfFile) return
+    setPdfImporting(true)
+    setPdfError(null)
+    setPdfStep('processing')
+    setPdfProgress({ current: 0, total: 0, products: 0 })
+
+    try {
+      // Step 1: Upload PDF and create job
+      const formData = new FormData()
+      formData.append('file', pdfFile)
+      const uploadRes = await fetch(appendForn('/api/representante/catalogo/importar-pdf', importFornecedorId ?? fornecedorAtivoId), {
+        method: 'POST',
+        body: formData,
+      })
+      const uploadData = await uploadRes.json()
+
+      if (!uploadRes.ok || !uploadData.job_id) {
+        setPdfError(uploadData.error || 'Erro ao enviar PDF')
+        setPdfStep('upload')
+        setPdfImporting(false)
+        return
+      }
+
+      const jobId = uploadData.job_id
+      setPdfJobId(jobId)
+      setPdfProgress({ current: 0, total: uploadData.total_pages || 0, products: 0 })
+
+      // Step 2: Process chunks in loop
+      let done = false
+      while (!done) {
+        const chunkRes = await fetch(appendForn(`/api/representante/catalogo/importar-pdf/${jobId}/processar`, importFornecedorId ?? fornecedorAtivoId), {
+          method: 'POST',
+        })
+        const chunkData = await chunkRes.json()
+
+        if (!chunkRes.ok) {
+          setPdfError(chunkData.error || 'Erro ao processar chunk')
+          setPdfStep('upload')
+          setPdfImporting(false)
+          return
+        }
+
+        setPdfProgress({
+          current: chunkData.current_page || 0,
+          total: chunkData.total_pages || 0,
+          products: chunkData.products_found || 0,
+        })
+
+        if (chunkData.done) {
+          done = true
+          setPdfProdutos(chunkData.produtos || [])
+          setPdfCuracao(chunkData.curacao || null)
+          setPdfStep('review')
+        }
+      }
+    } catch {
+      setPdfError('Erro de conexao ao processar PDF')
+      setPdfStep('upload')
+    } finally {
+      setPdfImporting(false)
+    }
+  }
+
+  const handlePdfConfirm = async () => {
+    if (!pdfJobId || pdfProdutos.length === 0) return
+    setPdfSaving(true)
+    setPdfError(null)
+    setPdfStep('saving')
+    try {
+      const res = await fetch(appendForn(`/api/representante/catalogo/importar-pdf/${pdfJobId}/confirmar`, importFornecedorId ?? fornecedorAtivoId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ produtos: pdfProdutos }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.total == null) {
+        setPdfError(data.error || 'Erro ao salvar produtos')
+        setPdfStep('review')
+        return
+      }
+
+      setPdfResult({ total: data.total, novos: data.novos, atualizados: data.atualizados })
+      fetchItens()
+
+      // Fecha modal de importacao e abre modal dedicado de sync de imagens
+      setShowPdfImportModal(false)
+      setImgProgress({ processed: 0, total: 0, found: 0 })
+      setImgSyncDone(false)
+      setImgSyncStartedAt(Date.now())
+      setImgSyncElapsed(0)
+      setImgSyncRunning(true)
+      imgSyncCancelRef.current = false
+      setShowImgSyncModal(true)
+
+      const jobRes = await fetch(appendForn(`/api/representante/catalogo/importar-pdf/${pdfJobId}`, importFornecedorId ?? fornecedorAtivoId))
+      const jobData = await jobRes.json()
+      const catalogoId = jobData?.catalogo_id
+
+      if (!catalogoId) {
+        setImgSyncDone(true)
+        setImgSyncRunning(false)
+        return
+      }
+
+      let done = false
+      let totalProcessed = 0
+      let totalFound = 0
+      let currentOffset = 0
+      let initialTotal = 0  // travado na primeira resposta
+      let consecutiveFailures = 0
+      const MAX_CONSECUTIVE_FAILURES = 5
+
+      while (!done && !imgSyncCancelRef.current) {
+        const ctrl = new AbortController()
+        imgSyncAbortRef.current = ctrl
+        try {
+          const imgRes = await fetch(appendForn('/api/representante/catalogo/processar-imagens', importFornecedorId ?? fornecedorAtivoId), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ catalogo_id: catalogoId, offset: currentOffset }),
+            signal: ctrl.signal,
+          })
+
+          if (!imgRes.ok) {
+            console.warn(`[ImgSync/PDF] HTTP ${imgRes.status} no offset ${currentOffset}`)
+            consecutiveFailures++
+            currentOffset++
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) done = true
+            continue
+          }
+
+          let imgData: {
+            processed?: number; com_imagem?: number; next_offset?: number;
+            total_sem_imagem?: number; done?: boolean; remaining?: number
+          }
+          try {
+            imgData = await imgRes.json()
+          } catch (parseErr) {
+            console.warn('[ImgSync/PDF] resposta nao-JSON, pulando', parseErr)
+            consecutiveFailures++
+            currentOffset++
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) done = true
+            continue
+          }
+
+          consecutiveFailures = 0
+          totalProcessed += imgData.processed || 0
+          totalFound += imgData.com_imagem || 0
+          currentOffset = imgData.next_offset ?? (currentOffset + (imgData.processed || 0))
+
+          if (initialTotal === 0 && imgData.total_sem_imagem != null) {
+            initialTotal = (imgData.total_sem_imagem || 0) + totalFound
+          }
+
+          setImgProgress({
+            processed: totalProcessed,
+            total: initialTotal || totalProcessed,
+            found: totalFound,
+          })
+
+          done = imgData.done === true || (imgData.remaining ?? 1) === 0 || (imgData.processed ?? 0) === 0
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError' && imgSyncCancelRef.current) {
+            done = true
+            break
+          }
+          console.warn('[ImgSync/PDF] erro de rede, retry', err)
+          consecutiveFailures++
+          currentOffset++
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) done = true
+        }
+      }
+
+      imgSyncAbortRef.current = null
+      setImgSyncDone(true)
+      setImgSyncRunning(false)
+      fetchItens()
+    } catch {
+      setPdfError('Erro de conexao ao salvar produtos')
+      setPdfStep('review')
+    } finally {
+      setPdfSaving(false)
+    }
+  }
+
+  const handlePdfRemove = (index: number) => {
+    setPdfProdutos((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  // ------ Toggle ativo ------
+  const handleImageUploaded = (id: number, url: string | null) => {
+    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, imagem_url: url } : i)))
+    setModalItem((prev) => prev && prev.id === id ? { ...prev, imagem_url: url } : prev)
+    setToast({ message: url ? 'Imagem atualizada!' : 'Imagem removida!', type: 'success' })
+  }
+
+  const handleToggleAtivo = async (id: number, ativo: boolean) => {
+    // Optimistic update
+    const target = itens.find((i) => i.id === id)
+    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, ativo } : i)))
+    try {
+      const res = await fetch(appendForn('/api/representante/catalogo/itens', target?.fornecedor_id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itens: [{ id, ativo }] }),
+      })
+      if (!res.ok) {
+        // Revert
+        setItens((prev) => prev.map((i) => (i.id === id ? { ...i, ativo: !ativo } : i)))
+        setToast({ message: 'Erro ao atualizar status do produto.', type: 'error' })
+      }
+    } catch {
+      setItens((prev) => prev.map((i) => (i.id === id ? { ...i, ativo: !ativo } : i)))
+      setToast({ message: 'Erro de conexao.', type: 'error' })
+    }
+  }
+
+  // ------ Update price (individual endpoint with Bling sync) ------
+  const handleUpdatePreco = async (id: number, preco: number) => {
+    const oldItem = itens.find((i) => i.id === id)
+    setItens((prev) => prev.map((i) => (i.id === id ? { ...i, preco_base: preco } : i)))
+    setSavingItemId(id)
+    try {
+      const res = await fetch(appendForn(`/api/representante/catalogo/itens/${id}`, oldItem?.fornecedor_id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          preco_base: preco,
+          sync_bling: syncBling,
+        }),
+      })
+      if (!res.ok) {
+        if (oldItem) {
+          setItens((prev) => prev.map((i) => (i.id === id ? { ...i, preco_base: oldItem.preco_base } : i)))
+        }
+        setToast({ message: 'Erro ao atualizar preco.', type: 'error' })
+      } else {
+        const data = await res.json()
+
+        if (data.sync_results && Array.isArray(data.sync_results)) {
+          const results: SyncResult[] = data.sync_results
+          const totalEmpresas = results.length
+          const blingFailed = results.filter((r) => !r.bling)
+          const allFailed = results.filter((r) => !r.supabase)
+
+          if (allFailed.length === totalEmpresas && totalEmpresas > 0) {
+            setToast({ message: 'Erro ao atualizar preco em todas as empresas.', type: 'error' })
+          } else if (blingFailed.length > 0) {
+            setToast({
+              message: `Preco atualizado localmente. Sync Bling falhou em ${blingFailed.length} empresa(s).`,
+              type: 'warning',
+            })
+          } else {
+            setToast({
+              message: totalEmpresas > 0
+                ? 'Preco atualizado em todas as empresas!'
+                : 'Preco atualizado!',
+              type: 'success',
+            })
+          }
+        } else {
+          setToast({ message: 'Preco atualizado!', type: 'success' })
+        }
+      }
+    } catch {
+      if (oldItem) {
+        setItens((prev) => prev.map((i) => (i.id === id ? { ...i, preco_base: oldItem.preco_base } : i)))
+      }
+      setToast({ message: 'Erro de conexao.', type: 'error' })
+    } finally {
+      setSavingItemId(null)
+    }
+  }
+
+  // ------ Categoria change (fire-and-forget) ------
+  const handleCategoriaChange = async (itemId: number, categoria: string | null) => {
+    const target = itens.find((i) => i.id === itemId)
+    setItens(prev => prev.map(i => i.id === itemId ? { ...i, categoria } : i))
+    await fetch(appendForn('/api/representante/catalogo/itens/batch', target?.fornecedor_id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itens: [{ id: itemId, categoria }] }),
+    })
+  }
+
+  // ------ Destaque toggle (fire-and-forget) ------
+  const handleDestaqueToggle = async (itemId: number, destaque: boolean) => {
+    const target = itens.find((i) => i.id === itemId)
+    setItens(prev => prev.map(i => i.id === itemId ? { ...i, destaque } : i))
+    await fetch(appendForn('/api/representante/catalogo/itens/batch', target?.fornecedor_id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itens: [{ id: itemId, destaque }] }),
+    })
+  }
+
+  // ------ Salvar perfil do catalogo ------
+  // Representante NAO pode editar perfil do fornecedor. Stub que avisa.
+  const handleSalvarPerfil = async () => {
+    setToast({
+      message: 'Representante nao pode editar o perfil do fornecedor.',
+      type: 'warning',
+    })
+    setShowPerfilModal(false)
+  }
+
+  // ------ Auth loading ------
+  if (authLoading) {
+    return (
+      <RepresentanteLayout>
+        <Skeleton className="h-96" />
+      </RepresentanteLayout>
+    )
+  }
+
+  // ------ Empty state: representante sem nenhum fornecedor vinculado ------
+  if (fornecedoresVinculados.length === 0) {
+    return (
+      <RepresentanteLayout>
+        <Toast toast={toast} onDismiss={() => setToast(null)} />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center max-w-md w-full">
+            <h1 className="text-2xl font-semibold text-gray-900 mb-2">Nenhum fornecedor vinculado</h1>
+            <p className="text-sm text-gray-500 mb-2 leading-relaxed">
+              Voce ainda nao tem fornecedores vinculados a sua conta de representante.
+            </p>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Vincule um fornecedor pelo CNPJ na area do representante para comecar a gerenciar catalogos.
+            </p>
+          </div>
+        </div>
+      </RepresentanteLayout>
+    )
+  }
+
+  // ------ Onboarding: catalog not yet created ------
+  if (catalogoExists === false) {
+    return (
+      <RepresentanteLayout>
+        <Toast toast={toast} onDismiss={() => setToast(null)} />
+        <EscolherFornecedorModal
+          isOpen={escolherFornecedorOpen}
+          titulo={escolherFornecedorTitulo}
+          fornecedores={fornecedoresDisponiveis
+            .filter((f) => selectedFornecedorIds.includes(f.fornecedor_id))
+            .map((f) => ({ id: f.fornecedor_id, nome: f.fornecedor_nome || '', cnpj: f.fornecedor_cnpj }))}
+          initialId={fornecedorAtivoId ?? undefined}
+          onCancel={() => setEscolherFornecedorOpen(false)}
+          onConfirm={(id) => {
+            setEscolherFornecedorOpen(false)
+            if (escolherFornecedorAction) escolherFornecedorAction(id)
+          }}
+        />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center max-w-md w-full">
+            <div className="w-20 h-20 mx-auto mb-6 bg-[#FFAA11]/10 rounded-full flex items-center justify-center">
+              <TagIcon className="w-10 h-10 text-[#FFAA11]" />
+            </div>
+            <h1 className="text-2xl font-semibold text-gray-900 mb-2">Crie seu Catalogo</h1>
+            <p className="text-sm text-gray-500 mb-8 leading-relaxed">
+              Seus produtos serao importados automaticamente dos lojistas vinculados.
+              Voce podera gerenciar precos e personalizar por lojista.
+            </p>
+            <Button
+              variant="primary"
+              size="xl"
+              fullWidth
+              loading={creating}
+              onClick={() => runWithFornecedor('Criar catalogo de qual fornecedor?', (fid) => handleCreateCatalogo(fid))}
+              className="!bg-[#FFAA11] hover:!bg-[#e69a0f]"
+            >
+              {creating ? 'Importando produtos...' : 'Criar Meu Catalogo'}
+            </Button>
+          </div>
+        </div>
+      </RepresentanteLayout>
+    )
+  }
+
+  // ------ Initial loading ------
+  if (catalogoExists === null) {
+    return (
+      <RepresentanteLayout>
+        <div className="space-y-4">
+          <Skeleton className="h-12 w-64" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-96" />
+        </div>
+      </RepresentanteLayout>
+    )
+  }
+
+  // ------ Main catalog view ------
+  return (
+    <RepresentanteLayout>
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
+
+      {/* Modal: escolher fornecedor para acoes single */}
+      <EscolherFornecedorModal
+        isOpen={escolherFornecedorOpen}
+        titulo={escolherFornecedorTitulo}
+        fornecedores={fornecedoresDisponiveis
+          .filter((f) => selectedFornecedorIds.includes(f.fornecedor_id))
+          .map((f) => ({ id: f.fornecedor_id, nome: f.fornecedor_nome || '', cnpj: f.fornecedor_cnpj }))}
+        initialId={fornecedorAtivoId ?? undefined}
+        onCancel={() => setEscolherFornecedorOpen(false)}
+        onConfirm={(id) => {
+          setEscolherFornecedorOpen(false)
+          if (escolherFornecedorAction) escolherFornecedorAction(id)
+        }}
+      />
+
+      {/* Barra de selecao multi-fornecedor */}
+      <FornecedoresMultiSelect
+        fornecedores={fornecedoresDisponiveis.map((f) => ({
+          id: f.fornecedor_id,
+          nome: f.fornecedor_nome || '',
+          cnpj: f.fornecedor_cnpj,
+        }))}
+        selectedIds={selectedFornecedorIds}
+        onChange={(ids) => setSelectedFornecedorIds(ids)}
+      />
+
+      <PersonalizarPrecosModal
+        isOpen={!!modalItem}
+        onClose={() => setModalItem(null)}
+        item={modalItem}
+        empresasVinculadas={empresasVinculadas}
+        onSaved={() => {
+          setToast({ message: 'Precos personalizados salvos!', type: 'success' })
+          fetchItens()
+        }}
+        onImageUploaded={handleImageUploaded}
+      />
+      {showMultiModal && multiModalEmpresaId && (
+        <PersonalizarMultiModal
+          isOpen={showMultiModal}
+          onClose={() => setShowMultiModal(false)}
+          items={itens.filter((i) => selectedIds.has(i.id))}
+          empresaId={multiModalEmpresaId}
+          empresaNome={empresasVinculadas.find((e) => e.empresaId === multiModalEmpresaId)?.nomeFantasia || ''}
+          onSaved={() => {
+            setToast({ message: 'Precos personalizados em lote salvos!', type: 'success' })
+            fetchItens()
+            setSelectedIds(new Set())
+            setShowMultiModal(false)
+          }}
+        />
+      )}
+
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Meu Catalogo</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Gerencie produtos e precos para todos os lojistas
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {/* Kebab mobile: abre dropdown com acoes secundarias */}
+            <div className="relative sm:hidden" ref={toolbarMenuRef}>
+              <button
+                type="button"
+                onClick={() => setToolbarMenuOpen(!toolbarMenuOpen)}
+                className="inline-flex items-center justify-center w-9 h-9 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                aria-label="Mais acoes"
+                aria-expanded={toolbarMenuOpen}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+                </svg>
+              </button>
+              {toolbarMenuOpen && (
+                <div className="absolute left-0 mt-2 w-60 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden z-30 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => { setToolbarMenuOpen(false); openSyncFlow() }}
+                    disabled={syncing}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <SyncIcon className="w-4 h-4 text-gray-500" />
+                    {syncing ? 'Sincronizando...' : 'Sincronizar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setToolbarMenuOpen(false); openImportExcelFlow() }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                    Importar Excel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setToolbarMenuOpen(false); openImportPdfFlow() }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                    Importar PDF
+                  </button>
+                  {totalItens > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setToolbarMenuOpen(false); openBuscarImagensFlow() }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>
+                      Buscar Imagens
+                    </button>
+                  )}
+                  {/* Botao "Personalizar" do perfil REMOVIDO: representante nao pode editar perfil do fornecedor. */}
+                </div>
+              )}
+            </div>
+
+            <span className="hidden sm:inline-flex">
+            <Button
+              variant="outline"
+              size="sm"
+              loading={syncing}
+              onClick={openSyncFlow}
+              leftIcon={<SyncIcon className="w-4 h-4" />}
+            >
+              Sincronizar
+            </Button>
+            </span>
+            <span className="hidden sm:inline-flex">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openImportExcelFlow}
+              leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>}
+            >
+              Importar Excel
+            </Button>
+            </span>
+            <span className="hidden sm:inline-flex">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openImportPdfFlow}
+              leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>}
+            >
+              Importar PDF
+            </Button>
+            </span>
+            {totalItens > 0 && (
+              <span className="hidden sm:inline-flex">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openBuscarImagensFlow}
+                leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>}
+              >
+                Buscar Imagens
+              </Button>
+              </span>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setShowRespostasModal(true); fetchRespostas() }}
+              leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>}
+            >
+              Respostas
+              {respostas.reduce((acc, r) => acc + r.itens.filter((i: any) => i.status === 'rejeitado').length, 0) > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
+                  {respostas.reduce((acc: number, r: any) => acc + r.itens.filter((i: any) => i.status === 'rejeitado').length, 0)}
+                </span>
+              )}
+            </Button>
+            {/* Botao "Personalizar" do perfil REMOVIDO: representante nao pode editar perfil do fornecedor. */}
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={openNovoItemFlow}
+              leftIcon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>}
+            >
+              Novo produto
+            </Button>
+            <span className="px-3 py-1.5 bg-[#336FB6]/10 text-[#336FB6] text-sm font-semibold rounded-lg">
+              {totalItens} produtos
+            </span>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search */}
+          <div className="relative w-full sm:flex-1 sm:min-w-[200px] sm:max-w-sm">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <SearchIcon />
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar por nome ou codigo..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-colors"
+            />
+          </div>
+
+          {/* Lojista filter */}
+          <LojistaFilterDropdown
+            empresasVinculadas={empresasVinculadas}
+            selected={lojistaFilter}
+            onSelect={setLojistaFilter}
+          />
+
+          {/* Marca filter */}
+          {marcas.length > 0 && (
+            <MarcaFilterDropdown
+              marcas={marcas}
+              selected={marcaFilter}
+              onSelect={setMarcaFilter}
+            />
+          )}
+
+          {/* Categoria filter */}
+          <select
+            value={categoriaFilter}
+            onChange={(e) => { setCategoriaFilter(e.target.value); setPage(1) }}
+            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white hover:border-[#336FB6]/40 focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-colors"
+          >
+            <option value="">Todas categorias</option>
+            {CATEGORIAS_PET.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+
+          {/* Show inativos toggle */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showInativos}
+              onChange={(e) => setShowInativos(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20"
+            />
+            <span className="text-sm text-gray-600">Inativos</span>
+          </label>
+
+          {/* Sync Bling toggle - oculto para fornecedor (interno) */}
+        </div>
+
+        {/* Content */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-x-auto">
+          {loading ? (
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-16" />
+              ))}
+            </div>
+          ) : itens.length > 0 ? (
+            <>
+              {/* Desktop: table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-[#336FB6]/5">
+                      <th className="px-4 py-4 w-10">
+                        <input
+                          type="checkbox"
+                          checked={itens.length > 0 && itens.every((i) => selectedIds.has(i.id))}
+                          onChange={() => {
+                            const allSelected = itens.length > 0 && itens.every((i) => selectedIds.has(i.id))
+                            if (allSelected) {
+                              setSelectedIds(new Set())
+                            } else {
+                              setSelectedIds(new Set(itens.map((i) => i.id)))
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20"
+                        />
+                      </th>
+                      <th className="px-2 py-4 w-10 text-center">
+                        <svg className="w-4 h-4 text-amber-500 mx-auto" fill="currentColor" viewBox="0 0 24 24"><path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
+                      </th>
+                      <th className="px-3 py-4 w-12">Ativo</th>
+                      <th className="px-2 py-4 w-16">Foto</th>
+                      <th className="px-3 py-4">Codigo</th>
+                      <th className="px-3 py-4">Nome</th>
+                      <th className="px-3 py-4">Fornecedor</th>
+                      <th className="px-3 py-4">Categoria</th>
+                      <th className="px-3 py-4">Marca</th>
+                      <th className="px-3 py-4 text-center">UN / Cx</th>
+                      <th className="px-3 py-4 text-right">Preco Base</th>
+                      {lojistaFilter && <th className="px-3 py-4 text-right">Preco Lojista</th>}
+                      <th className="px-3 py-4 text-center">Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {itens.map((item) => {
+                      const hasCustomPrice = lojistaFilter && item.preco_customizado != null
+                      return (
+                        <tr
+                          key={item.id}
+                          className={`hover:bg-[#336FB6]/5 transition-colors ${!item.ativo ? 'opacity-50' : ''}`}
+                        >
+                          <td className="px-4 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(item.id)}
+                              onChange={() => {
+                                setSelectedIds((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(item.id)) {
+                                    next.delete(item.id)
+                                  } else {
+                                    next.add(item.id)
+                                  }
+                                  return next
+                                })
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-[#336FB6] focus:ring-[#336FB6]/20"
+                            />
+                          </td>
+                          <td className="px-2 py-4 text-center">
+                            <button
+                              onClick={() => handleDestaqueToggle(item.id, !item.destaque)}
+                              className={`p-1 rounded-lg transition-colors ${item.destaque ? 'text-amber-500 bg-amber-50' : 'text-gray-300 hover:text-amber-400'}`}
+                              title={item.destaque ? 'Remover destaque' : 'Destacar produto'}
+                            >
+                              <svg className="w-4 h-4" fill={item.destaque ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                              </svg>
+                            </button>
+                          </td>
+                          <td className="px-3 py-4">
+                            <ToggleSwitch
+                              checked={item.ativo}
+                              onChange={(val) => handleToggleAtivo(item.id, val)}
+                            />
+                          </td>
+                          <td className="px-2 py-2">
+                            <ProductImageUpload item={item} onUploaded={handleImageUploaded} />
+                          </td>
+                          <td className="px-3 py-4 text-sm font-mono text-gray-700">{item.codigo || '-'}</td>
+                          <td className="px-3 py-4 text-sm text-gray-900 font-medium max-w-[200px] truncate">
+                            {item.nome}
+                          </td>
+                          <td className="px-3 py-4 text-xs text-gray-500 max-w-[140px] truncate" title={item.fornecedor_id ? fornecedoresById.get(item.fornecedor_id)?.nome || '' : ''}>
+                            {item.fornecedor_id ? fornecedoresById.get(item.fornecedor_id)?.nome || `Fornecedor ${item.fornecedor_id}` : '-'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={item.categoria || ''}
+                              onChange={(e) => handleCategoriaChange(item.id, e.target.value || null)}
+                              className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white w-full max-w-[140px]"
+                            >
+                              <option value="">Sem categoria</option>
+                              {CATEGORIAS_PET.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-3 py-4 text-sm text-gray-500">{item.marca || '-'}</td>
+                          <td className="px-3 py-4 text-sm text-gray-500 text-center">
+                            {item.unidade || '-'}
+                            {item.itens_por_caixa ? ` / ${item.itens_por_caixa} un` : ''}
+                          </td>
+                          <td className="px-3 py-4 text-right">
+                            <InlinePriceEditor
+                              value={item.preco_base}
+                              onSave={(val) => handleUpdatePreco(item.id, val)}
+                              saving={savingItemId === item.id}
+                            />
+                          </td>
+                          {lojistaFilter && (
+                            <td className="px-3 py-4 text-right">
+                              {hasCustomPrice ? (
+                                <span className="text-sm font-semibold text-[#336FB6]">
+                                  {formatCurrency(item.preco_customizado)}
+                                  {item.desconto_percentual != null && item.desconto_percentual > 0 && (
+                                    <span className="text-xs text-emerald-600 ml-1">
+                                      (-{item.desconto_percentual.toFixed(1)}%)
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-gray-400">Preco base</span>
+                              )}
+                            </td>
+                          )}
+                          <td className="px-3 py-4 text-center">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                onClick={() => openItemForm(item)}
+                                className="p-1.5 text-gray-500 hover:text-[#336FB6] hover:bg-[#336FB6]/10 rounded-lg transition-colors"
+                                title="Editar produto"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => setModalItem(item)}
+                                className="p-1.5 text-gray-500 hover:text-[#336FB6] hover:bg-[#336FB6]/10 rounded-lg transition-colors"
+                                title="Personalizar / Lojistas"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleItemDelete(item)}
+                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Apagar produto"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: cards */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {itens.map((item) => (
+                  <ProductCard
+                    key={item.id}
+                    item={item}
+                    lojistaFilter={lojistaFilter}
+                    onToggleAtivo={handleToggleAtivo}
+                    onUpdatePreco={handleUpdatePreco}
+                    onPersonalizar={setModalItem}
+                    onImageUploaded={handleImageUploaded}
+                    onCategoriaChange={handleCategoriaChange}
+                    onDestaqueToggle={handleDestaqueToggle}
+                    saving={savingItemId === item.id}
+                    isSelected={selectedIds.has(item.id)}
+                    onToggleSelect={(id) => {
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(id)) {
+                          next.delete(id)
+                        } else {
+                          next.add(id)
+                        }
+                        return next
+                      })
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 py-4 border-t border-gray-100">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeftIcon />
+                  </button>
+
+                  {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
+                    let pageNum: number
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (page <= 3) {
+                      pageNum = i + 1
+                    } else if (page >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = page - 2 + i
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setPage(pageNum)}
+                        className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                          page === pageNum
+                            ? 'bg-[#336FB6] text-white'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  })}
+
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRightIcon />
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="p-12 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-[#336FB6]/10 rounded-full flex items-center justify-center">
+                <TagIcon className="w-8 h-8 text-[#336FB6]" />
+              </div>
+              <p className="text-gray-500 font-medium">Nenhum produto encontrado.</p>
+              {searchQuery && (
+                <p className="text-sm text-gray-400 mt-1">Tente buscar com outros termos</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Floating action bar for multi-selection */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 z-40">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <span className="text-sm font-medium text-gray-700">
+              {selectedIds.size} produto(s) selecionado(s)
+            </span>
+            <div className="flex items-center gap-3 flex-wrap justify-center">
+              <select
+                value={multiModalEmpresaId ?? ''}
+                onChange={(e) => setMultiModalEmpresaId(e.target.value ? Number(e.target.value) : null)}
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] transition-colors"
+              >
+                <option value="">Selecione o lojista</option>
+                {empresasVinculadas.map((emp) => (
+                  <option key={emp.empresaId} value={emp.empresaId}>
+                    {emp.nomeFantasia || emp.razaoSocial}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowMultiModal(true)}
+                disabled={!multiModalEmpresaId}
+              >
+                Personalizar precos
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Limpar selecao
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Importar Excel */}
+      <Modal isOpen={showImportModal} onClose={() => !importando && setShowImportModal(false)} size="2xl">
+        <ModalHeader onClose={() => !importando && setShowImportModal(false)}>
+          <ModalTitle>Importar Produtos via Planilha</ModalTitle>
+          <ModalDescription>Adicione ou atualize produtos no catalogo em massa</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+              {importStep === 'upload' && (
+                <div className="space-y-5">
+                  {/* Step 1: Download template */}
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">1. Baixe o modelo da planilha:</p>
+                    <a
+                      href="/api/representante/catalogo/importar/template"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#336FB6]/10 text-[#336FB6] rounded-lg text-sm font-medium hover:bg-[#336FB6]/20 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+                      Baixar modelo Excel
+                    </a>
+                  </div>
+
+                  {/* Step 2: Field descriptions table */}
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">2. Preencha os campos:</p>
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Campo</th>
+                            <th className="px-3 py-2 text-center font-semibold text-gray-600">Obrigatorio</th>
+                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Descricao</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">codigo_fornecedor</td><td className="px-3 py-1.5 text-center text-amber-600">Sim*</td><td className="px-3 py-1.5 text-gray-600">Seu codigo interno do produto</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">ean</td><td className="px-3 py-1.5 text-center text-amber-600">Sim*</td><td className="px-3 py-1.5 text-gray-600">Codigo de barras EAN (13 digitos)</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">nome</td><td className="px-3 py-1.5 text-center text-red-600">Sim</td><td className="px-3 py-1.5 text-gray-600">Nome/descricao do produto</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">marca</td><td className="px-3 py-1.5 text-center text-gray-400">Nao</td><td className="px-3 py-1.5 text-gray-600">Marca do produto</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">unidade</td><td className="px-3 py-1.5 text-center text-gray-400">Nao</td><td className="px-3 py-1.5 text-gray-600">UN, KG, LT (padrao: UN)</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">tipo_embalagem</td><td className="px-3 py-1.5 text-center text-gray-400">Nao</td><td className="px-3 py-1.5 text-gray-600">UN, CX, FD, PCT (caixa, fardo, pacote)</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">itens_por_caixa</td><td className="px-3 py-1.5 text-center text-gray-400">Nao</td><td className="px-3 py-1.5 text-gray-600">Qtd por embalagem (padrao: 1)</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">preco</td><td className="px-3 py-1.5 text-center text-red-600">Sim</td><td className="px-3 py-1.5 text-gray-600">Preco de venda (ex: 15.44)</td></tr>
+                          <tr><td className="px-3 py-1.5 font-mono text-gray-900">imagem_url</td><td className="px-3 py-1.5 text-center text-gray-400">Nao</td><td className="px-3 py-1.5 text-gray-600">Link da foto do produto (https://...)</td></tr>
+                        </tbody>
+                      </table>
+                      <p className="px-3 py-2 text-xs text-gray-500 bg-gray-50 border-t border-gray-100">* Pelo menos um dos dois (codigo_fornecedor ou ean) deve estar preenchido</p>
+                    </div>
+                  </div>
+
+                  {/* Step 3: File upload */}
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">3. Envie a planilha preenchida:</p>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept=".xlsx,.csv,.xls"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                      />
+                      <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${importFile ? 'border-[#336FB6] bg-[#336FB6]/5' : 'border-gray-300 hover:border-[#336FB6]'}`}>
+                        {importFile ? (
+                          <div className="flex items-center justify-center gap-2 text-[#336FB6]">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className="text-sm font-medium">{importFile.name}</span>
+                          </div>
+                        ) : (
+                          <div className="text-gray-500">
+                            <svg className="w-8 h-8 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                            <p className="text-sm">Clique ou arraste o arquivo (.xlsx ou .csv)</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {importStep === 'preview' && importPreview && (
+                <div className="space-y-4">
+                  <div className="flex gap-3">
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">{importPreview.resumo.novos} novos</span>
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">{importPreview.resumo.atualizados} atualizados</span>
+                    {importPreview.resumo.erros > 0 && (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">{importPreview.resumo.erros} erros</span>
+                    )}
+                  </div>
+
+                  {importPreview.erros.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm font-medium text-red-800 mb-2">Erros encontrados:</p>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {importPreview.erros.map((err, i) => (
+                          <p key={i} className="text-xs text-red-600">Linha {err.linha}: {err.campo} - {err.mensagem}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {importPreview.novos.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-emerald-700 mb-1">Novos produtos ({importPreview.novos.length}):</p>
+                      <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 sticky top-0"><tr><th className="px-2 py-1 text-left">Codigo</th><th className="px-2 py-1 text-left">Nome</th><th className="px-2 py-1 text-right">Preco</th></tr></thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {importPreview.novos.map((r, i) => (
+                              <tr key={i}><td className="px-2 py-1 font-mono">{r.codigo || r.ean || '-'}</td><td className="px-2 py-1 truncate max-w-[200px]">{r.nome}</td><td className="px-2 py-1 text-right">R$ {r.preco?.toFixed(2)}</td></tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {importPreview.atualizados.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-blue-700 mb-1">Atualizados ({importPreview.atualizados.length}):</p>
+                      <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 sticky top-0"><tr><th className="px-2 py-1 text-left">Codigo</th><th className="px-2 py-1 text-left">Nome</th><th className="px-2 py-1 text-right">Preco</th></tr></thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {importPreview.atualizados.map((r, i) => (
+                              <tr key={i}><td className="px-2 py-1 font-mono">{r.codigo || r.ean || '-'}</td><td className="px-2 py-1 truncate max-w-[200px]">{r.nome}</td><td className="px-2 py-1 text-right">R$ {r.preco?.toFixed(2)}</td></tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {importStep === 'processing' && importJobStatus && (
+                <div className="py-6 space-y-4">
+                  <div className="text-center">
+                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#336FB6]/10 mb-3">
+                      <svg className="w-6 h-6 text-[#336FB6] animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.667 0l3.181-3.183m0-4.991v4.991M2.985 9.348h4.992m11.046 0L15.842 6.166a8.25 8.25 0 00-11.667 0L.985 9.348" />
+                      </svg>
+                    </div>
+                    <h4 className="text-lg font-semibold text-gray-900">Importando produtos...</h4>
+                    <p className="text-sm text-gray-500">Pode fechar esta tela; o processamento continua no servidor.</p>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-sm text-gray-700 mb-1">
+                      <span>{importJobStatus.processados} de {importJobStatus.totalLinhas}</span>
+                      <span>{importJobStatus.totalLinhas > 0 ? Math.round((importJobStatus.processados / importJobStatus.totalLinhas) * 100) : 0}%</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+                      <div
+                        className="h-full bg-[#336FB6] transition-all"
+                        style={{ width: `${importJobStatus.totalLinhas > 0 ? (importJobStatus.processados / importJobStatus.totalLinhas) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center gap-4 text-sm">
+                    <span className="text-emerald-600 font-medium">{importJobStatus.novos} novos</span>
+                    <span className="text-blue-600 font-medium">{importJobStatus.atualizados} atualizados</span>
+                    {importJobStatus.erros > 0 && <span className="text-red-600 font-medium">{importJobStatus.erros} erros</span>}
+                  </div>
+                </div>
+              )}
+
+              {importStep === 'done' && importResult && (
+                <div className="text-center py-6">
+                  <svg className="w-16 h-16 text-emerald-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">Importacao concluida!</h4>
+                  <div className="flex justify-center gap-4 text-sm">
+                    <span className="text-emerald-600 font-medium">{importResult.resumo.novos} novos</span>
+                    <span className="text-blue-600 font-medium">{importResult.resumo.atualizados} atualizados</span>
+                    {importResult.resumo.erros > 0 && <span className="text-red-600 font-medium">{importResult.resumo.erros} erros</span>}
+                  </div>
+                </div>
+              )}
+        </ModalBody>
+        <ModalFooter>
+              {importStep === 'upload' && (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setShowImportModal(false)}>Cancelar</Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    loading={importando}
+                    onClick={handleImportPreview}
+                    disabled={!importFile}
+                  >
+                    Verificar planilha
+                  </Button>
+                </>
+              )}
+              {importStep === 'preview' && (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setImportStep('upload')}>Voltar</Button>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    loading={importando}
+                    onClick={handleImportConfirm}
+                    disabled={importPreview?.resumo.novos === 0 && importPreview?.resumo.atualizados === 0}
+                  >
+                    {`Confirmar importacao (${(importPreview?.resumo.novos || 0) + (importPreview?.resumo.atualizados || 0)} itens)`}
+                  </Button>
+                </>
+              )}
+              {importStep === 'processing' && (
+                <Button variant="outline" size="sm" onClick={() => setShowImportModal(false)}>
+                  Fechar (continua em background)
+                </Button>
+              )}
+              {importStep === 'done' && (
+                <Button variant="primary" size="sm" onClick={() => setShowImportModal(false)}>Fechar</Button>
+              )}
+        </ModalFooter>
+      </Modal>
+
+      {/* Input file fora do modal (createPortal bloqueia file picker dentro de portals) */}
+      <input
+        ref={pdfInputRef}
+        type="file"
+        accept=".pdf"
+        style={{ display: 'none' }}
+        onChange={(e) => { setPdfFile(e.target.files?.[0] || null); setPdfError(null); if (e.target) e.target.value = '' }}
+      />
+
+      {/* Modal Importar PDF */}
+      <Modal isOpen={showPdfImportModal} onClose={() => !pdfImporting && !pdfSaving && setShowPdfImportModal(false)} size="full">
+        <ModalHeader onClose={() => !pdfImporting && !pdfSaving && setShowPdfImportModal(false)}>
+          <ModalTitle>Importar Catalogo via PDF</ModalTitle>
+          <ModalDescription>Extraia produtos automaticamente do seu catalogo em PDF usando IA</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          {pdfStep === 'upload' && (
+            <div className="space-y-5">
+              {/* Format tabs */}
+              <div className="flex gap-2">
+                <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-[#336FB6] text-white">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                  PDF
+                </button>
+                <button disabled className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 text-gray-400 cursor-not-allowed">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M12 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M3.375 12H12m0 0v1.5c0 .621.504 1.125 1.125 1.125m1.125 2.625h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M12 14.625v1.5c0 .621-.504 1.125-1.125 1.125" /></svg>
+                  Excel
+                  <span className="ml-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-gray-200 text-gray-500">Em breve</span>
+                </button>
+              </div>
+
+              {/* Drag & drop zone */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => pdfInputRef.current?.click()}
+                  className={`w-full border-2 border-dashed rounded-2xl p-8 text-center transition-colors cursor-pointer ${pdfFile ? 'border-[#336FB6] bg-[#336FB6]/5' : 'border-gray-300 hover:border-[#336FB6] hover:bg-gray-50'}`}
+                >
+                  {pdfFile ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <svg className="w-10 h-10 text-[#336FB6]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-sm font-semibold text-[#336FB6]">{pdfFile.name}</p>
+                      <p className="text-xs text-gray-500">{(pdfFile.size / (1024 * 1024)).toFixed(1)} MB</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-3 text-gray-500">
+                      <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium">Arraste o PDF aqui ou clique para selecionar</p>
+                        <p className="text-xs text-gray-400 mt-1">Aceita arquivos .pdf ate 50MB</p>
+                      </div>
+                    </div>
+                  )}
+                </button>
+              </div>
+
+              {pdfError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                  {pdfError}
+                </div>
+              )}
+            </div>
+          )}
+
+          {pdfStep === 'processing' && (
+            <div className="flex flex-col items-center justify-center py-12 gap-5">
+              <svg className="w-12 h-12 animate-spin text-[#336FB6]" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <div className="text-center">
+                <p className="text-base font-semibold text-gray-900">Extraindo produtos do PDF com IA...</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {pdfProgress.total > 0
+                    ? `Pagina ${pdfProgress.current} de ${pdfProgress.total} · ${pdfProgress.products} produtos encontrados`
+                    : 'Enviando PDF...'}
+                </p>
+              </div>
+              {pdfProgress.total > 0 && (
+                <div className="w-full max-w-xs">
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#336FB6] rounded-full transition-all duration-500"
+                      style={{ width: `${Math.round((pdfProgress.current / pdfProgress.total) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 text-center mt-1">
+                    {Math.round((pdfProgress.current / pdfProgress.total) * 100)}%
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {pdfStep === 'review' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-semibold text-gray-900">{pdfProdutos.length} produtos extraidos</span>
+              </div>
+
+              {pdfError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                  {pdfError}
+                </div>
+              )}
+
+              {pdfCuracao && pdfCuracao.flagados > 0 && (
+                <div className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-sm text-indigo-900">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+                  </svg>
+                  <span>
+                    IA curadora revisou <strong>{pdfCuracao.flagados}</strong> produtos com preço suspeito —
+                    <strong className="text-emerald-700"> {pdfCuracao.corrigidos} corrigidos</strong>
+                    {pdfCuracao.naoCorrigidos > 0 && (
+                      <>, <strong className="text-amber-700">{pdfCuracao.naoCorrigidos} precisam revisão manual</strong></>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              <div className="max-h-[400px] overflow-auto border border-gray-200 rounded-xl">
+                <table className="min-w-[900px] w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600 w-24">Status</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Codigo</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Nome</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">EAN</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Marca</th>
+                      <th className="px-3 py-2 text-left font-semibold text-gray-600">Categoria</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-600">UN</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-600">Cx</th>
+                      <th className="px-3 py-2 text-right font-semibold text-gray-600">Preco</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-600">Bonif</th>
+                      <th className="px-3 py-2 text-center font-semibold text-gray-600 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {pdfProdutos.map((prod, idx) => {
+                      const naoEncontrado = prod._curacao === 'nao_encontrado'
+                      const corrigido = prod._curacao === 'corrigido'
+                      const rowClass = naoEncontrado
+                        ? 'bg-amber-50 hover:bg-amber-100 border-l-4 border-amber-400'
+                        : corrigido
+                        ? 'bg-emerald-50 hover:bg-emerald-100 border-l-4 border-emerald-400'
+                        : 'hover:bg-gray-50'
+                      return (
+                      <tr key={idx} className={rowClass}>
+                        <td className="px-3 py-2">
+                          {corrigido && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-semibold whitespace-nowrap" title="Preço corrigido pela IA curadora">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                              </svg>
+                              IA corrigiu
+                            </span>
+                          )}
+                          {naoEncontrado && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold whitespace-nowrap" title="Preço não recuperado — revisar manualmente">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                              </svg>
+                              Revisar
+                            </span>
+                          )}
+                          {!corrigido && !naoEncontrado && <span className="text-[10px] text-gray-400">—</span>}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-gray-700">{prod.codigo_fornecedor || '-'}</td>
+                        <td className="px-3 py-2 text-gray-900 max-w-[200px] truncate">{prod.nome}</td>
+                        <td className="px-3 py-2 font-mono text-gray-500">{prod.ean || '-'}</td>
+                        <td className="px-3 py-2 text-gray-500">{prod.marca || '-'}</td>
+                        <td className="px-3 py-2 text-gray-500">{prod.categoria || '-'}</td>
+                        <td className="px-3 py-2 text-center text-gray-500">{prod.unidade || 'UN'}</td>
+                        <td className="px-3 py-2 text-center text-gray-500">{prod.itens_por_caixa || '-'}</td>
+                        <td className="px-3 py-2 text-right font-medium">
+                          <span className={corrigido ? 'text-emerald-700 font-bold' : naoEncontrado ? 'text-amber-700 font-bold' : 'text-gray-900'}>
+                            {formatCurrency(prod.preco_base)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-500">{prod.bonificacao ?? '-'}</td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => handlePdfRemove(idx)}
+                            className="p-1 text-gray-400 hover:text-red-500 transition-colors rounded-md hover:bg-red-50"
+                            title="Remover produto"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {pdfStep === 'saving' && (
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <svg className="w-12 h-12 animate-spin text-[#336FB6]" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <div className="text-center">
+                <p className="text-base font-semibold text-gray-900">Salvando produtos no catalogo...</p>
+              </div>
+            </div>
+          )}
+
+          {pdfStep === 'scraping' && (
+            <div className="flex flex-col items-center justify-center py-12 gap-5">
+              <svg className="w-12 h-12 animate-spin text-[#FFAA11]" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <div className="text-center">
+                <p className="text-base font-semibold text-gray-900">Buscando imagens dos produtos...</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {imgProgress.total > 0
+                    ? `${imgProgress.processed} de ${imgProgress.total} produtos · ${imgProgress.found} imagens encontradas`
+                    : 'Iniciando busca em Cobasi, Petlove, Amazon, ML, Magalu, Petz...'}
+                </p>
+              </div>
+              {imgProgress.total > 0 && (
+                <div className="w-full max-w-xs">
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#FFAA11] rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, Math.round((imgProgress.processed / Math.max(imgProgress.total, 1)) * 100))}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1 text-xs text-gray-400">
+                    <span>{Math.min(100, Math.round((imgProgress.processed / Math.max(imgProgress.total, 1)) * 100))}%</span>
+                    <span>{imgProgress.found} imagens</span>
+                  </div>
+                </div>
+              )}
+              {pdfResult && (
+                <div className="mt-2 px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+                  {pdfResult.total} produtos salvos ({pdfResult.novos} novos, {pdfResult.atualizados} atualizados)
+                </div>
+              )}
+              <button
+                onClick={() => setPdfStep('done')}
+                className="text-xs text-gray-400 hover:text-gray-600 underline mt-2"
+              >
+                Pular busca de imagens
+              </button>
+            </div>
+          )}
+
+          {pdfStep === 'done' && pdfResult && (
+            <div className="text-center py-8">
+              <svg className="w-16 h-16 text-emerald-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">Catalogo atualizado com sucesso!</h4>
+              <p className="text-sm text-gray-600">
+                {pdfResult.total} produtos importados ({pdfResult.novos} novos, {pdfResult.atualizados} atualizados)
+              </p>
+              {imgProgress.found > 0 && (
+                <p className="text-sm text-[#FFAA11] mt-1">
+                  {imgProgress.found} imagens encontradas automaticamente
+                </p>
+              )}
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          {pdfStep === 'upload' && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setShowPdfImportModal(false)}>Cancelar</Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={pdfImporting}
+                onClick={handlePdfUpload}
+                disabled={!pdfFile}
+              >
+                Enviar e Processar
+              </Button>
+            </>
+          )}
+          {pdfStep === 'review' && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => { setPdfStep('upload'); setPdfError(null) }}>Voltar</Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={pdfSaving}
+                onClick={handlePdfConfirm}
+                disabled={pdfProdutos.length === 0}
+              >
+                {`Confirmar e Salvar (${pdfProdutos.length} produtos)`}
+              </Button>
+            </>
+          )}
+          {pdfStep === 'done' && (
+            <Button variant="primary" size="sm" onClick={() => { setShowPdfImportModal(false); checkCatalogo() }}>Fechar</Button>
+          )}
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal Sync de Imagens */}
+      <Modal isOpen={showImgSyncModal} onClose={() => setShowImgSyncModal(false)} size="lg">
+        <ModalHeader onClose={() => setShowImgSyncModal(false)}>
+          <ModalTitle>Sincronizando imagens dos produtos</ModalTitle>
+          <ModalDescription>
+            Buscando em Cobasi, Petlove, Amazon, Mercado Livre, Magalu e Petz
+          </ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          <div className="flex flex-col items-center justify-center py-8 gap-6">
+            {!imgSyncDone ? (
+              <>
+                <div className="relative">
+                  <svg className="w-20 h-20 animate-spin text-[#FFAA11]" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xs font-mono font-bold text-[#FFAA11]">
+                      {String(Math.floor(imgSyncElapsed / 60)).padStart(2, '0')}:{String(imgSyncElapsed % 60).padStart(2, '0')}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-semibold text-gray-900">
+                    {imgProgress.total > 0
+                      ? `Processando ${Math.min(imgProgress.processed, imgProgress.total)} de ${imgProgress.total} produtos`
+                      : 'Iniciando busca...'}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {imgProgress.found} imagens encontradas
+                  </p>
+                </div>
+                {imgProgress.total > 0 && (
+                  <div className="w-full max-w-md">
+                    <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-[#FFAA11] to-[#FFCC55] rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(100, Math.round((imgProgress.processed / Math.max(imgProgress.total, 1)) * 100))}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-2 text-xs text-gray-500">
+                      <span>{Math.min(100, Math.round((imgProgress.processed / Math.max(imgProgress.total, 1)) * 100))}% concluido</span>
+                      <span>{imgProgress.found} imagens · {Math.max(0, imgProgress.total - imgProgress.processed)} restantes</span>
+                    </div>
+                  </div>
+                )}
+                {pdfResult && (
+                  <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+                    ✓ {pdfResult.total} produtos salvos ({pdfResult.novos} novos, {pdfResult.atualizados} atualizados)
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <svg className="w-20 h-20 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="text-center">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">Sincronizacao concluida!</h4>
+                  <p className="text-sm text-gray-600">
+                    {imgProgress.found} de {imgProgress.total || imgProgress.processed} produtos com imagens
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Tempo total: {String(Math.floor(imgSyncElapsed / 60)).padStart(2, '0')}:{String(imgSyncElapsed % 60).padStart(2, '0')}
+                  </p>
+                </div>
+                {pdfResult && (
+                  <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700 text-center">
+                    {pdfResult.total} produtos importados ({pdfResult.novos} novos, {pdfResult.atualizados} atualizados)
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          {!imgSyncDone ? (
+            <>
+              <Button variant="outline" size="sm" onClick={cancelarSyncImagens}>
+                Cancelar
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => setShowImgSyncModal(false)}>
+                Continuar em segundo plano
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" size="sm" onClick={() => { setShowImgSyncModal(false); checkCatalogo() }}>
+              Fechar
+            </Button>
+          )}
+        </ModalFooter>
+      </Modal>
+
+      {/* Pill flutuante quando sync rodando em segundo plano */}
+      {imgSyncRunning && !showImgSyncModal && (
+        <button
+          onClick={() => setShowImgSyncModal(true)}
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-white border-2 border-[#FFAA11] rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all cursor-pointer"
+          title="Clique para ver progresso"
+        >
+          <svg className="w-5 h-5 animate-spin text-[#FFAA11]" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          <div className="flex flex-col items-start">
+            <span className="text-xs font-semibold text-gray-900">
+              Buscando imagens · {imgProgress.processed}/{imgProgress.total || '?'}
+            </span>
+            <span className="text-[10px] text-gray-500">
+              {imgProgress.found} encontradas · {String(Math.floor(imgSyncElapsed / 60)).padStart(2, '0')}:{String(imgSyncElapsed % 60).padStart(2, '0')}
+            </span>
+          </div>
+        </button>
+      )}
+
+      {/* Modal Novo / Editar Item */}
+      <Modal isOpen={showItemModal} onClose={() => !itemFormSaving && setShowItemModal(false)} size="2xl">
+        <ModalHeader onClose={() => !itemFormSaving && setShowItemModal(false)}>
+          <ModalTitle>{itemFormMode === 'edit' ? 'Editar produto' : 'Novo produto'}</ModalTitle>
+          <ModalDescription>
+            {itemFormMode === 'edit' ? 'Atualize as informacoes do produto no seu catalogo' : 'Cadastre um produto manualmente no seu catalogo'}
+          </ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Imagem do produto */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Imagem do produto</label>
+              <div className="flex items-start gap-4">
+                <div className="w-24 h-24 shrink-0 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
+                  {itemFormImageFile ? (
+                    <img src={URL.createObjectURL(itemFormImageFile)} alt="preview" className="w-full h-full object-cover" />
+                  ) : itemFormImageUrl ? (
+                    <img src={itemFormImageUrl} alt="preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  ) : itemFormCurrentImage ? (
+                    <img src={itemFormCurrentImage} alt="atual" className="w-full h-full object-cover" />
+                  ) : (
+                    <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1 space-y-2">
+                  <input
+                    ref={itemImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { setItemFormImageFile(e.target.files?.[0] || null); setItemFormImageUrl('') }}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => itemImageInputRef.current?.click()}
+                      className="text-xs px-3 py-1.5 bg-[#336FB6] text-white rounded-lg hover:bg-[#2660a5] transition-colors"
+                    >
+                      Escolher arquivo
+                    </button>
+                    {(itemFormImageFile || itemFormImageUrl || itemFormCurrentImage) && (
+                      <button
+                        type="button"
+                        onClick={() => { setItemFormImageFile(null); setItemFormImageUrl(''); if (itemFormCurrentImage) removeItemImage() }}
+                        className="text-xs px-3 py-1.5 text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={itemFormImageUrl}
+                    onChange={(e) => { setItemFormImageUrl(e.target.value); setItemFormImageFile(null) }}
+                    placeholder="ou cole uma URL de imagem"
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                  />
+                  {itemFormImageFile && (
+                    <p className="text-xs text-gray-500 truncate">📎 {itemFormImageFile.name}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Nome do produto *</label>
+              <input
+                type="text"
+                value={itemFormData.nome}
+                onChange={(e) => setItemFormData({ ...itemFormData, nome: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="Ex: Premier Pet Selecao Natural Frango 1kg"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Codigo / SKU</label>
+              <input
+                type="text"
+                value={itemFormData.codigo}
+                onChange={(e) => setItemFormData({ ...itemFormData, codigo: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="4028084"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">EAN / GTIN</label>
+              <input
+                type="text"
+                value={itemFormData.ean}
+                onChange={(e) => setItemFormData({ ...itemFormData, ean: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="7897348206422"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Marca</label>
+              <input
+                type="text"
+                value={itemFormData.marca}
+                onChange={(e) => setItemFormData({ ...itemFormData, marca: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="Premier Pet"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Categoria</label>
+              <select
+                value={itemFormData.categoria}
+                onChange={(e) => setItemFormData({ ...itemFormData, categoria: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              >
+                <option value="">Sem categoria</option>
+                {CATEGORIAS_PET.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">NCM</label>
+              <input
+                type="text"
+                value={itemFormData.ncm}
+                onChange={(e) => setItemFormData({ ...itemFormData, ncm: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="2309.90.30"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Unidade</label>
+              <input
+                type="text"
+                value={itemFormData.unidade}
+                onChange={(e) => setItemFormData({ ...itemFormData, unidade: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="UN"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Itens por caixa</label>
+              <input
+                type="number"
+                min="1"
+                value={itemFormData.itens_por_caixa}
+                onChange={(e) => setItemFormData({ ...itemFormData, itens_por_caixa: Number(e.target.value) || 1 })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Preco base (R$) *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={itemFormData.preco_base}
+                onChange={(e) => setItemFormData({ ...itemFormData, preco_base: Number(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Bonificacao</label>
+              <input
+                type="number"
+                min="0"
+                value={itemFormData.bonificacao ?? ''}
+                onChange={(e) => setItemFormData({ ...itemFormData, bonificacao: e.target.value === '' ? null : Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                placeholder="0"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Descricao</label>
+              <textarea
+                value={itemFormData.descricao_produto}
+                onChange={(e) => setItemFormData({ ...itemFormData, descricao_produto: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] resize-none"
+                placeholder="Detalhes adicionais sobre o produto..."
+              />
+            </div>
+          </div>
+
+          {itemFormError && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+              {itemFormError}
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" size="sm" onClick={() => setShowItemModal(false)} disabled={itemFormSaving}>
+            Cancelar
+          </Button>
+          <Button variant="primary" size="sm" onClick={handleItemSave} loading={itemFormSaving}>
+            {itemFormMode === 'edit' ? 'Salvar alteracoes' : 'Criar produto'}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal Personalizar Catalogo */}
+      <Modal isOpen={showPerfilModal} onClose={() => setShowPerfilModal(false)} size="lg">
+        <ModalHeader onClose={() => setShowPerfilModal(false)}>
+          <ModalTitle>Personalizar Catalogo</ModalTitle>
+          <ModalDescription>Configure a aparencia do seu catalogo</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          <div className="space-y-4">
+            {/* Logo */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Logo</label>
+              <input
+                type="url"
+                value={perfilData?.logo_url || ''}
+                onChange={(e) => setPerfilData(prev => prev ? { ...prev, logo_url: e.target.value } : prev)}
+                placeholder="https://..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+            </div>
+            {/* Banner */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Banner</label>
+              <input
+                type="url"
+                value={perfilData?.banner_url || ''}
+                onChange={(e) => setPerfilData(prev => prev ? { ...prev, banner_url: e.target.value } : prev)}
+                placeholder="https://..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+            </div>
+            {/* Cor primaria */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cor primaria</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={perfilData?.cor_primaria || '#336FB6'}
+                  onChange={(e) => setPerfilData(prev => prev ? { ...prev, cor_primaria: e.target.value } : prev)}
+                  className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={perfilData?.cor_primaria || ''}
+                  onChange={(e) => setPerfilData(prev => prev ? { ...prev, cor_primaria: e.target.value } : prev)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                  placeholder="#336FB6"
+                />
+              </div>
+            </div>
+            {/* Descricao */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Descricao</label>
+              <textarea
+                value={perfilData?.descricao || ''}
+                onChange={(e) => setPerfilData(prev => prev ? { ...prev, descricao: e.target.value } : prev)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6] resize-none"
+                placeholder="Descreva seu catalogo..."
+              />
+            </div>
+            {/* WhatsApp */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
+              <input
+                type="tel"
+                value={perfilData?.whatsapp || ''}
+                onChange={(e) => setPerfilData(prev => prev ? { ...prev, whatsapp: e.target.value } : prev)}
+                placeholder="(11) 99999-9999"
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+              />
+            </div>
+            {/* Slug */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Link do catalogo</label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500 whitespace-nowrap">flowb2b.com/catalogo/</span>
+                <input
+                  type="text"
+                  value={perfilData?.slug || ''}
+                  onChange={(e) => setPerfilData(prev => prev ? { ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') } : prev)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#336FB6]/20 focus:border-[#336FB6]"
+                  placeholder="minha-loja"
+                />
+              </div>
+            </div>
+            {/* Publico toggle */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Catalogo publico</p>
+                <p className="text-xs text-gray-500">Qualquer pessoa pode ver seu catalogo</p>
+              </div>
+              <ToggleSwitch
+                checked={perfilData?.publico || false}
+                onChange={(val) => setPerfilData(prev => prev ? { ...prev, publico: val } : prev)}
+              />
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" size="md" onClick={() => setShowPerfilModal(false)}>Cancelar</Button>
+          <Button variant="primary" size="md" loading={salvandoPerfil} onClick={handleSalvarPerfil}>Salvar</Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Modal Respostas dos Lojistas */}
+      <Modal isOpen={showRespostasModal} onClose={() => setShowRespostasModal(false)} size="xl">
+        <ModalHeader>
+          <ModalTitle>Respostas dos Lojistas</ModalTitle>
+          <ModalDescription>Veja como os lojistas responderam as atualizacoes do seu catalogo</ModalDescription>
+        </ModalHeader>
+        <ModalBody>
+          {loadingRespostas ? (
+            <div className="space-y-4">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          ) : respostas.length === 0 ? (
+            <div className="text-center py-12">
+              <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+              </svg>
+              <p className="text-gray-500 text-sm">Nenhuma resposta dos lojistas ainda</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {respostas.map((empresa: any) => (
+                <div key={empresa.empresa_id} className="border border-gray-200 rounded-xl overflow-hidden">
+                  {/* Empresa Header */}
+                  <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-900">{empresa.empresa_nome}</h3>
+                    {empresa.empresa_cnpj && (
+                      <p className="text-xs text-gray-500 mt-0.5">CNPJ: {empresa.empresa_cnpj}</p>
+                    )}
+                  </div>
+                  {/* Items Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50/50">
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Produto</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Status</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Detalhes</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Data</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-gray-500 uppercase"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {empresa.itens.map((item: any) => {
+                          const tipoLabel: Record<string, string> = {
+                            preco: 'Preco',
+                            novo: 'Novo produto',
+                            removido: 'Removido',
+                            dados: 'Dados',
+                          }
+                          const precoAntigo = item.dados_antigos?.preco_base ?? item.dados_antigos?.valor_de_compra
+                          const precoNovo = item.dados_novos?.preco_base ?? item.dados_novos?.valor_de_compra
+
+                          return (
+                            <tr key={item.id} className="hover:bg-gray-50/50">
+                              <td className="px-4 py-2.5">
+                                <p className="font-medium text-gray-900 truncate max-w-[200px]">{item.item_nome || '-'}</p>
+                                {item.item_codigo && (
+                                  <p className="text-xs text-gray-400">{item.item_codigo}</p>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-700">
+                                  {tipoLabel[item.tipo] || item.tipo}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {item.status === 'aceito' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                    </svg>
+                                    Aceito
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 text-red-700">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Rejeitado
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-gray-500">
+                                {item.tipo === 'preco' && precoAntigo != null && precoNovo != null ? (
+                                  <span>
+                                    {formatCurrency(precoAntigo)} <span className="mx-1 text-gray-400">&rarr;</span> {formatCurrency(precoNovo)}
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">
+                                {item.respondido_em
+                                  ? new Date(item.respondido_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                  : '-'}
+                              </td>
+                              <td className="px-4 py-2.5 text-right">
+                                {item.status === 'rejeitado' && (
+                                  <button
+                                    className="text-xs font-medium text-[#336FB6] hover:text-[#2a5a94] transition-colors"
+                                    onClick={() => {
+                                      // Placeholder - future reenviar functionality
+                                      setToast({ message: 'Funcionalidade de reenvio em breve!', type: 'warning' })
+                                    }}
+                                  >
+                                    Reenviar
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline" size="md" onClick={() => setShowRespostasModal(false)}>Fechar</Button>
+        </ModalFooter>
+      </Modal>
+    </RepresentanteLayout>
+  )
+}

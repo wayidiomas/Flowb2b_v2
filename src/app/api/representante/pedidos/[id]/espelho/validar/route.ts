@@ -12,42 +12,29 @@ export async function POST(
   try {
     const user = await getCurrentUser()
     if (!user || user.tipo !== 'representante' || !user.representanteUserId) {
-      return NextResponse.json({ error: 'Nao autenticado como representante' }, { status: 401 })
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
     const { id } = await params
     const supabase = createServerSupabaseClient()
 
-    // Buscar representantes vinculados a este usuario
     const { data: representantes } = await supabase
       .from('representantes')
       .select('id')
       .eq('user_representante_id', user.representanteUserId)
       .eq('ativo', true)
 
-    const representanteIds = representantes?.map(r => r.id) || []
-    if (representanteIds.length === 0) {
-      return NextResponse.json({ error: 'Sem acesso como representante' }, { status: 403 })
+    if (!representantes || representantes.length === 0) {
+      return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
     }
 
-    // Buscar fornecedores vinculados
-    const { data: vinculos } = await supabase
-      .from('representante_fornecedores')
-      .select('fornecedor_id')
-      .in('representante_id', representanteIds)
+    const representanteIds = representantes.map(r => r.id)
 
-    const fornecedorIds = vinculos?.map(v => v.fornecedor_id) || []
-
-    if (fornecedorIds.length === 0) {
-      return NextResponse.json({ error: 'Sem fornecedores vinculados' }, { status: 403 })
-    }
-
-    // Validate representante has access to this pedido
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
       .select('id')
       .eq('id', id)
-      .in('fornecedor_id', fornecedorIds)
+      .in('representante_id', representanteIds)
       .eq('is_excluded', false)
       .single()
 

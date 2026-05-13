@@ -35,46 +35,34 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 1. Auth: mesma logica do /representante/pedidos/[id]/route.ts
+    // 1. Auth: representante
     const user = await getCurrentUser()
     if (!user || user.tipo !== 'representante' || !user.representanteUserId) {
-      return NextResponse.json({ error: 'Nao autenticado como representante' }, { status: 401 })
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
     const { id } = await params
     const supabase = createServerSupabaseClient()
 
-    // Buscar representantes vinculados a este usuario
+    // Buscar representantes vinculados ao usuario
     const { data: representantes } = await supabase
       .from('representantes')
       .select('id')
       .eq('user_representante_id', user.representanteUserId)
       .eq('ativo', true)
 
-    const representanteIds = representantes?.map(r => r.id) || []
-
-    if (representanteIds.length === 0) {
+    if (!representantes || representantes.length === 0) {
       return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
     }
 
-    // Buscar fornecedores vinculados ao representante
-    const { data: vinculos } = await supabase
-      .from('representante_fornecedores')
-      .select('fornecedor_id')
-      .in('representante_id', representanteIds)
+    const representanteIds = representantes.map(r => r.id)
 
-    const fornecedorIdsDoRepresentante = vinculos?.map(v => v.fornecedor_id) || []
-
-    if (fornecedorIdsDoRepresentante.length === 0) {
-      return NextResponse.json({ error: 'Sem fornecedores vinculados' }, { status: 403 })
-    }
-
-    // 2. Buscar o pedido para pegar empresa_id e fornecedor_id, validar acesso
+    // 2. Buscar o pedido para pegar fornecedor_id e empresa_id, validando acesso
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
       .select('id, empresa_id, fornecedor_id')
       .eq('id', id)
-      .in('fornecedor_id', fornecedorIdsDoRepresentante)
+      .in('representante_id', representanteIds)
       .eq('is_excluded', false)
       .single()
 
@@ -83,37 +71,33 @@ export async function GET(
     }
 
     const pedidoEmpresaId = pedido.empresa_id
+    const pedidoFornecedorId = pedido.fornecedor_id
 
-    // 3. Buscar o fornecedor do pedido para pegar o CNPJ
-    const { data: fornecedorDoPedido } = await supabase
+    // Pegar todos os "fornecedores" com mesmo CNPJ do fornecedor do pedido (mesmo fornecedor pode ter um registro por empresa)
+    const { data: fornecedorBase } = await supabase
       .from('fornecedores')
-      .select('id, cnpj')
-      .eq('id', pedido.fornecedor_id)
+      .select('cnpj')
+      .eq('id', pedidoFornecedorId)
       .single()
 
-    if (!fornecedorDoPedido || !fornecedorDoPedido.cnpj) {
-      return NextResponse.json({ error: 'Fornecedor nao encontrado' }, { status: 404 })
+    let fornecedorIds: number[] = [pedidoFornecedorId]
+    if (fornecedorBase?.cnpj) {
+      const { data: fornecedoresIrmaos } = await supabase
+        .from('fornecedores')
+        .select('id')
+        .eq('cnpj', fornecedorBase.cnpj)
+      if (fornecedoresIrmaos && fornecedoresIrmaos.length > 0) {
+        fornecedorIds = fornecedoresIrmaos.map(f => f.id)
+      }
     }
 
-    // 4. Buscar todos os fornecedores com esse CNPJ (pode ter um por empresa)
-    const { data: fornecedores } = await supabase
-      .from('fornecedores')
-      .select('id, empresa_id, nome, nome_fantasia')
-      .eq('cnpj', fornecedorDoPedido.cnpj)
-
-    if (!fornecedores || fornecedores.length === 0) {
-      return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
-    }
-
-    const fornecedorIds = fornecedores.map(f => f.id)
-
-    // 5. Query params
+    // 3. Query params
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '30', 10)))
 
-    // 6. Buscar TODOS os produtos do fornecedor (de todas as empresas)
+    // 4. Buscar TODOS os produtos do(s) fornecedor(es)
     const { data: allProductsRaw, error: productsError } = await supabase
       .from('fornecedores_produtos')
       .select('produto_id, valor_de_compra, precocusto, codigo_fornecedor, empresa_id, produtos!inner(id, nome, gtin, marca, unidade, codigo)')
@@ -133,7 +117,7 @@ export async function GET(
       return produtos
     }
 
-    // 7. Deduplicar por: gtin (quando existe) > codigo_fornecedor > nome
+    // 5. Deduplicar por: gtin (quando existe) > codigo_fornecedor > nome
     const seen = new Map<string, CatalogoProduto>()
 
     for (const item of allProducts) {
@@ -152,15 +136,13 @@ export async function GET(
           vinculado_empresa: item.empresa_id === pedidoEmpresaId,
         })
       } else if (item.empresa_id === pedidoEmpresaId) {
-        // Se ja vimos mas esse eh da empresa certa, marcar como vinculado
         const existing = seen.get(key)!
         existing.vinculado_empresa = true
-        // Usar o preco dessa empresa especificamente
         existing.preco = item.valor_de_compra || item.precocusto || existing.preco
       }
     }
 
-    // 8. Aplicar filtro de busca
+    // 6. Aplicar filtro de busca
     let results = Array.from(seen.values())
 
     if (search) {
@@ -172,7 +154,7 @@ export async function GET(
       )
     }
 
-    // 9. Ordenar: vinculados primeiro, depois por nome
+    // 7. Ordenar: vinculados primeiro, depois por nome
     results.sort((a, b) => {
       if (a.vinculado_empresa !== b.vinculado_empresa) {
         return a.vinculado_empresa ? -1 : 1
@@ -180,7 +162,7 @@ export async function GET(
       return (a.nome || '').localeCompare(b.nome || '')
     })
 
-    // 10. Paginar
+    // 8. Paginar
     const total = results.length
     const startIndex = (page - 1) * limit
     const paginatedResults = results.slice(startIndex, startIndex + limit)

@@ -18,12 +18,15 @@ interface CartItem {
   imagem_url?: string | null
   marca?: string | null
   unidade?: string | null
+  fornecedor_id?: number | null
 }
 
 interface PedidoLp {
   slug: string
   fornecedor_id: number
   fornecedor_cnpj: string
+  owner_tipo?: 'fornecedor' | 'representante'
+  representante_id?: number | null
   itens: CartItem[]
   created_at: string
 }
@@ -57,7 +60,7 @@ export default function LpCheckoutPage() {
     }
   }, [authLoading, user, router, slug])
 
-  // 2. Carrega pedido do localStorage e resolve fornecedor por CNPJ pra cada empresa
+  // 2. Carrega pedido do localStorage e resolve fornecedor(es)
   useEffect(() => {
     if (authLoading || !user) return
 
@@ -81,14 +84,86 @@ export default function LpCheckoutPage() {
     }
     setPedido(parsed)
 
-    // Resolve fornecedor.id pra cada empresa do user
-    const cnpj = (parsed.fornecedor_cnpj || '').replace(/\D/g, '')
-    if (!cnpj || empresas.length === 0) {
+    if (empresas.length === 0) {
       setLoading(false)
       return
     }
 
     const empresaIds = empresas.map(e => e.id)
+
+    // LP de representante: tem multiplos fornecedores no cart.
+    // Resolvemos por fornecedor_id dos itens, agrupando por fornecedor.
+    if (parsed.owner_tipo === 'representante') {
+      const fornIdsCart = Array.from(new Set(
+        (parsed.itens || [])
+          .map(i => i.fornecedor_id)
+          .filter((v): v is number => typeof v === 'number' && v > 0)
+      ))
+
+      if (fornIdsCart.length === 0) {
+        setError('Carrinho sem fornecedor identificado.')
+        setLoading(false)
+        return
+      }
+
+      // Pega CNPJs dos fornecedores que o cart referencia
+      supabase
+        .from('fornecedores')
+        .select('id, cnpj, empresa_id')
+        .in('id', fornIdsCart)
+        .then(({ data: fornsCart }) => {
+          const cnpjs = Array.from(new Set(((fornsCart || []) as { cnpj: string | null }[])
+            .map(f => (f.cnpj || '').replace(/\D/g, ''))
+            .filter(Boolean)))
+
+          if (cnpjs.length === 0) {
+            setLoading(false)
+            return
+          }
+
+          // Pra cada empresa do user, verifica se TODOS os CNPJs estao vinculados
+          supabase
+            .from('fornecedores')
+            .select('id, empresa_id, cnpj')
+            .in('cnpj', cnpjs)
+            .in('empresa_id', empresaIds)
+            .then(({ data: matches }) => {
+              const cnpjsPorEmpresa = new Map<number, Set<string>>()
+              for (const m of (matches || []) as { empresa_id: number; cnpj: string | null }[]) {
+                const c = (m.cnpj || '').replace(/\D/g, '')
+                if (!c) continue
+                if (!cnpjsPorEmpresa.has(m.empresa_id)) cnpjsPorEmpresa.set(m.empresa_id, new Set())
+                cnpjsPorEmpresa.get(m.empresa_id)!.add(c)
+              }
+              const totalCnpjs = cnpjs.length
+              const resolved: EmpresaComFornecedor[] = empresas.map(e => {
+                const set = cnpjsPorEmpresa.get(e.id) || new Set()
+                const vinculadaCompleta = set.size === totalCnpjs
+                // fornecedor_id aqui eh apenas um (o primeiro do cart) — checkout multifornecedor
+                // sera resolvido na rota /compras/pedidos/novo redirecionando por fornecedor.
+                const firstFornId = fornIdsCart[0]
+                return {
+                  empresa_id: e.id,
+                  empresa_nome: e.nome_fantasia || e.razao_social,
+                  empresa_cnpj: e.cnpj,
+                  fornecedor_id: vinculadaCompleta ? firstFornId : null,
+                  vinculada: vinculadaCompleta,
+                }
+              })
+              setEmpresasResolved(resolved)
+              setLoading(false)
+            })
+        })
+      return
+    }
+
+    // Fluxo legado: LP do fornecedor (1 fornecedor por CNPJ)
+    const cnpj = (parsed.fornecedor_cnpj || '').replace(/\D/g, '')
+    if (!cnpj) {
+      setLoading(false)
+      return
+    }
+
     supabase
       .from('fornecedores')
       .select('id, empresa_id, cnpj')
@@ -129,7 +204,8 @@ export default function LpCheckoutPage() {
       if (empresa?.id !== e.empresa_id) {
         await switchEmpresa(e.empresa_id)
       }
-      router.push(`/compras/pedidos/novo?fornecedor_id=${e.fornecedor_id}&from_lp=${slug}`)
+      const repParam = pedido?.representante_id ? `&representante_id=${pedido.representante_id}` : ''
+      router.push(`/compras/pedidos/novo?fornecedor_id=${e.fornecedor_id}&from_lp=${slug}${repParam}`)
     } catch {
       setError('Erro ao trocar de empresa. Tente novamente.')
       setRedirecting(false)

@@ -5,159 +5,154 @@ import { getCurrentUser } from '@/lib/auth'
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
+    console.log('[Representante Pedidos] User:', JSON.stringify({
+      tipo: user?.tipo,
+      representanteUserId: user?.representanteUserId,
+      email: user?.email,
+    }))
 
     if (!user || user.tipo !== 'representante' || !user.representanteUserId) {
-      return NextResponse.json(
-        { success: false, error: 'Nao autenticado como representante' },
-        { status: 401 }
-      )
+      console.log('[Representante Pedidos] Auth failed - user:', !!user, 'tipo:', user?.tipo, 'representanteUserId:', user?.representanteUserId)
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
-    const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status')
-    const fornecedorId = searchParams.get('fornecedor_id')
-    const origemFilter = searchParams.get('origem') || 'flowb2b'
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
-    const offset = (page - 1) * limit
-
     const supabase = createServerSupabaseClient()
+    const { searchParams } = new URL(request.url)
+    const statusFilter = searchParams.get('status')
+    const searchQuery = searchParams.get('search')?.toLowerCase().trim()
+    const origemFilter = searchParams.get('origem') || 'plataforma'
 
-    // Buscar representantes vinculados a este usuario
-    const { data: representantes } = await supabase
+    // Buscar representantes vinculados a este usuario (um por empresa)
+    const { data: representantes, error: repError } = await supabase
       .from('representantes')
-      .select('id')
+      .select('id, empresa_id')
       .eq('user_representante_id', user.representanteUserId)
       .eq('ativo', true)
 
-    const representanteIds = representantes?.map(r => r.id) || []
+    console.log('[Representante Pedidos] user_representante_id:', user.representanteUserId, '- Found:', representantes?.length || 0, 'representantes', repError ? `Error: ${repError.message}` : '')
 
-    if (representanteIds.length === 0) {
-      return NextResponse.json({
-        success: true,
-        pedidos: [],
-        total: 0,
-        page,
-        limit,
-      })
+    if (!representantes || representantes.length === 0) {
+      return NextResponse.json({ pedidos: [] })
     }
 
-    // Buscar fornecedores vinculados
-    const { data: vinculos } = await supabase
-      .from('representante_fornecedores')
-      .select('fornecedor_id')
-      .in('representante_id', representanteIds)
+    const representanteIds = representantes.map(r => r.id)
+    const empresaIds = [...new Set(representantes.map(r => r.empresa_id))]
 
-    const fornecedorIds = vinculos?.map(v => v.fornecedor_id) || []
+    // Buscar empresas para nomes e CNPJ
+    const { data: empresas } = await supabase
+      .from('empresas')
+      .select('id, razao_social, nome_fantasia, cnpj')
+      .in('id', empresaIds)
 
-    if (fornecedorIds.length === 0) {
-      return NextResponse.json({
-        success: true,
-        pedidos: [],
-        total: 0,
-        page,
-        limit,
-      })
+    const empresaMap = new Map((empresas || []).map(e => [e.id, e]))
+
+    // Se tiver busca, filtrar empresas primeiro
+    let empresaIdsFiltered = empresaIds
+    if (searchQuery) {
+      empresaIdsFiltered = (empresas || [])
+        .filter(e => {
+          const nomeFantasia = (e.nome_fantasia || '').toLowerCase()
+          const razaoSocial = (e.razao_social || '').toLowerCase()
+          const cnpj = (e.cnpj || '').replace(/\D/g, '')
+          const searchClean = searchQuery.replace(/\D/g, '')
+
+          return nomeFantasia.includes(searchQuery) ||
+                 razaoSocial.includes(searchQuery) ||
+                 (searchClean && cnpj.includes(searchClean))
+        })
+        .map(e => e.id)
+
+      if (empresaIdsFiltered.length === 0) {
+        return NextResponse.json({ pedidos: [] })
+      }
     }
 
-    // Montar query de pedidos
+    // Buscar pedidos: filtro CHAVE — representante_id IN (representanteIds)
     let query = supabase
       .from('pedidos_compra')
-      .select(`
-        id,
-        numero,
-        data,
-        data_prevista,
-        status_interno,
-        total,
-        desconto,
-        frete,
-        fornecedor_id,
-        empresa_id,
-        updated_at,
-        fornecedores (
-          id,
-          nome,
-          cnpj
-        ),
-        empresas (
-          id,
-          razao_social,
-          nome_fantasia
-        )
-      `, { count: 'exact' })
-      .in('fornecedor_id', fornecedorIds)
+      .select('id, numero, data, data_prevista, total, total_produtos, status_interno, empresa_id, fornecedor_id, representante_id')
+      .in('representante_id', representanteIds)
       .eq('is_excluded', false)
-      .in('status_interno', ['enviado_fornecedor', 'sugestao_enviada', 'aprovado', 'recusado', 'contra_proposta'])
-
-    // Filtros opcionais
-    // Mostrar pedidos da origem selecionada OU pedidos enviados diretamente a este representante
-    if (origemFilter !== 'todos') {
-      const repIdsStr = representanteIds.join(',')
-      query = query.or(`origem.eq.${origemFilter},representante_id.in.(${repIdsStr})`)
-    }
-
-    if (status) {
-      query = query.eq('status_interno', status)
-    }
-
-    if (fornecedorId) {
-      query = query.eq('fornecedor_id', parseInt(fornecedorId))
-    }
-
-    // Ordenacao e paginacao
-    query = query
+      .neq('status_interno', 'rascunho')
+      .neq('status_interno', 'cancelado')
       .order('data', { ascending: false })
-      .range(offset, offset + limit - 1)
 
-    const { data: pedidos, error, count } = await query
-
-    if (error) {
-      console.error('Erro ao buscar pedidos:', error)
-      throw error
+    if (origemFilter === 'plataforma') {
+      query = query.in('origem', ['flowb2b', 'catalogo'])
+    } else if (origemFilter !== 'todos') {
+      query = query.eq('origem', origemFilter)
     }
 
-    // Tipos para relações retornadas pelo Supabase (relação many-to-one retorna objeto)
-    type FornecedorRelation = { nome: string; cnpj?: string } | null
-    type EmpresaRelation = { nome_fantasia?: string; razao_social: string } | null
+    if (statusFilter) {
+      query = query.eq('status_interno', statusFilter)
+    }
 
-    // Formatar pedidos
-    const pedidosFormatados = pedidos?.map(p => {
-      // Supabase pode inferir tipos incorretamente em queries complexas, usar unknown como intermediário
-      const forn = p.fornecedores as unknown as FornecedorRelation
-      const emp = p.empresas as unknown as EmpresaRelation
+    if (searchQuery) {
+      query = query.in('empresa_id', empresaIdsFiltered)
+    }
 
-      return {
-        id: p.id,
-        numero: p.numero,
-        data: p.data,
-        data_prevista: p.data_prevista,
-        status: p.status_interno,
-        total: p.total,
-        desconto: p.desconto,
-        frete: p.frete,
-        fornecedor_id: p.fornecedor_id,
-        fornecedor_nome: forn?.nome || '',
-        fornecedor_cnpj: forn?.cnpj,
-        empresa_id: p.empresa_id,
-        empresa_nome: emp?.nome_fantasia || emp?.razao_social || '',
-        created_at: p.updated_at,
-        updated_at: p.updated_at,
-      }
-    }) || []
+    const { data: pedidos } = await query
 
-    return NextResponse.json({
-      success: true,
-      pedidos: pedidosFormatados,
-      total: count || 0,
-      page,
-      limit,
+    // Contar itens por pedido
+    const pedidoIds = (pedidos || []).map(p => p.id)
+    const { data: itensCounts } = await supabase
+      .from('itens_pedido_compra')
+      .select('pedido_compra_id')
+      .in('pedido_compra_id', pedidoIds.length > 0 ? pedidoIds : [0])
+
+    const itensCountMap = new Map<number, number>()
+    ;(itensCounts || []).forEach(item => {
+      itensCountMap.set(item.pedido_compra_id, (itensCountMap.get(item.pedido_compra_id) || 0) + 1)
     })
+
+    // Buscar fornecedores vinculados aos pedidos
+    const fornecedorIdsSet = [...new Set((pedidos || []).map(p => p.fornecedor_id).filter(Boolean))]
+    const fornecedorMap = new Map<number, { id: number; nome: string; nome_fantasia: string | null; cnpj: string | null }>()
+
+    if (fornecedorIdsSet.length > 0) {
+      const { data: fornecedores } = await supabase
+        .from('fornecedores')
+        .select('id, nome, nome_fantasia, cnpj')
+        .in('id', fornecedorIdsSet)
+
+      ;(fornecedores || []).forEach(f => {
+        fornecedorMap.set(f.id, { id: f.id, nome: f.nome, nome_fantasia: f.nome_fantasia, cnpj: f.cnpj })
+      })
+    }
+
+    // Buscar representantes vinculados aos pedidos (mostrar info do rep)
+    const representanteIdsDosPedidos = [...new Set((pedidos || []).map(p => p.representante_id).filter(Boolean))]
+    const representanteMap = new Map<number, { id: number; nome: string }>()
+
+    if (representanteIdsDosPedidos.length > 0) {
+      const { data: reps } = await supabase
+        .from('representantes')
+        .select('id, nome')
+        .in('id', representanteIdsDosPedidos)
+
+      ;(reps || []).forEach(r => {
+        representanteMap.set(r.id, { id: r.id, nome: r.nome })
+      })
+    }
+
+    const pedidosFormatted = (pedidos || []).map(p => {
+      const empresa = empresaMap.get(p.empresa_id)
+      const fornecedor = p.fornecedor_id ? fornecedorMap.get(p.fornecedor_id) : null
+      const representante = p.representante_id ? representanteMap.get(p.representante_id) : null
+      return {
+        ...p,
+        empresa_nome: empresa?.nome_fantasia || empresa?.razao_social || '',
+        empresa_cnpj: empresa?.cnpj || '',
+        fornecedor_nome: fornecedor?.nome_fantasia || fornecedor?.nome || '',
+        fornecedor_cnpj: fornecedor?.cnpj || '',
+        itens_count: itensCountMap.get(p.id) || 0,
+        representante: representante || null,
+      }
+    })
+
+    return NextResponse.json({ pedidos: pedidosFormatted })
   } catch (error) {
-    console.error('Representante pedidos error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Erro interno do servidor' },
-      { status: 500 }
-    )
+    console.error('Erro ao listar pedidos representante:', error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

@@ -12,6 +12,12 @@ export interface LpCartItem {
   imagem_url?: string | null
   marca?: string | null
   unidade?: string | null
+  /**
+   * Fornecedor do produto. Em LPs de fornecedor, todos os itens compartilham o
+   * mesmo fornecedor. Em LPs de representante, itens podem vir de fornecedores
+   * diferentes — o checkout agrupa por essa chave.
+   */
+  fornecedor_id?: number | null
 }
 
 const PREFIX = 'lp_cart_'

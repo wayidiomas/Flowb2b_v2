@@ -67,3 +67,70 @@ export interface LpListItem extends LandingPage {
   lojista_cnpj: string | null
   produtos_count: number
 }
+
+/**
+ * Landing page do REPRESENTANTE.
+ * Diferenca chave em relacao ao fornecedor:
+ *  - Nao tem fornecedor_id na LP (agregacao de N fornecedores que o rep atende).
+ *  - representante_id eh a "tenant key" da LP.
+ */
+export interface LandingPageRepresentante {
+  id: number
+  representante_id: number
+  empresa_id_lojista: number | null
+  slug: string
+  nome: string
+  modo: LpModo
+  cor_marca: string | null
+  logo_url: string | null
+  banner_url: string | null
+  hero_titulo: string | null
+  hero_subtitulo: string | null
+  descricao: string | null
+  whatsapp_contato: string | null
+  instagram_url: string | null
+  site_url: string | null
+  endereco_resumido: string | null
+  ativa: boolean
+  deletada_em: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface LandingPageRepresentanteProduto {
+  id: number
+  landing_page_id: number
+  produto_id: number
+  fornecedor_id: number
+  ordem: number
+  preco_override: number | null
+  destaque: boolean
+}
+
+export interface CreateLpRepRequest {
+  representante_id?: number
+  empresa_id_lojista?: number | null
+  nome: string
+  modo: LpModo
+  logo_url?: string
+  banner_url?: string
+  hero_titulo?: string
+  hero_subtitulo?: string
+  descricao?: string
+  whatsapp_contato?: string
+  instagram_url?: string
+  site_url?: string
+  endereco_resumido?: string
+  slug?: string
+}
+
+export interface UpdateLpRepRequest extends Partial<Omit<CreateLpRepRequest, 'representante_id'>> {
+  ativa?: boolean
+  cor_marca?: string | null
+}
+
+export interface LpRepListItem extends LandingPageRepresentante {
+  produtos_count: number
+  lojista_nome?: string | null
+  lojista_cnpj?: string | null
+}

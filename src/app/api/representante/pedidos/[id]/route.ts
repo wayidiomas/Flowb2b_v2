@@ -16,78 +16,50 @@ interface ItemPedidoRaw {
   produtos: { gtin: string | null } | { gtin: string | null }[] | null
 }
 
-interface RouteContext {
-  params: Promise<{ id: string }>
-}
-
 export async function GET(
   request: NextRequest,
-  context: RouteContext
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser()
-
     if (!user || user.tipo !== 'representante' || !user.representanteUserId) {
-      return NextResponse.json(
-        { success: false, error: 'Nao autenticado como representante' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
-    const params = await context.params
-    const pedidoId = parseInt(params.id)
-
-    if (isNaN(pedidoId)) {
-      return NextResponse.json({ error: 'ID invalido' }, { status: 400 })
-    }
-
+    const { id } = await params
     const supabase = createServerSupabaseClient()
 
-    // Buscar representantes vinculados a este usuario
+    // Buscar representantes vinculados a este usuario (um por empresa)
     const { data: representantes } = await supabase
       .from('representantes')
-      .select('id')
+      .select('id, empresa_id, nome')
       .eq('user_representante_id', user.representanteUserId)
       .eq('ativo', true)
 
-    const representanteIds = representantes?.map(r => r.id) || []
-
-    // Buscar fornecedores vinculados
-    const { data: vinculos } = await supabase
-      .from('representante_fornecedores')
-      .select('fornecedor_id')
-      .in('representante_id', representanteIds)
-
-    const fornecedorIds = vinculos?.map(v => v.fornecedor_id) || []
-
-    if (fornecedorIds.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Pedido nao encontrado' },
-        { status: 404 }
-      )
+    if (!representantes || representantes.length === 0) {
+      return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
     }
 
-    // Buscar pedido (select * para pegar todos os campos corretos)
+    const representanteIds = representantes.map(r => r.id)
+
+    // Buscar pedido — filtro por representante_id IN representanteIds
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
       .select('*')
-      .eq('id', pedidoId)
-      .in('fornecedor_id', fornecedorIds)
+      .eq('id', id)
+      .in('representante_id', representanteIds)
       .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {
-      return NextResponse.json(
-        { success: false, error: 'Pedido nao encontrado' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Pedido nao encontrado' }, { status: 404 })
     }
 
     // Buscar itens do pedido (com EAN do produto)
     const { data: itensRaw } = await supabase
       .from('itens_pedido_compra')
       .select('id, descricao, codigo_produto, codigo_fornecedor, unidade, valor, quantidade, aliquota_ipi, produto_id, produtos(gtin)')
-      .eq('pedido_compra_id', pedidoId)
+      .eq('pedido_compra_id', id)
 
     // Buscar codigos do fornecedor para os produtos deste pedido
     const itensTyped = (itensRaw || []) as ItemPedidoRaw[]
@@ -117,19 +89,56 @@ export async function GET(
       return produtos.gtin || null
     }
 
+    // Buscar fornecedor do pedido para pegar CNPJ (base do catalogo)
+    const { data: fornecedorPedido } = await supabase
+      .from('fornecedores')
+      .select('id, nome, nome_fantasia, cnpj')
+      .eq('id', pedido.fornecedor_id)
+      .single()
+
+    const cnpjLimpo = (fornecedorPedido?.cnpj || '').replace(/\D/g, '')
+    let catalogo: { id: number } | null = null
+    if (cnpjLimpo) {
+      const { data: cat } = await supabase
+        .from('catalogo_fornecedor')
+        .select('id')
+        .eq('cnpj', cnpjLimpo)
+        .single()
+      catalogo = cat
+    }
+
+    const precoCatalogoMap = new Map<string, number>()
+    if (catalogo) {
+      const { data: catItens } = await supabase
+        .from('catalogo_itens')
+        .select('codigo, ean, preco_base')
+        .eq('catalogo_id', catalogo.id)
+        .eq('ativo', true)
+      for (const ci of catItens || []) {
+        if (ci.codigo) precoCatalogoMap.set(ci.codigo, ci.preco_base)
+        if (ci.ean) precoCatalogoMap.set(ci.ean, ci.preco_base)
+      }
+    }
+
     // Mapear itens para incluir ean e codigo_fornecedor correto
-    const itens = itensTyped.map(item => ({
-      id: item.id,
-      descricao: item.descricao,
-      codigo_produto: item.codigo_produto,
-      codigo_fornecedor: (item.produto_id && codigosFornecedor[item.produto_id]) || null,
-      unidade: item.unidade,
-      valor: item.valor,
-      quantidade: item.quantidade,
-      aliquota_ipi: item.aliquota_ipi,
-      produto_id: item.produto_id,
-      ean: getGtin(item.produtos)
-    }))
+    const itens = itensTyped.map(item => {
+      const codForn = (item.produto_id && codigosFornecedor[item.produto_id])
+        || item.codigo_fornecedor
+        || null
+      const ean = getGtin(item.produtos)
+      return {
+        id: item.id,
+        descricao: item.descricao,
+        codigo_produto: item.codigo_produto,
+        codigo_fornecedor: codForn,
+        unidade: item.unidade,
+        preco_catalogo: precoCatalogoMap.get(codForn || '') || precoCatalogoMap.get(ean || '') || null,
+        quantidade: item.quantidade,
+        aliquota_ipi: item.aliquota_ipi,
+        produto_id: item.produto_id,
+        ean,
+      }
+    })
 
     // Buscar nome da empresa (lojista)
     const { data: empresa } = await supabase
@@ -138,18 +147,25 @@ export async function GET(
       .eq('id', pedido.empresa_id)
       .single()
 
-    // Buscar nome do fornecedor
-    const { data: fornecedor } = await supabase
-      .from('fornecedores')
-      .select('id, nome, nome_fantasia')
-      .eq('id', pedido.fornecedor_id)
-      .single()
+    // Representante info (do proprio pedido)
+    let representante = null
+    if (pedido.representante_id) {
+      const { data: repData } = await supabase
+        .from('representantes')
+        .select('id, nome')
+        .eq('id', pedido.representante_id)
+        .single()
 
-    // Buscar sugestoes existentes
+      if (repData) {
+        representante = { id: repData.id, nome: repData.nome }
+      }
+    }
+
+    // Buscar sugestoes existentes (incluindo autor_tipo para identificar contra-propostas)
     const { data: sugestoes } = await supabase
       .from('sugestoes_fornecedor')
       .select('id, status, observacao_fornecedor, observacao_lojista, created_at, autor_tipo, valor_minimo_pedido, desconto_geral, bonificacao_geral, prazo_entrega_dias, validade_proposta')
-      .eq('pedido_compra_id', pedidoId)
+      .eq('pedido_compra_id', id)
       .order('created_at', { ascending: false })
 
     // Se ha sugestao, buscar itens da sugestao mais recente
@@ -167,14 +183,16 @@ export async function GET(
     const { data: timeline } = await supabase
       .from('pedido_timeline')
       .select('*')
-      .eq('pedido_compra_id', pedidoId)
+      .eq('pedido_compra_id', id)
       .order('created_at', { ascending: false })
 
     return NextResponse.json({
       pedido: {
         ...pedido,
         empresa_nome: empresa?.nome_fantasia || empresa?.razao_social || '',
-        fornecedor_nome: fornecedor?.nome_fantasia || fornecedor?.nome || '',
+        fornecedor_nome: fornecedorPedido?.nome_fantasia || fornecedorPedido?.nome || '',
+        fornecedor_cnpj: fornecedorPedido?.cnpj || '',
+        representante,
       },
       itens: itens || [],
       sugestoes: sugestoes || [],
@@ -182,10 +200,7 @@ export async function GET(
       timeline: timeline || [],
     })
   } catch (error) {
-    console.error('Representante pedido detail error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Erro interno do servidor' },
-      { status: 500 }
-    )
+    console.error('Erro ao buscar pedido representante:', error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

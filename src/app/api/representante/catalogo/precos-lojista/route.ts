@@ -1,0 +1,154 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerSupabaseClient } from '@/lib/supabase'
+import { authRepresentanteCatalogo, isNextResponse } from '@/lib/representante-catalogo-auth'
+
+export async function POST(request: NextRequest) {
+  try {
+    const ctx = await authRepresentanteCatalogo(request)
+    if (isNextResponse(ctx)) return ctx
+    const { cnpj: cnpjLimpo } = ctx
+
+    const supabase = createServerSupabaseClient()
+    const body = await request.json()
+    const { catalogo_item_id, empresa_id, preco_customizado, desconto_percentual, ativo } = body
+
+    if (!catalogo_item_id || !empresa_id) {
+      return NextResponse.json({ error: 'catalogo_item_id e empresa_id obrigatorios' }, { status: 400 })
+    }
+
+    if (preco_customizado === undefined && desconto_percentual === undefined && ativo === undefined) {
+      return NextResponse.json({ error: 'Informe ao menos preco_customizado, desconto_percentual ou ativo' }, { status: 400 })
+    }
+
+    if (preco_customizado !== undefined) {
+      if (typeof preco_customizado !== 'number' || !isFinite(preco_customizado) || preco_customizado < 0) {
+        return NextResponse.json({ error: 'preco_customizado deve ser numero >= 0' }, { status: 400 })
+      }
+    }
+    if (desconto_percentual !== undefined) {
+      if (typeof desconto_percentual !== 'number' || !isFinite(desconto_percentual) || desconto_percentual < -100 || desconto_percentual > 100) {
+        return NextResponse.json({ error: 'desconto_percentual deve ser numero entre -100 e 100' }, { status: 400 })
+      }
+    }
+
+    const { data: catalogo } = await supabase
+      .from('catalogo_fornecedor')
+      .select('id')
+      .eq('cnpj', cnpjLimpo)
+      .single()
+
+    if (!catalogo) {
+      return NextResponse.json({ error: 'Catalogo nao encontrado' }, { status: 404 })
+    }
+
+    const { data: fornecedorEmpresa } = await supabase
+      .from('fornecedores')
+      .select('id')
+      .eq('cnpj', cnpjLimpo)
+      .eq('empresa_id', empresa_id)
+      .limit(1)
+      .single()
+
+    if (!fornecedorEmpresa) {
+      return NextResponse.json({ error: 'Fornecedor nao vinculado a esta empresa' }, { status: 403 })
+    }
+
+    const { data: item } = await supabase
+      .from('catalogo_itens')
+      .select('id')
+      .eq('id', Number(catalogo_item_id))
+      .eq('catalogo_id', catalogo.id)
+      .single()
+
+    if (!item) {
+      return NextResponse.json({ error: 'Item nao pertence ao seu catalogo' }, { status: 403 })
+    }
+
+    const upsertData: Record<string, unknown> = {
+      catalogo_item_id: Number(catalogo_item_id),
+      empresa_id: Number(empresa_id),
+      updated_at: new Date().toISOString(),
+    }
+    if (preco_customizado !== undefined) upsertData.preco_customizado = preco_customizado
+    if (desconto_percentual !== undefined) upsertData.desconto_percentual = desconto_percentual
+    if (ativo !== undefined) upsertData.ativo = ativo
+
+    const { data: override, error: upsertError } = await supabase
+      .from('catalogo_precos_lojista')
+      .upsert(upsertData, { onConflict: 'catalogo_item_id,empresa_id' })
+      .select()
+      .single()
+
+    if (upsertError) {
+      console.error('Erro ao criar/atualizar preco lojista:', upsertError)
+      return NextResponse.json({ error: 'Erro ao salvar preco' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, override })
+  } catch (error) {
+    console.error('Erro ao criar/atualizar preco lojista (representante):', error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const ctx = await authRepresentanteCatalogo(request)
+    if (isNextResponse(ctx)) return ctx
+    const { cnpj: cnpjLimpo } = ctx
+
+    const supabase = createServerSupabaseClient()
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'id obrigatorio' }, { status: 400 })
+    }
+
+    const { data: catalogo } = await supabase
+      .from('catalogo_fornecedor')
+      .select('id')
+      .eq('cnpj', cnpjLimpo)
+      .single()
+
+    if (!catalogo) {
+      return NextResponse.json({ error: 'Catalogo nao encontrado' }, { status: 404 })
+    }
+
+    const { data: override } = await supabase
+      .from('catalogo_precos_lojista')
+      .select('id, catalogo_item_id')
+      .eq('id', Number(id))
+      .single()
+
+    if (!override) {
+      return NextResponse.json({ error: 'Override nao encontrado' }, { status: 404 })
+    }
+
+    const { data: item } = await supabase
+      .from('catalogo_itens')
+      .select('id')
+      .eq('id', override.catalogo_item_id)
+      .eq('catalogo_id', catalogo.id)
+      .single()
+
+    if (!item) {
+      return NextResponse.json({ error: 'Override nao pertence ao seu catalogo' }, { status: 403 })
+    }
+
+    const { error: deleteError } = await supabase
+      .from('catalogo_precos_lojista')
+      .delete()
+      .eq('id', Number(id))
+
+    if (deleteError) {
+      console.error('Erro ao remover preco lojista:', deleteError)
+      return NextResponse.json({ error: 'Erro ao remover preco' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Erro ao remover preco lojista (representante):', error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}

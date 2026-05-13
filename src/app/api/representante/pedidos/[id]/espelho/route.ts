@@ -13,60 +13,43 @@ export async function POST(
   try {
     const user = await getCurrentUser()
     if (!user || user.tipo !== 'representante' || !user.representanteUserId) {
-      return NextResponse.json(
-        { success: false, error: 'Nao autenticado como representante' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
     const { id: pedidoId } = await params
     const supabase = createServerSupabaseClient()
 
-    // Buscar representantes vinculados a este usuario
+    // Buscar representantes vinculados ao usuario
     const { data: representantes } = await supabase
       .from('representantes')
-      .select('id')
+      .select('id, empresa_id')
       .eq('user_representante_id', user.representanteUserId)
       .eq('ativo', true)
 
-    const representanteIds = representantes?.map(r => r.id) || []
-
-    // Buscar fornecedores vinculados
-    const { data: vinculos } = await supabase
-      .from('representante_fornecedores')
-      .select('fornecedor_id')
-      .in('representante_id', representanteIds)
-
-    const fornecedorIds = vinculos?.map(v => v.fornecedor_id) || []
-
-    if (fornecedorIds.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Sem fornecedores vinculados' },
-        { status: 403 }
-      )
+    if (!representantes || representantes.length === 0) {
+      return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
     }
 
-    // Buscar pedido e validar que pertence a um fornecedor vinculado
+    const representanteIds = representantes.map(r => r.id)
+
+    // Buscar pedido (validar acesso via representante_id)
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
       .select('id, empresa_id, fornecedor_id, status_interno')
       .eq('id', pedidoId)
-      .in('fornecedor_id', fornecedorIds)
+      .in('representante_id', representanteIds)
       .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {
-      return NextResponse.json(
-        { success: false, error: 'Pedido nao encontrado' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Pedido nao encontrado' }, { status: 404 })
     }
 
     // Validar status do pedido
     const statusPermitidos = ['aceito', 'sugestao_pendente', 'enviado_fornecedor']
     if (!statusPermitidos.includes(pedido.status_interno)) {
       return NextResponse.json(
-        { success: false, error: 'Pedido nao esta em um status que permite envio de espelho' },
+        { error: 'Pedido nao esta em um status que permite envio de espelho' },
         { status: 400 }
       )
     }
@@ -78,31 +61,25 @@ export async function POST(
 
     // Validar arquivo
     if (!file || file.size === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Arquivo e obrigatorio' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Arquivo e obrigatorio' }, { status: 400 })
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { success: false, error: 'Arquivo muito grande, max 10MB' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Arquivo muito grande, max 10MB' }, { status: 400 })
     }
 
     if (!ALLOWED_TYPES.includes(file.type)) {
       return NextResponse.json(
-        { success: false, error: 'Tipo de arquivo nao permitido. Use PDF, JPG, PNG ou WEBP' },
+        { error: 'Tipo de arquivo nao permitido. Use PDF, JPG, PNG ou WEBP' },
         { status: 400 }
       )
     }
 
     // Upload para Supabase Storage (sanitizar nome do arquivo)
     const sanitizedName = file.name
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remover acentos
-      .replace(/[^a-zA-Z0-9._-]/g, '_') // substituir caracteres especiais por _
-      .replace(/_+/g, '_') // colapsar underscores consecutivos
+      .normalize('NFD').replace(/[̀-ͯ]/g, '') // remover acentos
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/_+/g, '_')
     const fileName = `${pedido.empresa_id}/${pedidoId}/${Date.now()}_${sanitizedName}`
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
@@ -116,10 +93,7 @@ export async function POST(
 
     if (uploadError) {
       console.error('Erro ao fazer upload do espelho:', uploadError)
-      return NextResponse.json(
-        { success: false, error: 'Erro ao fazer upload do arquivo' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Erro ao fazer upload do arquivo' }, { status: 500 })
     }
 
     // Atualizar pedido com dados do espelho (guardar path, nao URL)
@@ -142,10 +116,7 @@ export async function POST(
 
     if (updateError) {
       console.error('Erro ao atualizar pedido com espelho:', updateError)
-      return NextResponse.json(
-        { success: false, error: 'Erro ao salvar dados do espelho' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Erro ao salvar dados do espelho' }, { status: 500 })
     }
 
     // Buscar nome do usuario representante para timeline
@@ -180,10 +151,7 @@ export async function POST(
     })
   } catch (error) {
     console.error('Erro ao fazer upload do espelho (representante):', error)
-    return NextResponse.json(
-      { success: false, error: 'Erro interno do servidor' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
 
@@ -195,56 +163,36 @@ export async function GET(
   try {
     const user = await getCurrentUser()
     if (!user || user.tipo !== 'representante' || !user.representanteUserId) {
-      return NextResponse.json(
-        { success: false, error: 'Nao autenticado como representante' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
     const { id: pedidoId } = await params
     const supabase = createServerSupabaseClient()
 
-    // Buscar representantes vinculados a este usuario
     const { data: representantes } = await supabase
       .from('representantes')
       .select('id')
       .eq('user_representante_id', user.representanteUserId)
       .eq('ativo', true)
 
-    const representanteIds = representantes?.map(r => r.id) || []
-
-    // Buscar fornecedores vinculados
-    const { data: vinculos } = await supabase
-      .from('representante_fornecedores')
-      .select('fornecedor_id')
-      .in('representante_id', representanteIds)
-
-    const fornecedorIds = vinculos?.map(v => v.fornecedor_id) || []
-
-    if (fornecedorIds.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Pedido nao encontrado' },
-        { status: 404 }
-      )
+    if (!representantes || representantes.length === 0) {
+      return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
     }
 
-    // Buscar pedido
+    const representanteIds = representantes.map(r => r.id)
+
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
       .select('id, espelho_url, espelho_nome, espelho_enviado_em, espelho_status, prazo_entrega_fornecedor')
       .eq('id', pedidoId)
-      .in('fornecedor_id', fornecedorIds)
+      .in('representante_id', representanteIds)
       .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {
-      return NextResponse.json(
-        { success: false, error: 'Pedido nao encontrado' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Pedido nao encontrado' }, { status: 404 })
     }
 
-    // Gerar signed URL se houver espelho
     let espelhoSignedUrl: string | null = null
     if (pedido.espelho_url) {
       const { data: signedData } = await supabase.storage
@@ -262,10 +210,7 @@ export async function GET(
     })
   } catch (error) {
     console.error('Erro ao buscar espelho (representante):', error)
-    return NextResponse.json(
-      { success: false, error: 'Erro interno do servidor' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
 
@@ -277,71 +222,47 @@ export async function DELETE(
   try {
     const user = await getCurrentUser()
     if (!user || user.tipo !== 'representante' || !user.representanteUserId) {
-      return NextResponse.json(
-        { success: false, error: 'Nao autenticado como representante' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
     const { id: pedidoId } = await params
     const supabase = createServerSupabaseClient()
 
-    // Buscar representantes vinculados a este usuario
     const { data: representantes } = await supabase
       .from('representantes')
       .select('id')
       .eq('user_representante_id', user.representanteUserId)
       .eq('ativo', true)
 
-    const representanteIds = representantes?.map(r => r.id) || []
-
-    // Buscar fornecedores vinculados
-    const { data: vinculos } = await supabase
-      .from('representante_fornecedores')
-      .select('fornecedor_id')
-      .in('representante_id', representanteIds)
-
-    const fornecedorIds = vinculos?.map(v => v.fornecedor_id) || []
-
-    if (fornecedorIds.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Pedido nao encontrado' },
-        { status: 404 }
-      )
+    if (!representantes || representantes.length === 0) {
+      return NextResponse.json({ error: 'Sem acesso' }, { status: 403 })
     }
 
-    // Buscar pedido
+    const representanteIds = representantes.map(r => r.id)
+
     const { data: pedido, error: pedidoError } = await supabase
       .from('pedidos_compra')
       .select('id, espelho_url, espelho_status')
       .eq('id', pedidoId)
-      .in('fornecedor_id', fornecedorIds)
+      .in('representante_id', representanteIds)
       .eq('is_excluded', false)
       .single()
 
     if (pedidoError || !pedido) {
-      return NextResponse.json(
-        { success: false, error: 'Pedido nao encontrado' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Pedido nao encontrado' }, { status: 404 })
     }
 
-    // Verificar que o espelho existe e esta pendente
     if (!pedido.espelho_url) {
-      return NextResponse.json(
-        { success: false, error: 'Nenhum espelho encontrado' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Nenhum espelho encontrado' }, { status: 400 })
     }
 
     if (pedido.espelho_status !== 'pendente') {
       return NextResponse.json(
-        { success: false, error: 'Espelho so pode ser removido enquanto estiver pendente' },
+        { error: 'Espelho so pode ser removido enquanto estiver pendente' },
         { status: 400 }
       )
     }
 
-    // Remover arquivo do Storage
     const { error: removeError } = await supabase.storage
       .from('espelhos-pedido')
       .remove([pedido.espelho_url])
@@ -350,7 +271,6 @@ export async function DELETE(
       console.error('Erro ao remover arquivo do storage:', removeError)
     }
 
-    // Limpar campos do pedido
     const { error: updateError } = await supabase
       .from('pedidos_compra')
       .update({
@@ -364,20 +284,15 @@ export async function DELETE(
 
     if (updateError) {
       console.error('Erro ao limpar dados do espelho:', updateError)
-      return NextResponse.json(
-        { success: false, error: 'Erro ao remover espelho' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Erro ao remover espelho' }, { status: 500 })
     }
 
-    // Buscar nome do usuario representante para timeline
     const { data: representanteUser } = await supabase
       .from('users_representante')
       .select('nome')
       .eq('id', user.representanteUserId)
       .single()
 
-    // Registrar na timeline
     await supabase
       .from('pedido_timeline')
       .insert({
@@ -391,9 +306,6 @@ export async function DELETE(
     return NextResponse.json({ success: true, message: 'Espelho removido com sucesso' })
   } catch (error) {
     console.error('Erro ao remover espelho (representante):', error)
-    return NextResponse.json(
-      { success: false, error: 'Erro interno do servidor' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

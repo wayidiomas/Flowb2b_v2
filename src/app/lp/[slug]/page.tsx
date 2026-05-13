@@ -19,6 +19,8 @@ interface LpProduto {
   itens_por_caixa: number | null
   curva: string | null
   imagem_url: string | null
+  /** Sempre presente — necessario pro checkout (LP rep tem N fornecedores). */
+  fornecedor_id?: number
 }
 
 interface LpData {
@@ -36,6 +38,12 @@ interface LpData {
     instagram_url: string | null
     site_url: string | null
     endereco_resumido: string | null
+    owner_tipo?: 'fornecedor' | 'representante'
+    representante?: {
+      id: number
+      nome: string
+      telefone: string | null
+    }
     fornecedor: {
       id: number
       cnpj: string
@@ -141,6 +149,8 @@ export default function LandingPagePublica() {
           slug,
           fornecedor_id: data.landing_page.fornecedor.id,
           fornecedor_cnpj: data.landing_page.fornecedor.cnpj,
+          owner_tipo: data.landing_page.owner_tipo || 'fornecedor',
+          representante_id: data.landing_page.representante?.id ?? null,
           itens: items,
           created_at: new Date().toISOString(),
         })
@@ -383,6 +393,7 @@ export default function LandingPagePublica() {
                       imagem_url: p.imagem_url,
                       marca: p.marca,
                       unidade: p.unidade,
+                      fornecedor_id: p.fornecedor_id ?? null,
                     })
                   }}
                   onUpdateQty={(q) => updateQty(p.id, q)}
