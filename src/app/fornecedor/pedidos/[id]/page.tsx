@@ -186,7 +186,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     validade_proposta: '',
   })
   const [submitting, setSubmitting] = useState(false)
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string; count?: number } | null>(null)
   const [showCancelamentoModal, setShowCancelamentoModal] = useState(false)
   const [showSucessoModal, setShowSucessoModal] = useState(false)
   const [cancelando, setCancelando] = useState(false)
@@ -836,24 +836,22 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     return { nome, contexto, pend, scrollId: soVal ? `validade-${sug.item_id}` : `obs-${sug.item_id}` }
   }
 
-  const handleSubmitSugestao = async () => {
-    if (!data) return
+  // Valida o gate de envio. Retorna false e dispara o bloqueio (toast + leva para a
+  // etapa de ajuste com itens pendentes no topo) quando ha pendencias.
+  // O espelho (cotacao do fornecedor) e a fonte de verdade.
+  const validarGateEnvio = (): boolean => {
+    if (!data) return false
 
-    // Block if divergent items without edited price
+    // Itens divergentes precisam de preco ajustado
     const divergenteSemPreco = sugestoes.filter(s =>
       s.status_item === 'divergente' && !s.preco_editado && !s.preco_unitario
     )
     if (divergenteSemPreco.length > 0) {
       setToast({ type: 'error', msg: `${divergenteSemPreco.length} item(ns) divergente(s) precisam ter o preco ajustado.` })
-      return
+      setCurrentStep(3)
+      return false
     }
 
-    // GATE unificado por item. O espelho (cotacao do fornecedor) e a fonte de verdade.
-    // - Aumentou vs pedido E acima do espelho (ou sem espelho): exige desconto/bonificacao/motivo.
-    // - Diminuiu vs pedido E diferente do espelho: exige motivo.
-    // - Item extra (is_novo): exige motivo.
-    // - Validade: exigida em qualquer alteracao do item; logo, todo caso que exige motivo
-    //   exige a validade JUNTO (pedidos na mesma mensagem).
     const pendencias = sugestoes
       .map(sug => {
         const r = avaliarPendenciaItem(sug)
@@ -863,9 +861,13 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
 
     if (pendencias.length > 0) {
       const p = pendencias[0]
-      const mais = pendencias.length > 1 ? ` (e mais ${pendencias.length - 1})` : ''
       const ctx = p.contexto ? `${p.contexto}: ` : ''
-      setToast({ type: 'error', msg: `${p.nome}: ${ctx}informe ${p.pend.join(' e ')}${mais}` })
+      const prefixo = pendencias.length > 1 ? 'Comece por ' : ''
+      setToast({
+        type: 'error',
+        count: pendencias.length,
+        msg: `${prefixo}${p.nome}: ${ctx}informe ${p.pend.join(' e ')}.`,
+      })
 
       // Leva o fornecedor para a etapa de ajuste, com os itens pendentes no topo da tabela.
       const idsPendentes = new Set<number>()
@@ -874,7 +876,6 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       setCurrentStep(3)
       setItensPage(1)
 
-      // Apos o re-render do step 3 com a tabela reordenada, foca o primeiro item pendente.
       setTimeout(() => {
         const el = document.getElementById(p.scrollId)
         if (el) {
@@ -884,8 +885,14 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           setTimeout(() => el.classList.remove('ring-2', 'ring-red-500', 'border-red-500'), 3000)
         }
       }, 400)
-      return
+      return false
     }
+    return true
+  }
+
+  const handleSubmitSugestao = async () => {
+    if (!data) return
+    if (!validarGateEnvio()) return
 
     setSubmitting(true)
     setToast(null)
@@ -1087,7 +1094,11 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               </div>
               <div className="flex-1 pt-0.5">
                 <p className={`text-sm font-semibold ${toast.type === 'success' ? 'text-green-800' : 'text-red-800'}`}>
-                  {toast.type === 'success' ? 'Tudo certo' : 'Ajuste necessario antes de enviar'}
+                  {toast.type === 'success'
+                    ? 'Tudo certo'
+                    : (toast.count != null
+                        ? `${toast.count} ${toast.count > 1 ? 'itens precisam' : 'item precisa'} de ajuste`
+                        : 'Ajuste necessario antes de enviar')}
                 </p>
                 <p className="mt-0.5 text-sm leading-snug text-gray-600">{toast.msg}</p>
               </div>
@@ -2013,18 +2024,14 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   placeholder="Justifique suas sugestoes, informe prazos, condicoes especiais..."
                 />
               </div>
-              <div className="flex justify-end">
-                <Button
-                  variant="primary"
-                  size="lg"
-                  loading={submitting}
-                  onClick={handleSubmitSugestao}
-                  disabled={temBloqueio}
-                  className="w-full sm:w-auto"
-                >
-                  {hasPendingSugestao ? 'Reenviar sugestao' : 'Enviar sugestao ao lojista'}
-                </Button>
-              </div>
+              {temBloqueio && (
+                <p className="text-sm text-red-600">
+                  Resolva os itens divergentes antes de enviar.
+                </p>
+              )}
+              <p className="text-xs text-gray-400">
+                Use o botao <span className="font-medium text-secondary-600">Enviar</span> na barra abaixo para concluir.
+              </p>
             </div>
           </div>
           )
@@ -3028,14 +3035,30 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 {currentStep}/4 {['Conferir', 'Espelho', 'Validar', 'Enviar'][currentStep - 1]}
               </span>
               <button
-                onClick={() => setCurrentStep(Math.min(4, currentStep + 1) as 1|2|3|4)}
-                disabled={currentStep === 4}
-                className="flex items-center gap-1.5 px-3 md:px-5 py-2 text-xs md:text-sm font-medium text-white bg-[#336FB6] rounded-lg hover:bg-[#2a5a94] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                onClick={() => {
+                  // Step 3 -> 4: aciona o gate; so avanca para o resumo se passar.
+                  if (currentStep === 3) { if (validarGateEnvio()) setCurrentStep(4); return }
+                  // Step 4: o "Proximo" vira "Enviar" (envia a sugestao ao lojista).
+                  if (currentStep === 4) { handleSubmitSugestao(); return }
+                  setCurrentStep(Math.min(4, currentStep + 1) as 1|2|3|4)
+                }}
+                disabled={submitting}
+                className={`flex items-center gap-1.5 px-3 md:px-5 py-2 text-xs md:text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                  currentStep === 4 ? 'bg-secondary-500 hover:bg-secondary-600' : 'bg-[#336FB6] hover:bg-[#2a5a94]'
+                }`}
               >
-                <span className="hidden sm:inline">Proximo</span>
-                <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                </svg>
+                <span className="hidden sm:inline">
+                  {currentStep === 4 ? (submitting ? 'Enviando...' : (hasPendingSugestao ? 'Reenviar sugestao' : 'Enviar sugestao')) : 'Proximo'}
+                </span>
+                {currentStep === 4 ? (
+                  <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.126A59.768 59.768 0 0 1 21.485 12 59.77 59.77 0 0 1 3.27 20.876L5.999 12Zm0 0h7.5" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+                )}
               </button>
             </div>
           </div>
