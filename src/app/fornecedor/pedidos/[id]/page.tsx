@@ -816,6 +816,12 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       }
     }
 
+    // Produto trocado (substituicao) precisa de um motivo na observacao
+    if (sug.is_substituicao && !obs) {
+      if (!contexto) contexto = 'produto trocado'
+      pend.push('o motivo da troca')
+    }
+
     if (sug.quantidade_sugerida > itemOriginal.quantidade) {
       const respaldado = qtdEspelho != null && sug.quantidade_sugerida <= qtdEspelho
       if (!respaldado) {

@@ -557,6 +557,8 @@ export function StatusActionCard({
                       {(() => {
                         const s = item.status_item
                         const precoAlterado = item.precoSugerido != null && item.precoSugerido !== item.valorUnitario
+                        // Produto trocado pelo fornecedor (prioritario)
+                        if (item.is_substituicao) return <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700" title={item.observacao_item ? `Motivo da troca: ${item.observacao_item}` : 'Produto trocado pelo fornecedor'}>🔄 Trocado</span>
                         // Status do fornecedor
                         if (s === 'ruptura') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-700">Ruptura</span>
                         if (s === 'depreciado') return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">Depreciado</span>
@@ -566,7 +568,6 @@ export function StatusActionCard({
                         if (qtdMudou) return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700">Qtd alterada</span>
                         return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700">OK</span>
                       })()}
-                      {item.is_substituicao && <span className="block text-[9px] text-blue-600 mt-0.5">Substituicao</span>}
                     </td>
                     <td className="px-3 py-2.5 align-top">
                       {item.is_novo ? (
