@@ -174,6 +174,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const [itensSearch, setItensSearch] = useState('')
   const [itensPage, setItensPage] = useState(1)
   const ITENS_PER_PAGE = 5
+  // IDs dos itens que falharam no gate de envio: sobem para o topo da tabela (sort inteligente)
+  const [gatePendentesIds, setGatePendentesIds] = useState<Set<number>>(new Set())
   // Reset pagina quando muda search
   useEffect(() => { setItensPage(1) }, [itensSearch])
   const [condicoesComerciais, setCondicoesComerciais] = useState<CondicoesComerciais>({
@@ -859,6 +861,15 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       const mais = pendencias.length > 1 ? ` (e mais ${pendencias.length - 1})` : ''
       const ctx = p.contexto ? `${p.contexto}: ` : ''
       setToast({ type: 'error', msg: `${p.nome}: ${ctx}informe ${p.pend.join(' e ')}${mais}` })
+
+      // Leva o fornecedor para a etapa de ajuste, com os itens pendentes no topo da tabela.
+      const idsPendentes = new Set<number>()
+      pendencias.forEach(pd => { if (pd.sug.item_id != null) idsPendentes.add(pd.sug.item_id) })
+      setGatePendentesIds(idsPendentes)
+      setCurrentStep(3)
+      setItensPage(1)
+
+      // Apos o re-render do step 3 com a tabela reordenada, foca o primeiro item pendente.
       setTimeout(() => {
         const el = document.getElementById(p.scrollId)
         if (el) {
@@ -867,7 +878,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
           el.classList.add('ring-2', 'ring-red-500', 'border-red-500')
           setTimeout(() => el.classList.remove('ring-2', 'ring-red-500', 'border-red-500'), 3000)
         }
-      }, 100)
+      }, 400)
       return
     }
 
@@ -1028,12 +1039,16 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   // Filtro + paginacao para a tabela principal do step 3
   const itensFiltrados = (() => {
     const term = itensSearch.toLowerCase().trim()
-    if (!term) return itens
-    return itens.filter((item) =>
+    const base = !term ? itens : itens.filter((item) =>
       (item.descricao || '').toLowerCase().includes(term) ||
       (item.codigo_produto || '').toLowerCase().includes(term) ||
       (item.codigo_fornecedor || '').toLowerCase().includes(term) ||
       (item.ean || '').toLowerCase().includes(term)
+    )
+    // Sort inteligente: itens que falharam no gate de envio vao para o topo
+    if (gatePendentesIds.size === 0) return base
+    return [...base].sort((a, b) =>
+      (gatePendentesIds.has(a.id) ? 0 : 1) - (gatePendentesIds.has(b.id) ? 0 : 1)
     )
   })()
   const totalPagesItens = Math.max(1, Math.ceil(itensFiltrados.length / ITENS_PER_PAGE))
@@ -1048,10 +1063,39 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       <div className="space-y-6">
         {/* Toast */}
         {toast && (
-          <div className={`px-4 py-3 rounded-lg text-sm ${
-            toast.type === 'success' ? 'bg-success-500/10 text-success-600' : 'bg-error-500/10 text-error-600'
-          }`}>
-            {toast.msg}
+          <div className="fixed top-4 left-1/2 z-[100] w-[min(92vw,540px)] -translate-x-1/2 animate-toast-in">
+            <div className={`flex items-start gap-3 rounded-2xl border bg-white px-4 py-3.5 shadow-2xl ${
+              toast.type === 'success' ? 'border-green-200 shadow-green-200/40' : 'border-red-200 shadow-red-200/40'
+            }`}>
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                toast.type === 'success' ? 'bg-green-100' : 'bg-red-100'
+              }`}>
+                {toast.type === 'success' ? (
+                  <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                  </svg>
+                )}
+              </div>
+              <div className="flex-1 pt-0.5">
+                <p className={`text-sm font-semibold ${toast.type === 'success' ? 'text-green-800' : 'text-red-800'}`}>
+                  {toast.type === 'success' ? 'Tudo certo' : 'Ajuste necessario antes de enviar'}
+                </p>
+                <p className="mt-0.5 text-sm leading-snug text-gray-600">{toast.msg}</p>
+              </div>
+              <button
+                onClick={() => setToast(null)}
+                className="shrink-0 rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Fechar aviso"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
         )}
 

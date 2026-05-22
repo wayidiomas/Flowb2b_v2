@@ -321,3 +321,12 @@ body {
 .scrollbar-flow::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(90deg, var(--secondary-500), var(--secondary-700));
 }
+
+/* Toast de aviso (gate de envio do fornecedor) */
+@keyframes toast-in {
+  0% { opacity: 0; transform: translate(-50%, -12px); }
+  100% { opacity: 1; transform: translate(-50%, 0); }
+}
+.animate-toast-in {
+  animation: toast-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
