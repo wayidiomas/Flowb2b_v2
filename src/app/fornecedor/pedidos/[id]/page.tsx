@@ -771,6 +771,71 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
 
   const totaisSugeridos = calcularTotaisSugeridos()
 
+  // Avalia se um item da sugestao tem pendencia para o gate (motivo/validade).
+  // Usada tanto no envio (bloqueio) quanto para pintar a linha de vermelho ate o ajuste.
+  // O espelho (cotacao do fornecedor) e a fonte de verdade.
+  const avaliarPendenciaItem = (sug: ItemSugestao): { nome: string; contexto: string; pend: string[]; scrollId: string } | null => {
+    if (!data) return null
+    const idx = sugestoes.indexOf(sug)
+    const obs = (sug.observacao_item || '').trim()
+    const temValidade = !!sug.validade
+    const pend: string[] = []
+    let contexto = ''
+
+    if (sug.is_novo) {
+      if (!obs) pend.push('a observacao (ex: bonificacao/desconto ou motivo da inclusao)')
+      if (!temValidade) pend.push('a data de validade')
+      if (pend.length === 0) return null
+      const soVal = pend.length === 1 && pend[0] === 'a data de validade'
+      return { nome: sug.produto_nome || 'Novo item', contexto: 'item extra', pend, scrollId: soVal ? `validade-novo-${idx}` : `obs-novo-${idx}` }
+    }
+
+    const itemOriginal = data.itens.find(item => item.id === sug.item_id)
+    if (!itemOriginal) return null
+    if (sug.status_item === 'ruptura' || sug.status_item === 'depreciado') return null
+    const nome = itemOriginal.descricao || `Item #${sug.item_id}`
+    const qtdEspelho = sug.quantidade_espelho ?? null
+
+    if (sug.quantidade_sugerida > itemOriginal.quantidade) {
+      const respaldado = qtdEspelho != null && sug.quantidade_sugerida <= qtdEspelho
+      if (!respaldado) {
+        const temJust = sug.desconto_percentual > 0 || sug.bonificacao_quantidade > 0 || !!obs
+        if (!temJust) {
+          contexto = qtdEspelho != null
+            ? `qtd aumentada (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida}, espelho ${qtdEspelho})`
+            : `qtd aumentada (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida})`
+          pend.push('desconto, bonificacao ou o motivo')
+        }
+      }
+    } else if (sug.quantidade_sugerida < itemOriginal.quantidade) {
+      const igualEspelho = qtdEspelho != null && sug.quantidade_sugerida === qtdEspelho
+      if (!igualEspelho && !obs) {
+        contexto = qtdEspelho != null
+          ? `qtd reduzida (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida}, espelho ${qtdEspelho})`
+          : `qtd reduzida (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida})`
+        pend.push('o motivo (ex: estoque insuficiente)')
+      }
+    }
+
+    const foiAlterado =
+      sug.quantidade_sugerida !== itemOriginal.quantidade ||
+      sug.desconto_percentual > 0 ||
+      sug.bonificacao_quantidade > 0 ||
+      sug.is_substituicao ||
+      (sug.preco_editado != null && sug.preco_editado !== (itemOriginal.preco_catalogo ?? 0))
+    const espelhoMaiorQuePedido = qtdEspelho != null && qtdEspelho > itemOriginal.quantidade
+    if ((foiAlterado || espelhoMaiorQuePedido) && !temValidade) {
+      if (espelhoMaiorQuePedido && !foiAlterado && !contexto) {
+        contexto = `espelho traz ${qtdEspelho} (pediram ${itemOriginal.quantidade})`
+      }
+      pend.push('a data de validade')
+    }
+
+    if (pend.length === 0) return null
+    const soVal = pend.length === 1 && pend[0] === 'a data de validade'
+    return { nome, contexto, pend, scrollId: soVal ? `validade-${sug.item_id}` : `obs-${sug.item_id}` }
+  }
+
   const handleSubmitSugestao = async () => {
     if (!data) return
 
@@ -791,68 +856,8 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     //   exige a validade JUNTO (pedidos na mesma mensagem).
     const pendencias = sugestoes
       .map(sug => {
-        const idx = sugestoes.indexOf(sug)
-        const obs = (sug.observacao_item || '').trim()
-        const temValidade = !!sug.validade
-        const pend: string[] = []
-        let contexto = ''
-
-        // Item extra incluido pelo fornecedor
-        if (sug.is_novo) {
-          if (!obs) pend.push('a observacao (ex: bonificacao/desconto ou motivo da inclusao)')
-          if (!temValidade) pend.push('a data de validade')
-          if (pend.length === 0) return null
-          const soVal = pend.length === 1 && pend[0] === 'a data de validade'
-          return { sug, nome: sug.produto_nome || 'Novo item', contexto: 'item extra', pend, scrollId: soVal ? `validade-novo-${idx}` : `obs-novo-${idx}` }
-        }
-
-        const itemOriginal = data.itens.find(item => item.id === sug.item_id)
-        if (!itemOriginal) return null
-        if (sug.status_item === 'ruptura' || sug.status_item === 'depreciado') return null
-        const nome = itemOriginal.descricao || `Item #${sug.item_id}`
-        const qtdEspelho = sug.quantidade_espelho ?? null
-
-        if (sug.quantidade_sugerida > itemOriginal.quantidade) {
-          const respaldado = qtdEspelho != null && sug.quantidade_sugerida <= qtdEspelho
-          if (!respaldado) {
-            const temJust = sug.desconto_percentual > 0 || sug.bonificacao_quantidade > 0 || !!obs
-            if (!temJust) {
-              contexto = qtdEspelho != null
-                ? `qtd aumentada (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida}, espelho ${qtdEspelho})`
-                : `qtd aumentada (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida})`
-              pend.push('desconto, bonificacao ou o motivo')
-            }
-          }
-        } else if (sug.quantidade_sugerida < itemOriginal.quantidade) {
-          const igualEspelho = qtdEspelho != null && sug.quantidade_sugerida === qtdEspelho
-          if (!igualEspelho && !obs) {
-            contexto = qtdEspelho != null
-              ? `qtd reduzida (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida}, espelho ${qtdEspelho})`
-              : `qtd reduzida (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida})`
-            pend.push('o motivo (ex: estoque insuficiente)')
-          }
-        }
-
-        // Validade exigida em qualquer alteracao do item (inclui os casos de motivo acima)
-        const foiAlterado =
-          sug.quantidade_sugerida !== itemOriginal.quantidade ||
-          sug.desconto_percentual > 0 ||
-          sug.bonificacao_quantidade > 0 ||
-          sug.is_substituicao ||
-          (sug.preco_editado != null && sug.preco_editado !== (itemOriginal.preco_catalogo ?? 0))
-        // Tambem exige validade quando o espelho traz MAIS do que o lojista pediu
-        // (vem quantidade extra/lote a mais, precisa saber a validade desse lote).
-        const espelhoMaiorQuePedido = qtdEspelho != null && qtdEspelho > itemOriginal.quantidade
-        if ((foiAlterado || espelhoMaiorQuePedido) && !temValidade) {
-          if (espelhoMaiorQuePedido && !foiAlterado && !contexto) {
-            contexto = `espelho traz ${qtdEspelho} (pediram ${itemOriginal.quantidade})`
-          }
-          pend.push('a data de validade')
-        }
-
-        if (pend.length === 0) return null
-        const soVal = pend.length === 1 && pend[0] === 'a data de validade'
-        return { sug, nome, contexto, pend, scrollId: soVal ? `validade-${sug.item_id}` : `obs-${sug.item_id}` }
+        const r = avaliarPendenciaItem(sug)
+        return r ? { sug, ...r } : null
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
 
@@ -2177,8 +2182,10 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                         : ((getPrecoEspelho(sug ?? null, item) ?? sug?.preco_espelho ?? null) != null
                     ? (getPrecoEspelho(sug ?? null, item) ?? sug?.preco_espelho ?? 0)
                     : (item.preco_catalogo ?? 0)))
+                  // Linha fica vermelha sutil enquanto o gate apontou pendencia E ela ainda nao foi resolvida.
+                  const pendenteGate = gatePendentesIds.has(item.id) && !!sug && avaliarPendenciaItem(sug) !== null
                   return (
-                    <tr key={item.id} className="hover:bg-gray-50">
+                    <tr key={item.id} className={pendenteGate ? 'bg-red-50/70 hover:bg-red-50' : 'hover:bg-gray-50'}>
                       {canSuggest && sug && (<>
                         <td className="px-2 py-3">
                           <select
@@ -2662,8 +2669,9 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 bonifUnidades = sug.bonificacao_quantidade || 0
               }
 
+              const pendenteGateMobile = gatePendentesIds.has(item.id) && !!sug && avaliarPendenciaItem(sug) !== null
               return (
-                <div key={item.id} className="p-4 space-y-3">
+                <div key={item.id} className={`p-4 space-y-3 ${pendenteGateMobile ? 'bg-red-50/70' : ''}`}>
                   {/* Nome do produto + botao trocar */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
