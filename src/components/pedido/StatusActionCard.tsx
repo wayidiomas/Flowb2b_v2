@@ -88,6 +88,7 @@ interface StatusActionCardProps {
   sugestaoItens: SugestaoItem[] | null
   itens: { id: number; descricao: string; quantidade: number; valor: number; codigo_produto?: string | null; codigo_fornecedor?: string | null }[]
   onEnviarFornecedor: () => void
+  onEditar?: () => void
   onAceitarSugestao: () => void
   onRejeitarSugestao: () => void
   onManterOriginal?: () => void
@@ -123,6 +124,7 @@ export function StatusActionCard({
   sugestaoItens,
   itens,
   onEnviarFornecedor,
+  onEditar,
   onAceitarSugestao,
   onRejeitarSugestao,
   onManterOriginal,
@@ -220,6 +222,17 @@ export function StatusActionCard({
                   </svg>
                   {enviandoFornecedor ? 'Enviando...' : 'Enviar ao Fornecedor'}
                 </ShimmerButton>
+                {onEditar && (
+                  <button
+                    onClick={onEditar}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 whitespace-nowrap text-sm font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 hover:border-gray-400 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                    </svg>
+                    Editar pedido
+                  </button>
+                )}
                 <CancelarButton />
               </div>
             </div>
