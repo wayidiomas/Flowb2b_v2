@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardLayout, PageHeader } from '@/components/layout'
@@ -311,6 +311,11 @@ function GerarAutomaticoContent() {
     setToast({ type, title, message })
   }
 
+  // Persistencia local do resultado do calculo (somente modo CRIAR)
+  // Recalcular e caro (API externa ~60-90s); ao dar F5 restauramos o estado.
+  const lsKeyPedido = (empId: number, fornId: string) => `flowb2b:gerar-pedido:${empId}:${fornId}`
+  const restauradoRef = useRef(false)
+
   // Estados para modal de fornecedor
   const [showFornecedorModal, setShowFornecedorModal] = useState(false)
   const [fornecedores, setFornecedores] = useState<FornecedorOption[]>([])
@@ -338,6 +343,66 @@ function GerarAutomaticoContent() {
   const [parcelas, setParcelas] = useState<ParcelaPedido[]>([])
   const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([])
 
+  // SAVE: persiste o estado relevante no localStorage sempre que mudar
+  useEffect(() => {
+    const empId = empresa?.id || user?.empresa_id
+    if (isEdicao || !fornecedorIdParam || !empId || sugestoes.length === 0) return
+    try {
+      localStorage.setItem(
+        lsKeyPedido(empId, fornecedorIdParam),
+        JSON.stringify({
+          savedAt: Date.now(),
+          sugestoes,
+          politicasAplicaveis,
+          politicaSelecionadaId,
+          parcelas,
+          frete,
+          fretePorConta,
+          observacoes,
+          observacoesInternas,
+          dataPrevista,
+        })
+      )
+    } catch {
+      // localStorage pode falhar (quota / modo privado) - ignora
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sugestoes, politicasAplicaveis, politicaSelecionadaId, parcelas, frete, fretePorConta, observacoes, observacoesInternas, dataPrevista, isEdicao, fornecedorIdParam, empresa?.id, user?.empresa_id])
+
+  // RESTORE: restaura o estado salvo no mount (uma unica vez), modo CRIAR
+  useEffect(() => {
+    if (restauradoRef.current || isEdicao || !fornecedorIdParam) return
+    const empId = empresa?.id || user?.empresa_id
+    if (!empId) return
+    const chave = lsKeyPedido(empId, fornecedorIdParam)
+    try {
+      const raw = localStorage.getItem(chave)
+      if (!raw) return
+      const data = JSON.parse(raw)
+      if (!data || typeof data !== 'object') return
+      // expira em 24h
+      if (Date.now() - (data.savedAt || 0) > 24 * 60 * 60 * 1000) {
+        localStorage.removeItem(chave)
+        return
+      }
+      if (Array.isArray(data.sugestoes) && data.sugestoes.length > 0) {
+        setSugestoes(data.sugestoes)
+        setPoliticasAplicaveis(Array.isArray(data.politicasAplicaveis) ? data.politicasAplicaveis : [])
+        setPoliticaSelecionadaId(data.politicaSelecionadaId ?? null)
+        if (Array.isArray(data.parcelas)) setParcelas(data.parcelas)
+        if (typeof data.frete === 'number') setFrete(data.frete)
+        if (data.fretePorConta) setFretePorConta(data.fretePorConta)
+        if (typeof data.observacoes === 'string') setObservacoes(data.observacoes)
+        if (typeof data.observacoesInternas === 'string') setObservacoesInternas(data.observacoesInternas)
+        if (data.dataPrevista) setDataPrevista(data.dataPrevista)
+        restauradoRef.current = true
+      }
+    } catch {
+      // JSON invalido / acesso negado - ignora
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fornecedorIdParam, isEdicao, empresa?.id, user?.empresa_id])
+
   // Estados para modal de pedido em aberto
   const [pedidoAbertoModalOpen, setPedidoAbertoModalOpen] = useState(false)
   const [pedidoAbertoLoading, setPedidoAbertoLoading] = useState(false)
@@ -356,6 +421,15 @@ function GerarAutomaticoContent() {
     valor: number
   }>>([])
   const [descontarPedidos, setDescontarPedidos] = useState(false)
+
+  // Busca e filtros avancados da tabela de sugestoes
+  const [buscaSugestao, setBuscaSugestao] = useState('')
+  const [mostrarFiltrosAvancados, setMostrarFiltrosAvancados] = useState(false)
+  const [filtroEstoqueMin, setFiltroEstoqueMin] = useState('')
+  const [filtroEstoqueMax, setFiltroEstoqueMax] = useState('')
+  const [filtroSugestaoMin, setFiltroSugestaoMin] = useState('')
+  const [filtroSugestaoMax, setFiltroSugestaoMax] = useState('')
+  const [showAcoesMenu, setShowAcoesMenu] = useState(false) // kebab da barra fixa no mobile
 
   // Buscar fornecedores para o modal
   const fetchFornecedores = async () => {
@@ -1429,6 +1503,16 @@ function GerarAutomaticoContent() {
           `Pedido #${result.numero || result.id} foi registrado no Bling e salvo localmente.`)
       }
 
+      // Limpa o rascunho persistido (pedido foi criado com sucesso)
+      const empIdClear = empresa?.id || user?.empresa_id
+      if (empIdClear && fornecedorIdParam) {
+        try {
+          localStorage.removeItem(lsKeyPedido(empIdClear, fornecedorIdParam))
+        } catch {
+          // ignora
+        }
+      }
+
       // Aguardar um pouco para o usuario ver a mensagem antes de redirecionar
       setTimeout(() => {
         router.push(`/compras/pedidos/${result.id}`)
@@ -1454,6 +1538,34 @@ function GerarAutomaticoContent() {
   // Calcular totais
   const totalItens = sugestoes.reduce((acc, item) => acc + item.quantidade_ajustada, 0)
   const valorTotal = sugestoes.reduce((acc, item) => acc + item.valor_total, 0)
+
+  // Lista derivada para exibicao (busca + filtros) - NAO altera `sugestoes`
+  const filtrosAvancadosAtivos = [filtroEstoqueMin, filtroEstoqueMax, filtroSugestaoMin, filtroSugestaoMax].filter(v => v !== '').length
+  const buscaOuFiltroAtivo = buscaSugestao.trim() !== '' || filtrosAvancadosAtivos > 0
+  const limparFiltrosSugestao = () => {
+    setBuscaSugestao('')
+    setFiltroEstoqueMin('')
+    setFiltroEstoqueMax('')
+    setFiltroSugestaoMin('')
+    setFiltroSugestaoMax('')
+  }
+  const sugestoesExibidas = sugestoes.filter(item => {
+    // SEARCH: codigo, ean, produto(nome)
+    const termo = buscaSugestao.toLowerCase().trim()
+    if (termo) {
+      const hay = `${item.codigo || ''} ${item.ean || ''} ${item.nome || ''}`.toLowerCase()
+      if (!hay.includes(termo)) return false
+    }
+    // FILTRO AVANCADO estoque (faixa)
+    const est = Number(item.estoque_atual ?? 0)
+    if (filtroEstoqueMin !== '' && est < Number(filtroEstoqueMin)) return false
+    if (filtroEstoqueMax !== '' && est > Number(filtroEstoqueMax)) return false
+    // FILTRO AVANCADO sugestao (faixa)
+    const sug = Number(item.sugestao_quantidade ?? 0)
+    if (filtroSugestaoMin !== '' && sug < Number(filtroSugestaoMin)) return false
+    if (filtroSugestaoMax !== '' && sug > Number(filtroSugestaoMax)) return false
+    return true
+  })
 
   // Aplicar desconto da politica (percentual sobre valor dos produtos)
   const descontoPolitica = politica?.desconto || 0
@@ -1530,10 +1642,10 @@ function GerarAutomaticoContent() {
         </Link>
       </div>
 
-      {/* Card principal */}
-      <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)] overflow-hidden">
+      {/* Card principal (sem overflow-hidden para permitir footer sticky) */}
+      <div className="bg-white rounded-[20px] shadow-[0px_0px_12.4px_1px_rgba(137,170,255,0.1)]">
         {/* Header */}
-        <div className="bg-[#FBFBFB] border-b border-[#EDEDED] px-6 py-4">
+        <div className="bg-[#FBFBFB] border-b border-[#EDEDED] px-6 py-4 rounded-t-[20px]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-[#4684CD]/10 flex items-center justify-center text-[#4684CD]">
@@ -1975,6 +2087,103 @@ function GerarAutomaticoContent() {
         {/* Tabela de sugestoes */}
         {sugestoes.length > 0 && (
           <>
+            {/* Barra de busca e filtros */}
+            <div className="px-4 py-3 border-b border-[#EFEFEF]">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m1.35-5.65a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </span>
+                  <input
+                    type="text"
+                    value={buscaSugestao}
+                    onChange={(e) => setBuscaSugestao(e.target.value)}
+                    placeholder="Buscar por codigo, EAN ou produto..."
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg text-[#344054] placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6]"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMostrarFiltrosAvancados(v => !v)}
+                  className={`relative inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${mostrarFiltrosAvancados || filtrosAvancadosAtivos > 0 ? 'border-[#4684CD] text-[#4684CD] bg-[#4684CD]/5' : 'border-gray-300 text-[#344054] hover:bg-gray-50'}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M6 12h12M10 20h4" />
+                  </svg>
+                  Filtros
+                  {filtrosAvancadosAtivos > 0 && (
+                    <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold text-white bg-[#4684CD] rounded-full">
+                      {filtrosAvancadosAtivos}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {buscaOuFiltroAtivo && (
+                <p className="mt-2 text-xs text-[#667085]">
+                  Mostrando {sugestoesExibidas.length} de {sugestoes.length} itens
+                </p>
+              )}
+
+              {mostrarFiltrosAvancados && (
+                <div className="mt-3 p-3 bg-[#F9F9F9] border border-[#EFEFEF] rounded-lg">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-[#344054] mb-1.5">Estoque</p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={filtroEstoqueMin}
+                          onChange={(e) => setFiltroEstoqueMin(e.target.value)}
+                          placeholder="Min"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg text-[#344054] placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                        />
+                        <span className="text-gray-400 text-sm">-</span>
+                        <input
+                          type="number"
+                          value={filtroEstoqueMax}
+                          onChange={(e) => setFiltroEstoqueMax(e.target.value)}
+                          placeholder="Max"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg text-[#344054] placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-[#344054] mb-1.5">Sugestao</p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={filtroSugestaoMin}
+                          onChange={(e) => setFiltroSugestaoMin(e.target.value)}
+                          placeholder="Min"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg text-[#344054] placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                        />
+                        <span className="text-gray-400 text-sm">-</span>
+                        <input
+                          type="number"
+                          value={filtroSugestaoMax}
+                          onChange={(e) => setFiltroSugestaoMax(e.target.value)}
+                          placeholder="Max"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg text-[#344054] placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#336FB6]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={limparFiltrosSugestao}
+                      className="text-xs font-medium text-[#4684CD] hover:underline"
+                    >
+                      Limpar filtros
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -1993,7 +2202,16 @@ function GerarAutomaticoContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sugestoes.map((item, index) => (
+                  {sugestoesExibidas.length === 0 && (
+                    <tr>
+                      <td colSpan={11} className="px-4 py-10 text-center text-sm text-[#667085]">
+                        Nenhum item corresponde a busca/filtros
+                      </td>
+                    </tr>
+                  )}
+                  {sugestoesExibidas.map((item) => {
+                    const index = sugestoes.indexOf(item)
+                    return (
                     <tr key={`${item.produto_id}-${index}`} className={`border-b border-[#EFEFEF] hover:bg-gray-50 ${item.is_adicional ? 'bg-yellow-50' : ''}`}>
                       <td className="px-4 py-3 text-sm text-[#344054]">{item.codigo}</td>
                       <td className="px-4 py-3 text-sm text-[#667085] font-mono text-xs">{item.ean || '-'}</td>
@@ -2034,14 +2252,22 @@ function GerarAutomaticoContent() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
 
             {/* Mobile card list */}
             <div className="md:hidden divide-y divide-gray-100">
-              {sugestoes.map((item, index) => (
+              {sugestoesExibidas.length === 0 && (
+                <div className="p-6 text-center text-sm text-[#667085]">
+                  Nenhum item corresponde a busca/filtros
+                </div>
+              )}
+              {sugestoesExibidas.map((item) => {
+                const index = sugestoes.indexOf(item)
+                return (
                 <div key={`${item.produto_id}-${index}`} className={`p-4 space-y-3 ${item.is_adicional ? 'bg-yellow-50' : ''}`}>
                   {/* Header */}
                   <div className="flex items-start justify-between gap-2">
@@ -2103,7 +2329,8 @@ function GerarAutomaticoContent() {
                     </div>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Secao de detalhes do pedido */}
@@ -2318,95 +2545,146 @@ function GerarAutomaticoContent() {
               </div>
             </div>
 
-            {/* Footer com totais */}
-            <div className="px-6 py-4 bg-[#FBFBFB] border-t border-[#EDEDED] flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <div>
-                  <p className="text-xs text-gray-500">Itens</p>
-                  <p className="text-lg font-semibold text-[#344054]">{sugestoes.length}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Quantidade total</p>
-                  <p className="text-lg font-semibold text-[#344054]">{totalItens}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Valor produtos</p>
-                  <p className="text-lg font-semibold text-[#667085]">{formatCurrency(valorTotal)}</p>
-                </div>
-                {valorDesconto > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-500">Desconto ({descontoPolitica}%)</p>
-                    <p className="text-lg font-semibold text-green-600">-{formatCurrency(valorDesconto)}</p>
-                  </div>
-                )}
-                {frete > 0 && fretePorConta !== 'CIF' && fretePorConta !== 'SEM_FRETE' && (
-                  <div>
-                    <p className="text-xs text-gray-500">Frete ({fretePorConta})</p>
-                    <p className="text-lg font-semibold text-[#667085]">+{formatCurrency(frete)}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-xs text-gray-500">Total do pedido</p>
-                  <p className="text-lg font-semibold text-[#336FB6]">{formatCurrency(valorTotalComFrete)}</p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Exportar CSV */}
-                <button
-                  onClick={handleExportarCSV}
-                  disabled={sugestoes.length === 0}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#475569] bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                  </svg>
-                  Exportar CSV
-                </button>
-                {/* Adicionar item extra */}
-                {sugestoes.length > 0 && fornecedor && (
-                  <button
-                    onClick={() => setShowProdutoModal(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#336FB6] bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    Adicionar item extra
-                  </button>
-                )}
-                {/* Recalcular - apenas no modo criar */}
-                {!isEdicao && (
-                  <button
-                    onClick={calcularSugestoes}
-                    disabled={calculando}
-                    className="px-4 py-2.5 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Recalcular
-                  </button>
-                )}
-                <button
-                  onClick={isEdicao ? handleSalvarEdicao : handleCriarPedido}
-                  disabled={saving || sugestoes.length === 0}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#009E3F] hover:bg-[#008735] rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {saving ? (
-                    <>
-                      <SpinnerIcon />
-                      {isEdicao ? 'Salvando...' : 'Criando...'}
-                    </>
-                  ) : (
-                    <>
-                      <CheckIcon />
-                      {isEdicao ? 'Salvar edicao' : 'Criar Pedido'}
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+            {/* Espacador para o conteudo nao ficar atras da barra fixa */}
+            <div aria-hidden className="h-32 md:h-24" />
           </>
         )}
       </div>
+
+      {/* Barra de acoes FIXA no rodape da tela (responsiva) */}
+      {sugestoes.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#EDEDED] shadow-[0_-4px_16px_rgba(0,0,0,0.10)]">
+          <div className="max-w-[1800px] 2xl:max-w-[2200px] 3xl:max-w-none mx-auto px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            {/* Totais (compactam no mobile) */}
+            <div className="flex items-center gap-4 md:gap-6 overflow-x-auto no-scrollbar">
+              <div className="hidden md:block shrink-0">
+                <p className="text-xs text-gray-500">Itens</p>
+                <p className="text-base lg:text-lg font-semibold text-[#344054]">{sugestoes.length}</p>
+              </div>
+              <div className="hidden md:block shrink-0">
+                <p className="text-xs text-gray-500">Qtd total</p>
+                <p className="text-base lg:text-lg font-semibold text-[#344054]">{totalItens}</p>
+              </div>
+              <div className="hidden lg:block shrink-0">
+                <p className="text-xs text-gray-500">Valor produtos</p>
+                <p className="text-base lg:text-lg font-semibold text-[#667085]">{formatCurrency(valorTotal)}</p>
+              </div>
+              {valorDesconto > 0 && (
+                <div className="hidden lg:block shrink-0">
+                  <p className="text-xs text-gray-500">Desconto ({descontoPolitica}%)</p>
+                  <p className="text-base lg:text-lg font-semibold text-green-600">-{formatCurrency(valorDesconto)}</p>
+                </div>
+              )}
+              {frete > 0 && fretePorConta !== 'CIF' && fretePorConta !== 'SEM_FRETE' && (
+                <div className="hidden lg:block shrink-0">
+                  <p className="text-xs text-gray-500">Frete ({fretePorConta})</p>
+                  <p className="text-base lg:text-lg font-semibold text-[#667085]">+{formatCurrency(frete)}</p>
+                </div>
+              )}
+              <div className="shrink-0">
+                <p className="text-xs text-gray-500">Total do pedido</p>
+                <p className="text-lg font-bold text-[#336FB6]">{formatCurrency(valorTotalComFrete)}</p>
+              </div>
+            </div>
+
+            {/* Botoes */}
+            <div className="flex items-center gap-2 md:gap-3">
+              {/* Exportar CSV — desktop (no mobile vai pro kebab) */}
+              <button
+                onClick={handleExportarCSV}
+                disabled={sugestoes.length === 0}
+                className="hidden md:inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#475569] bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                Exportar CSV
+              </button>
+              {/* Recalcular — desktop (no mobile vai pro kebab) */}
+              {!isEdicao && (
+                <button
+                  onClick={calcularSugestoes}
+                  disabled={calculando}
+                  className="hidden md:inline-flex px-4 py-2.5 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 shrink-0"
+                >
+                  Recalcular
+                </button>
+              )}
+              {/* Adicionar item extra — sempre visivel (desktop e mobile) */}
+              {sugestoes.length > 0 && fornecedor && (
+                <button
+                  onClick={() => setShowProdutoModal(true)}
+                  className="inline-flex items-center gap-2 px-3 md:px-4 py-2.5 text-sm font-medium text-[#336FB6] bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shrink-0"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  <span className="whitespace-nowrap">Adicionar item extra</span>
+                </button>
+              )}
+              {/* Criar / Salvar — sempre visivel */}
+              <button
+                onClick={isEdicao ? handleSalvarEdicao : handleCriarPedido}
+                disabled={saving || sugestoes.length === 0}
+                className="inline-flex flex-1 md:flex-none justify-center items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#009E3F] hover:bg-[#008735] rounded-lg transition-colors disabled:opacity-50 shrink-0"
+              >
+                {saving ? (
+                  <>
+                    <SpinnerIcon />
+                    {isEdicao ? 'Salvando...' : 'Criando...'}
+                  </>
+                ) : (
+                  <>
+                    <CheckIcon />
+                    <span className="whitespace-nowrap">{isEdicao ? 'Salvar edicao' : 'Criar Pedido'}</span>
+                  </>
+                )}
+              </button>
+              {/* Kebab — SO no mobile: agrupa Exportar CSV e Recalcular */}
+              <div className="relative md:hidden shrink-0">
+                <button
+                  onClick={() => setShowAcoesMenu(v => !v)}
+                  aria-label="Mais acoes"
+                  className="inline-flex items-center justify-center w-10 h-10 text-[#475569] bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 5a2 2 0 110-4 2 2 0 010 4zm0 9a2 2 0 110-4 2 2 0 010 4zm0 9a2 2 0 110-4 2 2 0 010 4z" />
+                  </svg>
+                </button>
+                {showAcoesMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowAcoesMenu(false)} />
+                    <div className="absolute right-0 bottom-12 z-50 w-48 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden py-1">
+                      <button
+                        onClick={() => { setShowAcoesMenu(false); handleExportarCSV() }}
+                        disabled={sugestoes.length === 0}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-[#475569] hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        Exportar CSV
+                      </button>
+                      {!isEdicao && (
+                        <button
+                          onClick={() => { setShowAcoesMenu(false); calcularSugestoes() }}
+                          disabled={calculando}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-[#336FB6] hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                          </svg>
+                          Recalcular
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de selecao de fornecedor */}
       {showFornecedorModal && (
