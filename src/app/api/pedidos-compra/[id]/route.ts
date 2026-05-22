@@ -314,7 +314,68 @@ export async function PUT(
 
     console.log('Payload Bling (PUT):', JSON.stringify(blingPayload, null, 2))
 
-    // 4. PUT para Bling (com retry inteligente para rate limit e erros transientes)
+    // 4. ESTORNAR contas ANTES do PUT.
+    // O Bling NAO permite editar um pedido com contas a pagar ja lancadas; e preciso
+    // estornar primeiro. Contas ja baixadas/pagas/liquidadas NAO podem ser estornadas
+    // e, nesse caso, o pedido nao pode ser editado -> abortamos com 409.
+    let estornoWarning: string | null = null
+    try {
+      const estornoResult = await blingFetch(
+        `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/estornar-contas`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({}),
+        },
+        { context: 'estornar contas', maxRetries: 3 }
+      )
+
+      if (estornoResult.response.ok) {
+        console.log('Contas estornadas com sucesso para pedido:', pedido.bling_id)
+      } else {
+        const estornoError = await estornoResult.response.text()
+        console.warn('Estorno de contas retornou erro:', estornoResult.response.status, estornoError)
+
+        const estornoErrorLower = estornoError.toLowerCase()
+
+        // Conta ja baixada/paga/liquidada -> NAO pode editar. Aborta com 409.
+        const contaPaga =
+          estornoErrorLower.includes('paga') ||
+          estornoErrorLower.includes('baixad') ||
+          estornoErrorLower.includes('liquidad') ||
+          estornoErrorLower.includes('quitad')
+
+        // Casos que NAO bloqueiam: nao ha contas para estornar / nota fiscal ja gerada.
+        const semContas =
+          estornoErrorLower.includes('nenhuma conta') ||
+          estornoErrorLower.includes('nao ha conta') ||
+          estornoErrorLower.includes('não há conta') ||
+          estornoErrorLower.includes('sem conta') ||
+          estornoErrorLower.includes('nota fiscal')
+
+        if (contaPaga && !semContas) {
+          return NextResponse.json(
+            {
+              error: 'Este pedido possui conta a pagar ja baixada/paga no Bling e nao pode ser editado.',
+              details: estornoError,
+            },
+            { status: 409 }
+          )
+        }
+
+        if (!semContas) {
+          estornoWarning = 'Nao foi possivel estornar contas a pagar automaticamente. Verifique no Bling.'
+        }
+      }
+    } catch (estornoErr) {
+      console.warn('Aviso: Erro ao tentar estornar contas:', estornoErr)
+      estornoWarning = 'Nao foi possivel estornar contas a pagar automaticamente. Verifique no Bling.'
+    }
+
+    // 5. PUT para Bling (com retry inteligente para rate limit e erros transientes)
     let blingResponse: Response
     try {
       const result = await blingFetch(
@@ -366,11 +427,10 @@ export async function PUT(
       )
     }
 
-    // 5. Estornar contas automaticamente (Bling pode recriar contas a pagar ao editar parcelas)
-    let estornoWarning: string | null = null
+    // 6. Re-lancar contas com as novas parcelas (best-effort; nao quebra a edicao)
     try {
-      const estornoResult = await blingFetch(
-        `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/estornar-contas`,
+      const lancarResult = await blingFetch(
+        `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/lancar-contas`,
         {
           method: 'POST',
           headers: {
@@ -379,22 +439,24 @@ export async function PUT(
           },
           body: JSON.stringify({}),
         },
-        { context: 'estornar contas', maxRetries: 3 }
+        { context: 'lancar contas', maxRetries: 3 }
       )
 
-      if (estornoResult.response.ok) {
-        console.log('Contas estornadas com sucesso para pedido:', pedido.bling_id)
+      if (lancarResult.response.ok) {
+        console.log('Contas re-lancadas com sucesso para pedido:', pedido.bling_id)
       } else {
-        const estornoError = await estornoResult.response.text()
-        console.warn('Aviso: Nao foi possivel estornar contas:', estornoError)
-        estornoWarning = 'Nao foi possivel estornar contas a pagar automaticamente. Verifique no Bling.'
+        const lancarError = await lancarResult.response.text()
+        console.warn('Aviso: Nao foi possivel re-lancar contas:', lancarResult.response.status, lancarError)
+        const lancarWarning = 'Pedido atualizado, mas nao foi possivel re-lancar as contas a pagar automaticamente. Verifique no Bling.'
+        estornoWarning = estornoWarning ? `${estornoWarning} ${lancarWarning}` : lancarWarning
       }
-    } catch (estornoErr) {
-      console.warn('Aviso: Erro ao tentar estornar contas:', estornoErr)
-      estornoWarning = 'Nao foi possivel estornar contas a pagar automaticamente. Verifique no Bling.'
+    } catch (lancarErr) {
+      console.warn('Aviso: Erro ao tentar re-lancar contas:', lancarErr)
+      const lancarWarning = 'Pedido atualizado, mas nao foi possivel re-lancar as contas a pagar automaticamente. Verifique no Bling.'
+      estornoWarning = estornoWarning ? `${estornoWarning} ${lancarWarning}` : lancarWarning
     }
 
-    // 6. Atualizar Supabase - cabecalho do pedido
+    // 7. Atualizar Supabase - cabecalho do pedido
     const { error: updateError } = await supabase
       .from('pedidos_compra')
       .update({
@@ -424,7 +486,7 @@ export async function PUT(
       console.error('Erro ao atualizar cabecalho no Supabase:', updateError)
     }
 
-    // 7. Atualizar itens - DELETE existentes + INSERT novos
+    // 8. Atualizar itens - DELETE existentes + INSERT novos
     const { error: deleteItensError } = await supabase
       .from('itens_pedido_compra')
       .delete()
@@ -455,7 +517,7 @@ export async function PUT(
       console.error('Erro ao inserir novos itens:', insertItensError)
     }
 
-    // 8. Atualizar parcelas - DELETE existentes + INSERT novas
+    // 9. Atualizar parcelas - DELETE existentes + INSERT novas
     const { error: deleteParcelasError } = await supabase
       .from('parcelas_pedido_compra')
       .delete()
@@ -484,7 +546,7 @@ export async function PUT(
       }
     }
 
-    // 9. Retornar sucesso
+    // 10. Retornar sucesso
     const warnings = [estornoWarning].filter(Boolean)
     if (updateError || deleteItensError || insertItensError || deleteParcelasError) {
       warnings.push('Pedido atualizado no Bling mas houve erro ao salvar alguns dados localmente.')
