@@ -862,6 +862,17 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     return { nome, contexto, pend, scrollId: soVal ? `validade-${sug.item_id}` : `obs-${sug.item_id}` }
   }
 
+  // Fecha automaticamente o toast de pendencias quando todos os itens foram ajustados.
+  useEffect(() => {
+    setToast(prev => {
+      if (prev?.type === 'error' && prev.count != null && !sugestoes.some(s => avaliarPendenciaItem(s) !== null)) {
+        return null
+      }
+      return prev
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sugestoes])
+
   // Valida o gate de envio. Retorna false e dispara o bloqueio (toast + leva para a
   // etapa de ajuste com itens pendentes no topo) quando ha pendencias.
   // O espelho (cotacao do fornecedor) e a fonte de verdade.
