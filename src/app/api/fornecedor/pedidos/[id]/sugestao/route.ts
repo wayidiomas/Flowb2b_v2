@@ -157,24 +157,41 @@ export async function POST(
       return NextResponse.json({ error: 'Erro ao criar sugestao' }, { status: 500 })
     }
 
+    // Buscar valores originais dos itens do pedido (snapshot para diff de 3 vias)
+    const itemIds = itens.map(i => i.item_pedido_compra_id).filter((id): id is number => id != null)
+    const originaisMap = new Map<number, { quantidade: number; valor: number }>()
+    if (itemIds.length > 0) {
+      const { data: originais } = await supabase
+        .from('itens_pedido_compra')
+        .select('id, quantidade, valor')
+        .in('id', itemIds)
+      originais?.forEach(o => originaisMap.set(o.id, { quantidade: o.quantidade, valor: o.valor }))
+    }
+
     // Inserir itens da sugestao
-    const sugestaoItens = itens.map(item => ({
-      sugestao_id: sugestao.id,
-      item_pedido_compra_id: item.item_pedido_compra_id || null,
-      produto_id: item.produto_id || null,
-      quantidade_sugerida: item.quantidade_sugerida,
-      desconto_percentual: item.desconto_percentual || 0,
-      bonificacao_quantidade: item.bonificacao_quantidade || 0,  // Quantidade direta de unidades
-      validade: item.validade || null,
-      gtin: item.gtin || null,
-      codigo_fornecedor: item.codigo_fornecedor || null,
-      is_substituicao: item.is_substituicao || false,
-      is_novo: item.is_novo || false,
-      produto_nome: item.produto_nome || null,
-      preco_unitario: item.preco_unitario || null,
-      status_item: item.status_item || 'ok',
-      observacao_item: item.observacao_item || null,
-    }))
+    const sugestaoItens = itens.map(item => {
+      const orig = item.item_pedido_compra_id ? originaisMap.get(item.item_pedido_compra_id) : undefined
+      return {
+        sugestao_id: sugestao.id,
+        item_pedido_compra_id: item.item_pedido_compra_id || null,
+        produto_id: item.produto_id || null,
+        quantidade_sugerida: item.quantidade_sugerida,
+        desconto_percentual: item.desconto_percentual || 0,
+        bonificacao_quantidade: item.bonificacao_quantidade || 0,  // Quantidade direta de unidades
+        validade: item.validade || null,
+        gtin: item.gtin || null,
+        codigo_fornecedor: item.codigo_fornecedor || null,
+        is_substituicao: item.is_substituicao || false,
+        is_novo: item.is_novo || false,
+        produto_nome: item.produto_nome || null,
+        preco_unitario: item.preco_unitario || null,
+        status_item: item.status_item || 'ok',
+        observacao_item: item.observacao_item || null,
+        // Snapshot do que o lojista pediu originalmente
+        quantidade_pedida: orig?.quantidade ?? null,
+        valor_pedido: orig?.valor ?? null,
+      }
+    })
 
     const { error: itensError } = await supabase
       .from('sugestoes_fornecedor_itens')

@@ -257,6 +257,9 @@ export interface SugestaoItem {
   produto_nome?: string | null       // Nome do produto (quando substituicao/novo)
   gtin?: string | null
   codigo_fornecedor?: string | null
+  // Snapshot do pedido original do lojista (gravado na criacao da sugestao do fornecedor)
+  quantidade_pedida?: number | null  // Quantidade originalmente pedida pelo lojista
+  valor_pedido?: number | null       // Valor originalmente pedido pelo lojista
   // Campos calculados (frontend)
   valor_unitario_com_desconto?: number
   subtotal_original?: number

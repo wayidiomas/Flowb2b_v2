@@ -420,9 +420,11 @@ export async function GET(
     const pendente = (sugestoes || []).find(s => s.status === 'pendente')
     let sugestaoItens = null
     if (pendente) {
+      // select('*') ja inclui as colunas de snapshot do pedido original
+      // (quantidade_pedida, valor_pedido) alem de quantidade_sugerida/preco_unitario
       const { data: itens } = await supabase
         .from('sugestoes_fornecedor_itens')
-        .select('*')
+        .select('*, quantidade_pedida, valor_pedido')
         .eq('sugestao_id', pendente.id)
 
       sugestaoItens = itens

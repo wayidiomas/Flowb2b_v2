@@ -1,7 +1,54 @@
 'use client'
 
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { StatusInterno, SugestaoFornecedor, SugestaoItem } from '@/types/pedido-compra'
 import { ESTADOS_FINAIS } from '@/types/pedido-compra'
+
+// Tooltip estilizado (branding FlowB2B), instantaneo e posicionado via fixed
+// para nao ser cortado pelo overflow da tabela.
+function ConferenciaHover({ trigger, titulo, linhas, cor }: {
+  trigger: ReactNode
+  titulo: string
+  linhas: string[]
+  cor: 'amber' | 'red' | 'green'
+}) {
+  const [show, setShow] = useState(false)
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  const ref = useRef<HTMLSpanElement>(null)
+  const handleEnter = () => {
+    const r = ref.current?.getBoundingClientRect()
+    if (r) setPos({ top: r.bottom + 8, left: Math.max(8, Math.min(r.left, window.innerWidth - 300)) })
+    setShow(true)
+  }
+  const headerCor =
+    cor === 'red' ? 'from-red-50 to-rose-50 border-red-100 text-red-700'
+    : cor === 'green' ? 'from-green-50 to-emerald-50 border-green-100 text-green-700'
+    : 'from-secondary-50 to-amber-50 border-secondary-100 text-secondary-700'
+  const bulletCor = cor === 'red' ? 'text-red-400' : cor === 'green' ? 'text-green-500' : 'text-secondary-500'
+  return (
+    <span ref={ref} className="cursor-help inline-block" onMouseEnter={handleEnter} onMouseLeave={() => setShow(false)}>
+      {trigger}
+      {show && linhas.length > 0 && (
+        <div
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+          className="w-72 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden text-left pointer-events-none"
+        >
+          <div className={`px-3 py-2 bg-gradient-to-r ${headerCor} border-b flex items-center gap-1.5`}>
+            <span className="text-xs font-bold uppercase tracking-wide">{titulo}</span>
+          </div>
+          <div className="p-3 space-y-1.5">
+            {linhas.map((l, i) => (
+              <p key={i} className="text-xs text-gray-600 leading-snug flex gap-1.5">
+                <span className={`${bulletCor} font-bold`}>•</span>
+                <span>{l}</span>
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+    </span>
+  )
+}
 
 // Botao CTA principal com shimmer animado
 function ShimmerButton({ onClick, disabled, children, className }: {
@@ -39,7 +86,7 @@ interface StatusActionCardProps {
   statusInterno: StatusInterno
   sugestoes: SugestaoFornecedor[]
   sugestaoItens: SugestaoItem[] | null
-  itens: { id: number; descricao: string; quantidade: number; valor: number }[]
+  itens: { id: number; descricao: string; quantidade: number; valor: number; codigo_produto?: string | null; codigo_fornecedor?: string | null }[]
   onEnviarFornecedor: () => void
   onAceitarSugestao: () => void
   onRejeitarSugestao: () => void
@@ -56,6 +103,18 @@ interface StatusActionCardProps {
   formatCurrency: (value: number) => string
   formatDate: (date: string) => string
   situacaoBling?: number
+  temEspelho?: boolean
+  validandoEspelho?: boolean
+  onValidarEspelho?: () => void
+  // Resultado da validacao do espelho pela IA, para cruzar com cada item da sugestao
+  validacaoEspelho?: {
+    codigo: string | null
+    gtin: string | null
+    status: string
+    espelho_quantidade: number | null
+    espelho_preco: number | null
+    diferencas?: string[]
+  }[]
 }
 
 export function StatusActionCard({
@@ -79,7 +138,25 @@ export function StatusActionCard({
   formatCurrency,
   formatDate,
   situacaoBling,
+  temEspelho,
+  validandoEspelho,
+  onValidarEspelho,
+  validacaoEspelho,
 }: StatusActionCardProps) {
+  // ─── Estados para search / filtros / paginacao da tabela de sugestao ───
+  const [busca, setBusca] = useState('')
+  const [filtros, setFiltros] = useState<{ ruptura: boolean; descontinuado: boolean; alterados: boolean }>({ ruptura: false, descontinuado: false, alterados: false })
+  const [pagina, setPagina] = useState(1)
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+  const itensPorPagina = isMobile ? 5 : 30
+
   const pendenteSugestao = sugestoes.find(s => s.status === 'pendente')
   const podeCancelar = !ESTADOS_FINAIS.includes(statusInterno) && situacaoBling !== 1 && situacaoBling !== 2
   const podeRecolher = ['enviado_fornecedor', 'sugestao_pendente', 'contra_proposta_pendente'].includes(statusInterno)
@@ -89,7 +166,7 @@ export function StatusActionCard({
     podeCancelar && onCancelar ? (
       <button
         onClick={onCancelar}
-        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50/80 rounded-xl transition-all duration-200"
+        className="inline-flex items-center gap-1.5 px-3.5 py-2 whitespace-nowrap text-sm text-gray-500 hover:text-red-600 hover:bg-red-50/80 rounded-xl transition-all duration-200"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -104,7 +181,7 @@ export function StatusActionCard({
       <button
         onClick={onRecolher}
         disabled={recolhendo}
-        className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-secondary-700 bg-gradient-to-r from-secondary-50 to-secondary-100/80 hover:from-secondary-100 hover:to-secondary-200/80 border border-secondary-300/60 rounded-xl transition-all duration-200 disabled:opacity-50 shadow-sm hover:shadow-md"
+        className="inline-flex items-center gap-2 px-5 py-2.5 whitespace-nowrap text-sm font-semibold text-secondary-700 bg-gradient-to-r from-secondary-50 to-secondary-100/80 hover:from-secondary-100 hover:to-secondary-200/80 border border-secondary-300/60 rounded-xl transition-all duration-200 disabled:opacity-50 shadow-sm hover:shadow-md"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
@@ -207,6 +284,15 @@ export function StatusActionCard({
     let totalComDescontoItem = 0
     let totalBonificacaoUnidades = 0
 
+    // Indexa a validacao do espelho (IA) por SKU do lojista e por EAN, para cruzar com cada item.
+    const normKey = (s: string | null | undefined) => (s || '').toLowerCase().replace(/\s+/g, '').trim()
+    const espelhoPorCodigo = new Map<string, NonNullable<typeof validacaoEspelho>[number]>()
+    const espelhoPorGtin = new Map<string, NonNullable<typeof validacaoEspelho>[number]>()
+    for (const v of validacaoEspelho || []) {
+      if (v.codigo) espelhoPorCodigo.set(normKey(v.codigo), v)
+      if (v.gtin) espelhoPorGtin.set(normKey(v.gtin), v)
+    }
+
     const itensCalculados = sugestaoItens.map((sItem) => {
       const itemOriginal = itens.find(i => i.id === sItem.item_pedido_compra_id)
       const valorUnitario = itemOriginal?.valor || 0
@@ -219,15 +305,80 @@ export function StatusActionCard({
       const subtotalOriginal = valorUnitario * qtdOriginal
       const valorComDesconto = valorBase * (1 - descontoItem / 100)
       const subtotalSugerido = valorComDesconto * qtdSugerida
+      // Itens em ruptura ou descontinuados sao descartados: nao serao comprados,
+      // entao nao entram nos totais (ficam riscados na tabela).
+      const descartado = sItem.status_item === 'ruptura' || sItem.status_item === 'depreciado'
 
-      totalOriginal += subtotalOriginal
-      totalComDescontoItem += subtotalSugerido
-      totalBonificacaoUnidades += unidadesBonificadas
+      if (!descartado) {
+        totalOriginal += subtotalOriginal
+        totalComDescontoItem += subtotalSugerido
+        totalBonificacaoUnidades += unidadesBonificadas
+      }
 
-      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas }
+      // Cruza com a validacao do espelho (IA): por SKU do lojista, fallback EAN.
+      const espelho =
+        (itemOriginal?.codigo_produto ? espelhoPorCodigo.get(normKey(itemOriginal.codigo_produto)) : undefined) ||
+        (sItem.gtin ? espelhoPorGtin.get(normKey(sItem.gtin)) : undefined)
+      const qtdSugeridaFinal = sItem.quantidade_sugerida
+      const espelhoStatus = espelho?.status
+      const espelhoFaltando = !!espelho && espelhoStatus === 'faltando'
+      const temEspelhoItem = !!espelho && !espelhoFaltando
+      const espQtd = espelho?.espelho_quantidade ?? null
+      const espelhoPreco = espelho?.espelho_preco ?? null
+
+      // REGRA: a conferencia compara o que VOCE PEDIU com o que o FORNECEDOR EDITOU.
+      // Se pedido == fornecedor, e OK (confere) MESMO que o espelho traga valor diferente.
+      // So e divergencia quando o fornecedor entregou diferente do que voce pediu.
+      const fornecedorMudouQtd = qtdOriginal !== qtdSugeridaFinal
+      const fornecedorMudouPreco = Math.abs(valorUnitario - valorBase) > 0.001
+      const pedidoEncaixaFornecedor = !fornecedorMudouQtd && !fornecedorMudouPreco
+      const espelhoConfere = temEspelhoItem && pedidoEncaixaFornecedor && !descartado
+      const espelhoDiverge = temEspelhoItem && !pedidoEncaixaFornecedor && !descartado
+
+      // Preco do espelho (venda atual do fornecedor) comparado ao CUSTO (o que o lojista comprava = valorUnitario).
+      const espelhoVsCusto = espelhoPreco != null && Math.abs(espelhoPreco - valorUnitario) > 0.001 ? espelhoPreco - valorUnitario : null
+      const espelhoVsCustoPct = espelhoVsCusto != null && valorUnitario > 0 ? (espelhoVsCusto / valorUnitario) * 100 : null
+
+      // Texto do hover quando DIVERGE (fornecedor != pedido). Mostra pedido / fornecedor / espelho.
+      const espelhoDiffPartes: string[] = []
+      if (espelhoFaltando) {
+        espelhoDiffPartes.push('Item nao consta no espelho do fornecedor.')
+      } else if (espelhoDiverge) {
+        if (fornecedorMudouQtd) {
+          const dif = qtdSugeridaFinal - qtdOriginal
+          let linha = `Quantidade: voce pediu ${qtdOriginal}, fornecedor editou para ${qtdSugeridaFinal} (${dif > 0 ? '+' : ''}${dif})`
+          if (espQtd != null) {
+            if (espQtd === qtdSugeridaFinal) linha += `; espelho confirma ${espQtd}.`
+            else if (espQtd === qtdOriginal) linha += `; mas o espelho registra ${espQtd} (igual ao que voce pediu).`
+            else linha += `; e o espelho registra ${espQtd} (difere dos dois).`
+          } else linha += '.'
+          espelhoDiffPartes.push(linha)
+        }
+        if (fornecedorMudouPreco) {
+          let linha = `Preco: voce comprava por ${formatCurrency(valorUnitario)}, fornecedor editou para ${formatCurrency(valorBase)}`
+          if (espelhoPreco != null) {
+            if (Math.abs(espelhoPreco - valorBase) < 0.001) linha += `; espelho confirma ${formatCurrency(espelhoPreco)}.`
+            else if (Math.abs(espelhoPreco - valorUnitario) < 0.001) linha += `; mas o espelho mostra ${formatCurrency(espelhoPreco)} (igual ao custo).`
+            else linha += `; e o espelho mostra ${formatCurrency(espelhoPreco)} (difere dos dois).`
+          } else linha += '.'
+          espelhoDiffPartes.push(linha)
+        }
+      }
+      const espelhoDiffTexto = espelhoDiffPartes.join('\n')
+
+      // Texto do hover quando CONFERE (explica POR QUE esta OK, citando o espelho se diferir).
+      const espelhoConfereTexto = (() => {
+        if (!espelhoConfere) return ''
+        const partes = [`Voce pediu ${qtdOriginal} e o fornecedor confirmou ${qtdSugeridaFinal} pelo mesmo preco — confere com o seu pedido.`]
+        if (espQtd != null && espQtd !== qtdSugeridaFinal) partes.push(`Obs: espelho registra ${espQtd}, mas o acordo com o fornecedor e ${qtdSugeridaFinal}.`)
+        if (espelhoPreco != null && Math.abs(espelhoPreco - valorBase) > 0.001) partes.push(`Obs: espelho mostra ${formatCurrency(espelhoPreco)} (acordo: ${formatCurrency(valorBase)}).`)
+        return partes.join('\n')
+      })()
+
+      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct }
     })
 
-    const temPrecoSugerido = itensCalculados.some(item => item.precoSugerido != null)
+    const temPrecoSugerido = itensCalculados.some(item => item.precoSugerido != null || item.espelhoVsCusto != null)
 
     const valorMinimo = pendenteSugestao?.valor_minimo_pedido || 0
     const descontoGeral = pendenteSugestao?.desconto_geral || 0
@@ -244,6 +395,34 @@ export function StatusActionCard({
 
     const economia = totalOriginal - totalFinal
     const economiaPercent = totalOriginal > 0 ? (economia / totalOriginal) * 100 : 0
+
+    // ─── Filtro / busca / paginacao (somente para renderizacao das linhas) ───
+    const norm = (s: string | null | undefined) => (s || '').toLowerCase().trim()
+    const termo = norm(busca)
+    const filtrados = itensCalculados.filter((it) => {
+      // busca: SKU lojista, SKU fornecedor, nome, EAN
+      if (termo) {
+        const skuLojista = norm(it.itemOriginal?.codigo_produto)
+        const skuForn = norm(it.codigo_fornecedor) || norm(it.itemOriginal?.codigo_fornecedor)
+        const nome = norm(it.itemOriginal?.descricao) + ' ' + norm(it.produto_nome)
+        const ean = norm(it.gtin)
+        const match = skuLojista.includes(termo) || skuForn.includes(termo) || nome.includes(termo) || ean.includes(termo)
+        if (!match) return false
+      }
+      // filtros (chips). Se nenhum ativo, passa tudo. Se algum ativo, item precisa casar com ALGUM ativo (OR).
+      const algumFiltroAtivo = filtros.ruptura || filtros.descontinuado || filtros.alterados
+      if (algumFiltroAtivo) {
+        const ehRuptura = it.status_item === 'ruptura'
+        const ehDescont = it.status_item === 'depreciado'
+        const ehAlterado = (it.qtdOriginal !== it.quantidade_sugerida) || (it.precoSugerido != null) || it.status_item === 'divergente'
+        const passa = (filtros.ruptura && ehRuptura) || (filtros.descontinuado && ehDescont) || (filtros.alterados && ehAlterado)
+        if (!passa) return false
+      }
+      return true
+    })
+    const totalPaginas = Math.max(1, Math.ceil(filtrados.length / itensPorPagina))
+    const paginaAtual = Math.min(pagina, totalPaginas)
+    const paginados = filtrados.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina)
 
     return (
       <div className="relative overflow-hidden rounded-2xl border border-secondary-300/60 bg-white shadow-lg shadow-secondary-100/40">
@@ -298,12 +477,55 @@ export function StatusActionCard({
           </div>
         )}
 
+        {/* Barra de busca + filtros */}
+        <div className="px-6 py-3.5 bg-white border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="relative flex-1 min-w-0">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+            </svg>
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => { setBusca(e.target.value); setPagina(1) }}
+              placeholder="Buscar por SKU, cod. fornecedor, nome ou EAN..."
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/30 focus:border-primary-400 outline-none bg-white transition-all"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setFiltros(f => ({ ...f, ruptura: !f.ruptura })); setPagina(1) }}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filtros.ruptura ? 'bg-red-50 border-red-300 text-red-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+            >
+              Ruptura
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFiltros(f => ({ ...f, descontinuado: !f.descontinuado })); setPagina(1) }}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filtros.descontinuado ? 'bg-gray-200 border-gray-400 text-gray-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+            >
+              Descontinuado
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFiltros(f => ({ ...f, alterados: !f.alterados })); setPagina(1) }}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filtros.alterados ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+            >
+              Alterados
+            </button>
+            <span className="text-xs text-gray-400 tabular-nums whitespace-nowrap">
+              {filtrados.length} de {itensCalculados.length}
+            </span>
+          </div>
+        </div>
+
         {/* Tabela comparativa */}
-        <div className="overflow-x-auto max-h-64 overflow-y-auto">
+        <div className="overflow-x-auto scrollbar-flow">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50/80 sticky top-0">
+            <thead className="bg-gray-50/80">
               <tr>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Status</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-amber-600 uppercase tracking-wider w-28">Conferencia</th>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[140px]">Observacao</th>
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Produto</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Qtd Orig</th>
@@ -320,10 +542,17 @@ export function StatusActionCard({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {itensCalculados.map((item) => {
+              {filtrados.length === 0 && (
+                <tr>
+                  <td colSpan={temPrecoSugerido ? 13 : 12} className="px-4 py-8 text-center text-sm text-gray-400">
+                    Nenhum item corresponde a busca/filtros
+                  </td>
+                </tr>
+              )}
+              {paginados.map((item) => {
                 const qtdMudou = item.qtdOriginal !== item.quantidade_sugerida
                 return (
-                  <tr key={item.id} className="hover:bg-secondary-50/30 transition-colors">
+                  <tr key={item.id} className={`hover:bg-secondary-50/30 transition-colors ${item.descartado ? 'bg-gray-50/60' : ''}`}>
                     <td className="px-3 py-2.5">
                       {(() => {
                         const s = item.status_item
@@ -340,22 +569,55 @@ export function StatusActionCard({
                       {item.is_substituicao && <span className="block text-[9px] text-blue-600 mt-0.5">Substituicao</span>}
                     </td>
                     <td className="px-3 py-2.5 align-top">
+                      {item.espelhoFaltando ? (
+                        <ConferenciaHover
+                          cor="red"
+                          titulo="Faltando no espelho"
+                          linhas={['Item nao consta no espelho do fornecedor.']}
+                          trigger={<span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-800">⚠ Faltando</span>}
+                        />
+                      ) : item.espelhoDiverge ? (
+                        <ConferenciaHover
+                          cor="amber"
+                          titulo="Fornecedor editou seu pedido"
+                          linhas={item.espelhoDiffTexto ? item.espelhoDiffTexto.split('\n') : ['O fornecedor entregou diferente do que voce pediu.']}
+                          trigger={<span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">⚠ Diverge</span>}
+                        />
+                      ) : item.espelhoConfere ? (
+                        <ConferenciaHover
+                          cor="green"
+                          titulo="Confere com o seu pedido"
+                          linhas={item.espelhoConfereTexto ? item.espelhoConfereTexto.split('\n') : ['O fornecedor confirmou o que voce pediu.']}
+                          trigger={<span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-green-600">✓ Confere</span>}
+                        />
+                      ) : (
+                        <span className="text-gray-300 text-[10px]" title="Sem espelho validado para este item">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 align-top">
                       {item.observacao_item ? (
                         <span className="text-[11px] text-gray-600 leading-tight block break-words">{item.observacao_item}</span>
                       ) : (
                         <span className="text-gray-300 text-[10px]">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-900 truncate max-w-[150px] font-medium" title={item.itemOriginal?.descricao}>
+                    <td className="px-4 py-2.5 text-gray-900 max-w-[180px] font-medium" title={item.itemOriginal?.descricao}>
                       {item.is_substituicao && item.produto_nome ? (
                         <div>
-                          <span className="line-through text-gray-400 text-xs">{item.itemOriginal?.descricao}</span>
-                          <span className="block text-blue-700">{item.produto_nome}</span>
+                          <span className="line-through text-gray-400 text-xs block truncate">{item.itemOriginal?.descricao}</span>
+                          <span className="block text-blue-700 truncate">{item.produto_nome}</span>
                         </div>
                       ) : item.is_novo ? (
-                        <span className="text-blue-700">{item.produto_nome || `Item #${item.item_pedido_compra_id}`}</span>
+                        <span className="text-blue-700 block truncate">{item.produto_nome || `Item #${item.item_pedido_compra_id}`}</span>
                       ) : (
-                        item.itemOriginal?.descricao || `Item #${item.item_pedido_compra_id}`
+                        <span className="block truncate">{item.itemOriginal?.descricao || `Item #${item.item_pedido_compra_id}`}</span>
+                      )}
+                      {(item.itemOriginal?.codigo_produto || item.codigo_fornecedor) && (
+                        <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                          {item.itemOriginal?.codigo_produto && <span>SKU: {item.itemOriginal.codigo_produto}</span>}
+                          {item.itemOriginal?.codigo_produto && item.codigo_fornecedor && <span> · </span>}
+                          {item.codigo_fornecedor && <span>Forn: {item.codigo_fornecedor}</span>}
+                        </p>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-gray-400 text-right tabular-nums">{item.qtdOriginal}</td>
@@ -364,6 +626,11 @@ export function StatusActionCard({
                       {qtdMudou && (
                         <span className="ml-1 text-xs font-normal">
                           ({item.quantidade_sugerida > item.qtdOriginal ? '+' : ''}{item.quantidade_sugerida - item.qtdOriginal})
+                        </span>
+                      )}
+                      {!item.espelhoFaltando && item.espelho?.espelho_quantidade != null && item.espelho.espelho_quantidade !== item.quantidade_sugerida && (
+                        <span className="block text-[10px] font-medium text-amber-700 mt-0.5" title="Quantidade no espelho do fornecedor">
+                          espelho: {item.espelho.espelho_quantidade}
                         </span>
                       )}
                     </td>
@@ -378,7 +645,17 @@ export function StatusActionCard({
                             </div>
                           </div>
                         ) : (
-                          <span className="text-gray-300">-</span>
+                          <span className="text-gray-400 tabular-nums" title="Preco mantido pelo fornecedor">{formatCurrency(item.valorUnitario)}</span>
+                        )}
+                        {item.espelhoPreco != null && item.espelhoVsCusto != null && (
+                          <span className="block text-[10px] mt-0.5 leading-tight">
+                            <span className="font-medium text-amber-700">espelho: {formatCurrency(item.espelhoPreco)}</span>
+                            {item.espelhoVsCusto != null && item.espelhoVsCustoPct != null && (
+                              <span className={`block font-semibold ${item.espelhoVsCusto > 0 ? 'text-red-600' : 'text-green-600'}`} title="Preco do espelho comparado ao que voce comprava (custo)">
+                                {item.espelhoVsCusto > 0 ? '↑' : '↓'} {Math.abs(item.espelhoVsCustoPct).toFixed(1)}% vs custo
+                              </span>
+                            )}
+                          </span>
                         )}
                       </td>
                     )}
@@ -396,8 +673,14 @@ export function StatusActionCard({
                     <td className="px-3 py-2.5 text-center">
                       {item.validade ? <span className="text-secondary-700 font-medium">{formatDate(item.validade)}</span> : <span className="text-gray-300">-</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-right text-gray-400 tabular-nums">{formatCurrency(item.subtotalOriginal)}</td>
-                    <td className="px-3 py-2.5 text-right font-semibold text-green-700 tabular-nums">{formatCurrency(item.subtotalSugerido)}</td>
+                    <td className={`px-3 py-2.5 text-right tabular-nums ${item.descartado ? 'text-gray-300 line-through' : 'text-gray-400'}`}>{formatCurrency(item.subtotalOriginal)}</td>
+                    <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
+                      {item.descartado ? (
+                        <span className="text-gray-300 line-through" title="Item descartado (ruptura/descontinuado) - nao entra no total">{formatCurrency(item.subtotalSugerido)}</span>
+                      ) : (
+                        <span className="text-green-700">{formatCurrency(item.subtotalSugerido)}</span>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
@@ -405,8 +688,65 @@ export function StatusActionCard({
           </table>
         </div>
 
+        {/* Paginacao */}
+        {totalPaginas > 1 && (
+          <div className="px-6 py-3 bg-white border-t border-gray-100 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setPagina(p => Math.max(1, p - 1))}
+              disabled={paginaAtual === 1}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Anterior
+            </button>
+            <div className="flex items-center gap-2 text-xs text-gray-500 tabular-nums">
+              <span>Pagina {paginaAtual} de {totalPaginas} · {filtrados.length} itens</span>
+              <span className="hidden sm:inline text-gray-300">|</span>
+              <span className="hidden sm:inline">Ir para</span>
+              <input
+                type="number"
+                min={1}
+                max={totalPaginas}
+                defaultValue={paginaAtual}
+                key={paginaAtual}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                onBlur={(e) => {
+                  const n = parseInt(e.target.value, 10)
+                  if (!isNaN(n)) setPagina(Math.min(totalPaginas, Math.max(1, n)))
+                }}
+                className="w-14 text-center text-sm font-medium text-gray-800 border border-gray-200 rounded-lg px-2 py-1 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-500/20"
+                aria-label="Ir para pagina"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+              disabled={paginaAtual === totalPaginas}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Proxima
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        )}
+
         {/* Resumo financeiro */}
         <div className="px-6 py-5 bg-gradient-to-r from-green-50/80 via-emerald-50/50 to-white border-t border-gray-100">
+          {itensCalculados.some(i => i.descartado) && (
+            <div className="mb-3 flex items-center gap-2 text-xs text-gray-500">
+              <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+              <span>
+                {itensCalculados.filter(i => i.descartado).length} {itensCalculados.filter(i => i.descartado).length === 1 ? 'item descartado' : 'itens descartados'} (ruptura/descontinuado) <span className="line-through">nao contabilizados</span> no total
+              </span>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Original</p>
@@ -457,18 +797,38 @@ export function StatusActionCard({
               <ShimmerButton
                 onClick={onAceitarSugestao}
                 disabled={processandoSugestao}
-                className="w-full sm:w-auto px-7 py-3.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 shadow-lg shadow-green-200/50 hover:shadow-xl hover:shadow-green-300/40 hover:-translate-y-0.5"
+                className="w-full sm:w-auto px-7 py-3.5 whitespace-nowrap bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 shadow-lg shadow-green-200/50 hover:shadow-xl hover:shadow-green-300/40 hover:-translate-y-0.5"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
                 {processandoSugestao ? 'Processando...' : 'Aceitar Sugestao'}
               </ShimmerButton>
+              {temEspelho && onValidarEspelho && (
+                <button
+                  onClick={onValidarEspelho}
+                  disabled={validandoEspelho}
+                  className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-xl font-medium transition-all duration-200 disabled:opacity-50 shadow-lg shadow-purple-200/50"
+                  title="Conferir o espelho do fornecedor com a IA"
+                >
+                  {validandoEspelho ? (
+                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                  {validandoEspelho ? 'Validando...' : 'Revalidar Espelho'}
+                </button>
+              )}
               {onManterOriginal && (
                 <button
                   onClick={onManterOriginal}
                   disabled={processandoSugestao}
-                  className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 rounded-xl font-medium transition-all duration-200 disabled:opacity-50"
+                  className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 rounded-xl font-medium transition-all duration-200 disabled:opacity-50"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
@@ -479,7 +839,7 @@ export function StatusActionCard({
               <button
                 onClick={onRejeitarSugestao}
                 disabled={processandoSugestao}
-                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-2.5 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl font-medium transition-all duration-200 disabled:opacity-50"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-5 py-2.5 whitespace-nowrap bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl font-medium transition-all duration-200 disabled:opacity-50"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />

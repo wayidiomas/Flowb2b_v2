@@ -289,6 +289,10 @@ export default function VisualizarPedidoPage() {
   }, [pedidoId])
 
   // Handler para aprovar/rejeitar espelho
+  // CODIGO MORTO (mantido propositalmente): os botoes "Aprovar/Rejeitar Espelho" foram
+  // removidos da UI - a aprovacao do espelho deixou de ser um passo separado e passou a
+  // acontecer junto do "Aceitar Sugestao". Esta funcao nao e mais chamada por nenhum
+  // componente. Mantida por ora caso o fluxo de aprovacao explicita volte a ser necessario.
   const handleEspelhoAction = async (action: 'aprovar' | 'rejeitar') => {
     if (!pedido) return
     setProcessandoEspelho(true)
@@ -975,6 +979,24 @@ export default function VisualizarPedidoPage() {
 
   const statusConfig = STATUS_CONFIG[pedido.situacao] || STATUS_CONFIG[0]
 
+  // Snapshot do que o lojista pediu (preservado na sugestao do fornecedor).
+  // Apos o aceite, os itens do pedido sao sobrescritos; o snapshot garante que a
+  // tabela "Itens do Pedido" sempre mostre o pedido ORIGINAL (read-only).
+  const snapshotPedidoMap = new Map<number, { quantidade: number; valor: number }>()
+  if (sugestaoItens) {
+    for (const s of sugestaoItens) {
+      if (s.item_pedido_compra_id != null && s.quantidade_pedida != null && s.valor_pedido != null) {
+        snapshotPedidoMap.set(s.item_pedido_compra_id, {
+          quantidade: Number(s.quantidade_pedida),
+          valor: Number(s.valor_pedido),
+        })
+      }
+    }
+  }
+  // A edicao direta dos itens so faz sentido em rascunho. A partir do envio ao
+  // fornecedor, a tabela de itens vira referencia read-only do pedido original.
+  const itensEditaveis = statusInterno === 'rascunho'
+
   return (
     <RequirePermission permission="pedidos">
     <DashboardLayout>
@@ -1113,16 +1135,16 @@ export default function VisualizarPedidoPage() {
       <WorkflowStepper statusInterno={statusInterno} className="mb-6 print:hidden" />
 
       {/* Layout 2 colunas */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 2xl:gap-8" id="print-area" ref={printRef}>
-        {/* Coluna Principal (2/3) */}
-        <div className="lg:col-span-2 space-y-6">
+      <div className="space-y-6" id="print-area" ref={printRef}>
+        {/* Conteudo principal (largura total) */}
+        <div className="space-y-6">
           {/* Card de Acao Contextual */}
           <div className="print:hidden">
 <StatusActionCard
               statusInterno={statusInterno}
               sugestoes={sugestoes}
               sugestaoItens={sugestaoItens}
-              itens={pedido.itens.filter(i => i.id !== undefined).map(i => ({ id: i.id as number, descricao: i.descricao, quantidade: i.quantidade, valor: i.valor }))}
+              itens={pedido.itens.filter(i => i.id !== undefined).map(i => ({ id: i.id as number, descricao: i.descricao, quantidade: i.quantidade, valor: i.valor, codigo_produto: i.codigo_produto ?? null, codigo_fornecedor: i.codigo_fornecedor ?? null }))}
               onEnviarFornecedor={handleEnviarClick}
               onAceitarSugestao={() => handleProcessarSugestao('aceitar')}
               onRejeitarSugestao={() => setShowRejectModal(true)}
@@ -1139,6 +1161,17 @@ export default function VisualizarPedidoPage() {
               formatCurrency={formatCurrency}
               formatDate={formatDate}
               situacaoBling={pedido.situacao}
+              temEspelho={!!espelhoInfo?.espelho_url}
+              validandoEspelho={validandoEspelho}
+              onValidarEspelho={handleValidarEspelho}
+              validacaoEspelho={validacaoItens.map(v => ({
+                codigo: v.item_pedido?.codigo ?? null,
+                gtin: v.item_pedido?.gtin ?? null,
+                status: (v.status_manual || v.status) as string,
+                espelho_quantidade: v.item_espelho?.quantidade ?? null,
+                espelho_preco: v.item_espelho?.preco_unitario ?? null,
+                diferencas: v.diferencas,
+              }))}
             />
           </div>
 
@@ -1188,28 +1221,6 @@ export default function VisualizarPedidoPage() {
                     >
                       Download
                     </a>
-                    <button
-                      onClick={handleValidarEspelho}
-                      disabled={validandoEspelho}
-                      className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg text-sm font-medium hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
-                    >
-                      {validandoEspelho ? (
-                        <>
-                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          Validando com IA...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Validar Espelho
-                        </>
-                      )}
-                    </button>
                     {validacaoItens.length > 0 && !showValidacaoModal && (
                       <button
                         onClick={() => setShowValidacaoModal(true)}
@@ -1225,29 +1236,14 @@ export default function VisualizarPedidoPage() {
                   </div>
                 </div>
 
-                {/* Botoes de aprovacao (so se pendente) */}
+                {/* Conferencia do espelho: a aprovacao deixou de ser um botao separado.
+                    A validacao roda pela IA e o aceite acontece junto do "Aceitar Sugestao". */}
                 {espelhoInfo.espelho_status === 'pendente' && (
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      onClick={() => handleEspelhoAction('aprovar')}
-                      disabled={processandoEspelho}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-semibold transition-all disabled:opacity-50 shadow-lg shadow-green-200/50"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                      {processandoEspelho ? 'Processando...' : 'Aprovar Espelho'}
-                    </button>
-                    <button
-                      onClick={() => handleEspelhoAction('rejeitar')}
-                      disabled={processandoEspelho}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-red-300 text-red-600 hover:bg-red-50 rounded-xl font-semibold transition-all disabled:opacity-50"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                      Rejeitar
-                    </button>
+                  <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 px-4 py-2 rounded-lg">
+                    <svg className="w-4 h-4 shrink-0 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Use &quot;Validar Espelho&quot; para conferir com a IA. A conferencia e confirmada ao aceitar a sugestao.
                   </div>
                 )}
 
@@ -1297,6 +1293,11 @@ export default function VisualizarPedidoPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Itens do Pedido + Resumo/Timeline (lado a lado) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <div className="lg:col-span-2 space-y-6">
 
           {/* Itens do Pedido */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -1304,6 +1305,14 @@ export default function VisualizarPedidoPage() {
               <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
                 <span className="w-1 h-4 bg-amber-400 rounded-full"></span>
                 Itens do Pedido ({pedido.itens.length})
+                {!itensEditaveis && (
+                  <span className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500 normal-case tracking-normal">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                    Pedido original (somente leitura)
+                  </span>
+                )}
               </h3>
             </div>
             <div className="overflow-x-auto hidden md:block">
@@ -1317,19 +1326,23 @@ export default function VisualizarPedidoPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qtd</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Valor</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
-                    {!['cancelado', 'finalizado'].includes(statusInterno) && (
+                    {itensEditaveis && (
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Acoes</th>
                     )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {pedido.itens.map((item, index) => (
+                  {pedido.itens.map((item, index) => {
+                    const snap = item.id != null ? snapshotPedidoMap.get(item.id) : undefined
+                    const qtdOriginal = snap?.quantidade ?? item.quantidade
+                    const valorOriginal = snap?.valor ?? item.valor
+                    return (
                     <tr key={item.id || index} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-gray-500">{item.codigo_produto || '-'}</td>
                       <td className="px-4 py-3 text-sm text-blue-600 font-medium">{item.codigo_fornecedor || '-'}</td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate" title={item.descricao}>{item.descricao}</td>
                       <td className="px-4 py-3 text-sm text-gray-500 text-center">{item.unidade}</td>
-                      {!['cancelado', 'finalizado'].includes(statusInterno) ? (
+                      {itensEditaveis ? (
                         <td className="px-4 py-3 text-right">
                           <input
                             type="number"
@@ -1344,11 +1357,11 @@ export default function VisualizarPedidoPage() {
                           />
                         </td>
                       ) : (
-                        <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{item.quantidade}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{qtdOriginal}</td>
                       )}
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(item.valor)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{formatCurrency(item.quantidade * item.valor)}</td>
-                      {!['cancelado', 'finalizado'].includes(statusInterno) && (
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(valorOriginal)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{formatCurrency(qtdOriginal * valorOriginal)}</td>
+                      {itensEditaveis && (
                         <td className="px-4 py-3 text-center">
                           <button
                             onClick={() => handleRemoverItem(item.id!, item.descricao)}
@@ -1362,13 +1375,18 @@ export default function VisualizarPedidoPage() {
                         </td>
                       )}
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
             {/* Mobile card list */}
             <div className="md:hidden divide-y divide-gray-200">
-              {pedido.itens.map((item, index) => (
+              {pedido.itens.map((item, index) => {
+                const snap = item.id != null ? snapshotPedidoMap.get(item.id) : undefined
+                const qtdOriginal = snap?.quantidade ?? item.quantidade
+                const valorOriginal = snap?.valor ?? item.valor
+                return (
                 <div key={item.id || index} className="px-4 py-3">
                   <div className="flex justify-between items-start">
                     <div className="flex-1 min-w-0">
@@ -1379,8 +1397,8 @@ export default function VisualizarPedidoPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 ml-3">
-                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(item.quantidade * item.valor)}</p>
-                      {!['cancelado', 'finalizado'].includes(statusInterno) && (
+                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(qtdOriginal * valorOriginal)}</p>
+                      {itensEditaveis && (
                         <button
                           onClick={() => handleRemoverItem(item.id!, item.descricao)}
                           className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -1394,7 +1412,7 @@ export default function VisualizarPedidoPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-4 mt-1.5 text-xs text-gray-500">
-                    {!['cancelado', 'finalizado'].includes(statusInterno) ? (
+                    {itensEditaveis ? (
                       <span className="flex items-center gap-1">
                         <input
                           type="number"
@@ -1410,17 +1428,18 @@ export default function VisualizarPedidoPage() {
                         <span>{item.unidade}</span>
                       </span>
                     ) : (
-                      <span>{item.quantidade} {item.unidade}</span>
+                      <span>{qtdOriginal} {item.unidade}</span>
                     )}
-                    <span>x {formatCurrency(item.valor)}</span>
+                    <span>x {formatCurrency(valorOriginal)}</span>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
           {/* Botao Adicionar Produto */}
-          {pedido && !['cancelado', 'finalizado'].includes(statusInterno) && (
+          {pedido && itensEditaveis && (
             <div className="-mt-3 mb-2 flex justify-end px-6 pb-4">
               <button
                 onClick={() => setModalAdicionarAberto(true)}
@@ -1482,10 +1501,10 @@ export default function VisualizarPedidoPage() {
               </div>
             </div>
           )}
-        </div>
+          </div>
 
-        {/* Sidebar (1/3) */}
-        <div className="space-y-6">
+          {/* Coluna direita: Resumo + Timeline + Historico (ao lado dos itens) */}
+          <div className="space-y-6">
           {/* Resumo Financeiro */}
           <div className="bg-white rounded-xl border border-gray-200 p-6 border-t-4 border-t-amber-400">
             <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Resumo</h3>
@@ -1553,6 +1572,7 @@ export default function VisualizarPedidoPage() {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
 
