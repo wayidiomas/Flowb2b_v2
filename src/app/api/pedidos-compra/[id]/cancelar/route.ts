@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { requirePermission } from '@/lib/permissions'
-import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
-import { blingFetch } from '@/lib/bling-fetch'
+import { refreshBlingTokens } from '@/lib/bling'
+import { cancelarPedidoCompraBling } from '@/lib/bling-pedido-compra'
 import { ESTADOS_FINAIS } from '@/types/pedido-compra'
 
 interface CancelarRequest {
@@ -106,42 +106,43 @@ export async function POST(
     let blingSyncSuccess = false
     let blingSyncError = ''
 
-    // Tentar sincronizar com Bling se tiver bling_id
+    // Cancelar no Bling quando o pedido tem vinculo. Regra: se TEM bling_id e o
+    // cancelamento no Bling falhar, BLOQUEIA (nao cancela so localmente) para
+    // manter os dois sistemas consistentes.
     if (pedido.bling_id) {
       const accessToken = await getBlingAccessToken(empresaId, supabase)
 
-      if (accessToken) {
-        try {
-          const result = await blingFetch(
-            `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes/2`,
-            {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-              },
-            },
-            { context: 'cancelar pedido', maxRetries: 3 }
-          )
+      if (!accessToken) {
+        return NextResponse.json(
+          { error: 'Bling nao conectado. Reconecte sua conta Bling para cancelar este pedido.' },
+          { status: 400 }
+        )
+      }
 
-          if (result.response.ok) {
-            blingSyncSuccess = true
-            if (result.hadRateLimit) {
-              console.log(`Pedido cancelado apos ${result.retriesUsed} retries por rate limit`)
-            }
-          } else {
-            const errorText = await result.response.text()
-            blingSyncError = `Bling: ${errorText}`
-            console.error('Erro ao cancelar no Bling:', errorText)
-          }
-        } catch (err) {
-          blingSyncError = err instanceof Error ? err.message : 'Erro desconhecido'
-          console.error('Erro na chamada Bling:', err)
+      try {
+        const cancelamento = await cancelarPedidoCompraBling(pedido.bling_id, accessToken)
+        if (cancelamento.ok) {
+          blingSyncSuccess = true
+        } else if (cancelamento.naoEncontrado) {
+          // 404 = pedido nao existe mais no Bling: seguimos cancelando localmente
+          blingSyncError = 'Pedido nao encontrado no Bling (404)'
+        } else {
+          console.error('Erro ao cancelar no Bling:', cancelamento.status, cancelamento.errorText)
+          return NextResponse.json(
+            { error: `Nao foi possivel cancelar no Bling: ${cancelamento.errorText || cancelamento.status}. O pedido NAO foi cancelado.` },
+            { status: 502 }
+          )
         }
+      } catch (err) {
+        console.error('Erro na chamada Bling:', err)
+        return NextResponse.json(
+          { error: `Falha de comunicacao com o Bling: ${err instanceof Error ? err.message : 'erro desconhecido'}. O pedido NAO foi cancelado.` },
+          { status: 502 }
+        )
       }
     }
 
-    // Atualizar status no Supabase
+    // Atualizar status no Supabase (Bling OK, 404, ou pedido sem bling_id)
     const updateData: Record<string, unknown> = {
       status_interno: 'cancelado',
       updated_at: new Date().toISOString(),

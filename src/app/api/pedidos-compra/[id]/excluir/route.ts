@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { requirePermission } from '@/lib/permissions'
-import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
-import { blingFetch, BlingRateLimitError } from '@/lib/bling-fetch'
+import { refreshBlingTokens } from '@/lib/bling'
+import { BlingRateLimitError } from '@/lib/bling-fetch'
+import { cancelarPedidoCompraBling } from '@/lib/bling-pedido-compra'
 import { ESTADOS_FINAIS, type StatusInterno } from '@/types/pedido-compra'
 
 // Estados que ainda permitem cancelar no Bling (situação Bling vira "Cancelado" = 2)
@@ -123,41 +124,22 @@ export async function POST(
         outcome = 'sem_token_bling'
       } else {
         try {
-          // Endpoint correto (descoberto via SDK oficial Bling):
-          // PATCH /pedidos/compras/{id}/situacoes  body: { valor: 2 } onde 2 = Cancelado
-          const result = await blingFetch(
-            `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes`,
-            {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({ valor: 2 }),
-            },
-            { context: 'cancelar pedido (excluir)', maxRetries: 3 }
-          )
-
-          if (result.response.ok) {
-            outcome = 'cancelado'
+          // Fonte unica de cancelamento no Bling (PATCH /situacoes { valor: 2 })
+          const cancelamento = await cancelarPedidoCompraBling(pedido.bling_id, accessToken)
+          if (cancelamento.ok) {
+            outcome = cancelamento.jaCancelado ? 'ja_cancelado' : 'cancelado'
             // Refletir cancelamento no DB tambem
             await supabase
               .from('pedidos_compra')
               .update({ situacao: 2, status_interno: 'cancelado', updated_at: new Date().toISOString() })
               .eq('id', pedidoId)
               .eq('empresa_id', empresaId)
-          } else if (result.response.status === 404) {
+          } else if (cancelamento.naoEncontrado) {
             outcome = 'nao_encontrado_bling'
           } else {
-            const errorText = await result.response.text().catch(() => '')
-            // Idempotencia: Bling devolve erro especifico quando ja esta cancelado
-            if (errorText.toLowerCase().includes('cancelad')) {
-              outcome = 'ja_cancelado'
-            } else {
-              outcome = 'falha_bling'
-              blingErrorMsg = errorText.slice(0, 300)
-              console.error('Erro ao cancelar no Bling:', result.response.status, errorText)
-            }
+            outcome = 'falha_bling'
+            blingErrorMsg = cancelamento.errorText
+            console.error('Erro ao cancelar no Bling:', cancelamento.status, cancelamento.errorText)
           }
         } catch (err) {
           outcome = 'falha_bling'
