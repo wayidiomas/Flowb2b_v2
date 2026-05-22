@@ -1441,22 +1441,27 @@ export default function VisualizarPedidoPage() {
                 <span className="text-gray-500">Subtotal ({pedido.itens.length} itens)</span>
                 <span className="font-medium">{formatCurrency(pedido.total_produtos)}</span>
               </div>
-              {pedido.frete && pedido.frete > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Frete</span>
-                  <span className="font-medium">{formatCurrency(pedido.frete)}</span>
-                </div>
-              )}
-              {pedido.desconto && pedido.desconto > 0 && (
+              {(pedido.frete ?? 0) > 0 && (() => {
+                const freteNaoSoma = pedido.frete_por_conta === 'CIF' || pedido.frete_por_conta === 'SEM_FRETE'
+                return (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Frete{freteNaoSoma ? ' (incluso no preco)' : ''}</span>
+                    <span className={freteNaoSoma ? 'font-medium text-gray-400' : 'font-medium'}>
+                      {formatCurrency(pedido.frete)}
+                    </span>
+                  </div>
+                )
+              })()}
+              {(pedido.desconto ?? 0) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Desconto</span>
                   <span className="font-medium text-green-600">-{formatCurrency(pedido.desconto)}</span>
                 </div>
               )}
-              {pedido.total_icms && pedido.total_icms > 0 && (
+              {(pedido.total_icms ?? 0) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">ICMS</span>
-                  <span className="font-medium">{formatCurrency(pedido.total_icms)}</span>
+                  <span className="font-medium">{formatCurrency(pedido.total_icms ?? 0)}</span>
                 </div>
               )}
               <div className="border-t pt-3 flex justify-between">
