@@ -156,21 +156,21 @@ export function PedidoEmAbertoModal({
                   </h3>
                   <div className="border border-[#EDEDED] rounded-lg overflow-hidden">
                     <div className="max-h-48 overflow-y-auto">
-                      <table className="w-full text-sm">
+                      <table className="w-full text-sm table-fixed">
                         <thead className="bg-[#FBFBFB] sticky top-0">
                           <tr>
                             <th className="py-2 px-3 text-left font-medium text-[#667085]">Produto</th>
-                            <th className="py-2 px-3 text-right font-medium text-[#667085] w-24">Qtd</th>
+                            <th className="py-2 px-3 text-right font-medium text-[#667085] w-16">Qtd</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#F0F0F0]">
                           {itens.slice(0, 10).map((item) => (
                             <tr key={item.produto_id} className="hover:bg-[#FBFBFB]">
-                              <td className="py-2 px-3">
-                                <div className="font-medium text-[#344054] truncate max-w-[280px]">
+                              <td className="py-2 px-3 min-w-0">
+                                <div className="font-medium text-[#344054] truncate">
                                   {item.nome}
                                 </div>
-                                <div className="text-xs text-[#838383]">
+                                <div className="text-xs text-[#838383] truncate">
                                   {item.codigo}
                                 </div>
                               </td>
@@ -210,7 +210,7 @@ export function PedidoEmAbertoModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-[#EDEDED] bg-[#FBFBFB] flex gap-3">
+        <div className="px-6 py-4 border-t border-[#EDEDED] bg-[#FBFBFB] flex flex-col-reverse sm:flex-row gap-2 sm:gap-3">
           <button
             onClick={onClose}
             className="flex-1 py-2.5 px-4 rounded-xl border border-[#D0D5DD] text-[#344054] font-medium hover:bg-[#F5F5F5] transition-colors"
