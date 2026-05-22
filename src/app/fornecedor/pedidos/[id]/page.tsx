@@ -103,7 +103,8 @@ interface ItemSugestao {
   produto_nome_original?: string | null  // nome do item original (para mostrar riscado)
   preco_unitario?: number | null          // preco do produto (novo ou substituto)
   preco_catalogo?: number | null          // preco do catalogo para comparacao na validacao
-  preco_espelho?: number | null           // preco extraido do espelho do lojista (preco praticado atual)
+  preco_espelho?: number | null           // preco extraido do espelho (preco praticado atual)
+  quantidade_espelho?: number | null      // quantidade extraida do espelho (cotacao do fornecedor) - usada no gate de envio
 }
 
 // Condicoes comerciais gerais da sugestao
@@ -286,20 +287,21 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         const precoEsp = valItem?.item_espelho?.preco_unitario ?? 0
         // Espelho eh fonte de verdade quando presente: praticado atual > tabela base
         const precoEspelhoNovo = precoEsp > 0 ? precoEsp : (sug.preco_espelho ?? null)
+        const qtdEspelhoNova = valItem?.item_espelho?.quantidade ?? (sug.quantidade_espelho ?? null)
         if (valItem?.status === 'faltando') {
-          return { ...sug, status_item: 'ruptura' as const, preco_espelho: precoEspelhoNovo }
+          return { ...sug, status_item: 'ruptura' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
         }
         // Quantidade divergente: lojista pediu X e espelho tem Y diferente
         const qtyPed = Number(sug.quantidade_sugerida) || 0
         const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
         if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
-          return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
+          return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
         }
         // Preco espelho absurdamente diferente do catalogo (>50%) — provavel erro de leitura da IA
         if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.5) {
-          return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
+          return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
         }
-        return { ...sug, status_item: 'ok' as const, preco_espelho: precoEspelhoNovo }
+        return { ...sug, status_item: 'ok' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
       })
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -340,18 +342,19 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 const precoEsp = valItem?.item_espelho?.preco_unitario ?? 0
                 // Espelho eh fonte de verdade quando presente: praticado atual > tabela base
                 const precoEspelhoNovo = precoEsp > 0 ? precoEsp : (sug.preco_espelho ?? null)
+                const qtdEspelhoNova = valItem?.item_espelho?.quantidade ?? (sug.quantidade_espelho ?? null)
                 if (valItem?.status === 'faltando') {
-                  return { ...sug, status_item: 'ruptura' as const, preco_espelho: precoEspelhoNovo }
+                  return { ...sug, status_item: 'ruptura' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
                 }
                 const qtyPed = Number(sug.quantidade_sugerida) || 0
                 const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
                 if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
-                  return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
+                  return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
                 }
                 if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.5) {
-                  return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
+                  return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
                 }
-                return { ...sug, status_item: 'ok' as const, preco_espelho: precoEspelhoNovo }
+                return { ...sug, status_item: 'ok' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
               }))
             }
           }
@@ -769,71 +772,102 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const handleSubmitSugestao = async () => {
     if (!data) return
 
-    // Validacao: itens alterados precisam ter validade preenchida
-    const itensAlteradosSemValidade = sugestoes.filter(sug => {
-      // Itens novos que foram modificados precisam de validade
-      if (sug.is_novo) {
-        return !sug.validade
-      }
-
-      const itemOriginal = data.itens.find(item => item.id === sug.item_id)
-      if (!itemOriginal) return false
-
-      // Verifica se o item foi alterado (quantidade, desconto, bonificacao, preco ou substituicao)
-      const foiAlterado =
-        sug.quantidade_sugerida !== itemOriginal.quantidade ||
-        sug.desconto_percentual > 0 ||
-        sug.bonificacao_quantidade > 0 ||
-        sug.is_substituicao ||
-        (sug.preco_editado != null && sug.preco_editado !== (itemOriginal.preco_catalogo ?? 0))
-
-      // Se foi alterado, precisa ter validade
-      return foiAlterado && !sug.validade
-    })
-
-    if (itensAlteradosSemValidade.length > 0) {
-      const nomesItens = itensAlteradosSemValidade
-        .map(sug => {
-          if (sug.is_novo) return sug.produto_nome || 'Novo item'
-          const item = data.itens.find(i => i.id === sug.item_id)
-          return item?.descricao || `Item #${sug.item_id}`
-        })
-        .slice(0, 3)
-        .join(', ')
-      const mais = itensAlteradosSemValidade.length > 3
-        ? ` e mais ${itensAlteradosSemValidade.length - 3}`
-        : ''
-
-      setToast({
-        type: 'error',
-        msg: `Preencha a validade dos itens alterados: ${nomesItens}${mais}`
-      })
-
-      // Scroll para o primeiro item sem validade
-      setTimeout(() => {
-        const primeiroItem = itensAlteradosSemValidade[0]
-        const elementId = primeiroItem.is_novo
-          ? `validade-novo-${sugestoes.indexOf(primeiroItem)}`
-          : `validade-${primeiroItem.item_id}`
-        const inputElement = document.getElementById(elementId)
-        if (inputElement) {
-          inputElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          inputElement.focus()
-          inputElement.classList.add('ring-2', 'ring-red-500', 'border-red-500')
-          setTimeout(() => {
-            inputElement.classList.remove('ring-2', 'ring-red-500', 'border-red-500')
-          }, 3000)
-        }
-      }, 100)
-      return
-    }
-
     // Block if divergent items without edited price
     const divergenteSemPreco = sugestoes.filter(s =>
       s.status_item === 'divergente' && !s.preco_editado && !s.preco_unitario
     )
     if (divergenteSemPreco.length > 0) {
       setToast({ type: 'error', msg: `${divergenteSemPreco.length} item(ns) divergente(s) precisam ter o preco ajustado.` })
+      return
+    }
+
+    // GATE unificado por item. O espelho (cotacao do fornecedor) e a fonte de verdade.
+    // - Aumentou vs pedido E acima do espelho (ou sem espelho): exige desconto/bonificacao/motivo.
+    // - Diminuiu vs pedido E diferente do espelho: exige motivo.
+    // - Item extra (is_novo): exige motivo.
+    // - Validade: exigida em qualquer alteracao do item; logo, todo caso que exige motivo
+    //   exige a validade JUNTO (pedidos na mesma mensagem).
+    const pendencias = sugestoes
+      .map(sug => {
+        const idx = sugestoes.indexOf(sug)
+        const obs = (sug.observacao_item || '').trim()
+        const temValidade = !!sug.validade
+        const pend: string[] = []
+        let contexto = ''
+
+        // Item extra incluido pelo fornecedor
+        if (sug.is_novo) {
+          if (!obs) pend.push('a observacao (ex: bonificacao/desconto ou motivo da inclusao)')
+          if (!temValidade) pend.push('a data de validade')
+          if (pend.length === 0) return null
+          const soVal = pend.length === 1 && pend[0] === 'a data de validade'
+          return { sug, nome: sug.produto_nome || 'Novo item', contexto: 'item extra', pend, scrollId: soVal ? `validade-novo-${idx}` : `obs-novo-${idx}` }
+        }
+
+        const itemOriginal = data.itens.find(item => item.id === sug.item_id)
+        if (!itemOriginal) return null
+        if (sug.status_item === 'ruptura' || sug.status_item === 'depreciado') return null
+        const nome = itemOriginal.descricao || `Item #${sug.item_id}`
+        const qtdEspelho = sug.quantidade_espelho ?? null
+
+        if (sug.quantidade_sugerida > itemOriginal.quantidade) {
+          const respaldado = qtdEspelho != null && sug.quantidade_sugerida <= qtdEspelho
+          if (!respaldado) {
+            const temJust = sug.desconto_percentual > 0 || sug.bonificacao_quantidade > 0 || !!obs
+            if (!temJust) {
+              contexto = qtdEspelho != null
+                ? `qtd aumentada (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida}, espelho ${qtdEspelho})`
+                : `qtd aumentada (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida})`
+              pend.push('desconto, bonificacao ou o motivo')
+            }
+          }
+        } else if (sug.quantidade_sugerida < itemOriginal.quantidade) {
+          const igualEspelho = qtdEspelho != null && sug.quantidade_sugerida === qtdEspelho
+          if (!igualEspelho && !obs) {
+            contexto = qtdEspelho != null
+              ? `qtd reduzida (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida}, espelho ${qtdEspelho})`
+              : `qtd reduzida (pediram ${itemOriginal.quantidade}, mandou ${sug.quantidade_sugerida})`
+            pend.push('o motivo (ex: estoque insuficiente)')
+          }
+        }
+
+        // Validade exigida em qualquer alteracao do item (inclui os casos de motivo acima)
+        const foiAlterado =
+          sug.quantidade_sugerida !== itemOriginal.quantidade ||
+          sug.desconto_percentual > 0 ||
+          sug.bonificacao_quantidade > 0 ||
+          sug.is_substituicao ||
+          (sug.preco_editado != null && sug.preco_editado !== (itemOriginal.preco_catalogo ?? 0))
+        // Tambem exige validade quando o espelho traz MAIS do que o lojista pediu
+        // (vem quantidade extra/lote a mais, precisa saber a validade desse lote).
+        const espelhoMaiorQuePedido = qtdEspelho != null && qtdEspelho > itemOriginal.quantidade
+        if ((foiAlterado || espelhoMaiorQuePedido) && !temValidade) {
+          if (espelhoMaiorQuePedido && !foiAlterado && !contexto) {
+            contexto = `espelho traz ${qtdEspelho} (pediram ${itemOriginal.quantidade})`
+          }
+          pend.push('a data de validade')
+        }
+
+        if (pend.length === 0) return null
+        const soVal = pend.length === 1 && pend[0] === 'a data de validade'
+        return { sug, nome, contexto, pend, scrollId: soVal ? `validade-${sug.item_id}` : `obs-${sug.item_id}` }
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+
+    if (pendencias.length > 0) {
+      const p = pendencias[0]
+      const mais = pendencias.length > 1 ? ` (e mais ${pendencias.length - 1})` : ''
+      const ctx = p.contexto ? `${p.contexto}: ` : ''
+      setToast({ type: 'error', msg: `${p.nome}: ${ctx}informe ${p.pend.join(' e ')}${mais}` })
+      setTimeout(() => {
+        const el = document.getElementById(p.scrollId)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          el.focus()
+          el.classList.add('ring-2', 'ring-red-500', 'border-red-500')
+          setTimeout(() => el.classList.remove('ring-2', 'ring-red-500', 'border-red-500'), 3000)
+        }
+      }, 100)
       return
     }
 
@@ -2122,6 +2156,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                         </td>
                         <td className="px-2 py-3 align-top">
                           <textarea
+                            id={`obs-${item.id}`}
                             maxLength={100}
                             rows={2}
                             value={sug.observacao_item}

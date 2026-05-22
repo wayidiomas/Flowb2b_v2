@@ -569,7 +569,14 @@ export function StatusActionCard({
                       {item.is_substituicao && <span className="block text-[9px] text-blue-600 mt-0.5">Substituicao</span>}
                     </td>
                     <td className="px-3 py-2.5 align-top">
-                      {item.espelhoFaltando ? (
+                      {item.is_novo ? (
+                        <ConferenciaHover
+                          cor="amber"
+                          titulo="Item extra do fornecedor"
+                          linhas={[`O fornecedor incluiu este produto, que NAO estava no seu pedido original.`, ...(item.observacao_item ? [`Obs: ${item.observacao_item}`] : [])]}
+                          trigger={<span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800">+ Extra</span>}
+                        />
+                      ) : item.espelhoFaltando ? (
                         <ConferenciaHover
                           cor="red"
                           titulo="Faltando no espelho"
@@ -640,9 +647,13 @@ export function StatusActionCard({
                         {item.precoSugerido != null ? (
                           <div>
                             <span className="font-semibold text-secondary-700">{formatCurrency(item.precoSugerido)}</span>
-                            <div className={`text-xs mt-0.5 ${item.precoSugerido < item.valorUnitario ? 'text-green-600' : 'text-red-500'}`}>
-                              {item.precoSugerido < item.valorUnitario ? '\u2193' : '\u2191'} {Math.abs(((item.precoSugerido - item.valorUnitario) / item.valorUnitario) * 100).toFixed(1)}%
-                            </div>
+                            {item.valorUnitario > 0 ? (
+                              <div className={`text-xs mt-0.5 ${item.precoSugerido < item.valorUnitario ? 'text-green-600' : 'text-red-500'}`}>
+                                {item.precoSugerido < item.valorUnitario ? '\u2193' : '\u2191'} {Math.abs(((item.precoSugerido - item.valorUnitario) / item.valorUnitario) * 100).toFixed(1)}%
+                              </div>
+                            ) : (
+                              <div className="text-xs mt-0.5 text-blue-500">novo (sem base)</div>
+                            )}
                           </div>
                         ) : (
                           <span className="text-gray-400 tabular-nums" title="Preco mantido pelo fornecedor">{formatCurrency(item.valorUnitario)}</span>
