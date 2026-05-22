@@ -105,6 +105,7 @@ interface ItemSugestao {
   preco_catalogo?: number | null          // preco do catalogo para comparacao na validacao
   preco_espelho?: number | null           // preco extraido do espelho (preco praticado atual)
   quantidade_espelho?: number | null      // quantidade extraida do espelho (cotacao do fornecedor) - usada no gate de envio
+  motivo_divergencia?: 'quantidade' | 'preco' | null  // por que a IA marcou como divergente (qtd do espelho difere x preco fora do catalogo)
 }
 
 // Condicoes comerciais gerais da sugestao
@@ -297,13 +298,13 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         const qtyPed = Number(sug.quantidade_sugerida) || 0
         const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
         if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
-          return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
+          return { ...sug, status_item: 'divergente' as const, motivo_divergencia: 'quantidade' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
         }
         // Preco espelho absurdamente diferente do catalogo (>50%) — provavel erro de leitura da IA
         if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.5) {
-          return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
+          return { ...sug, status_item: 'divergente' as const, motivo_divergencia: 'preco' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
         }
-        return { ...sug, status_item: 'ok' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
+        return { ...sug, status_item: 'ok' as const, motivo_divergencia: null, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
       })
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -351,12 +352,12 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 const qtyPed = Number(sug.quantidade_sugerida) || 0
                 const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
                 if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
-                  return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
+                  return { ...sug, status_item: 'divergente' as const, motivo_divergencia: 'quantidade' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
                 }
                 if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.5) {
-                  return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
+                  return { ...sug, status_item: 'divergente' as const, motivo_divergencia: 'preco' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
                 }
-                return { ...sug, status_item: 'ok' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
+                return { ...sug, status_item: 'ok' as const, motivo_divergencia: null, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
               }))
             }
           }
@@ -796,10 +797,23 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     const nome = itemOriginal.descricao || `Item #${sug.item_id}`
     const qtdEspelho = sug.quantidade_espelho ?? null
 
-    // Item com preco desatualizado (divergente) precisa do preco ajustado
-    if (sug.status_item === 'divergente' && !sug.preco_editado && !sug.preco_unitario) {
-      contexto = 'preco desatualizado'
-      pend.push('o preco ajustado')
+    // Item marcado como divergente pela IA. Texto/exigencia conforme o motivo:
+    // - 'quantidade': a qtd do espelho difere -> confirmar a quantidade (alinhar ao espelho) ou justificar
+    // - 'preco' (ou legado): preco fora do catalogo -> informar o preco ajustado
+    if (sug.status_item === 'divergente') {
+      if (sug.motivo_divergencia === 'quantidade') {
+        const qe = sug.quantidade_espelho ?? null
+        const resolvido = (qe != null && sug.quantidade_sugerida === qe) || !!obs
+        if (!resolvido) {
+          contexto = qe != null
+            ? `quantidade divergente do espelho (espelho mostra ${qe})`
+            : 'quantidade divergente do espelho'
+          pend.push('a confirmacao da quantidade ou um motivo')
+        }
+      } else if (!sug.preco_editado && !sug.preco_unitario) {
+        contexto = 'preco fora do catalogo'
+        pend.push('o preco ajustado')
+      }
     }
 
     if (sug.quantidade_sugerida > itemOriginal.quantidade) {
