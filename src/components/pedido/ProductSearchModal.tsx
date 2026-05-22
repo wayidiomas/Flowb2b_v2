@@ -10,6 +10,11 @@ export interface CatalogoProduto {
   unidade: string | null
   preco: number | null
   vinculado_empresa: boolean
+  // Campos opcionais usados pelo catalogo do fornecedor (item extra em pedidos de compra).
+  // Opcionais para nao quebrar os outros usos do modal (substituir/adicionar no portal do fornecedor).
+  produto_id?: number
+  id_produto_bling?: number
+  itens_por_caixa?: number
 }
 
 interface ProductSearchModalProps {
@@ -53,7 +58,7 @@ export function ProductSearchModal({
       if (searchTerm) params.set('search', searchTerm)
 
       const url = apiEndpoint
-        ? `${apiEndpoint}?${params}`
+        ? `${apiEndpoint}${apiEndpoint.includes('?') ? '&' : '?'}${params}`
         : `${apiBasePath}/${pedidoId}/catalogo-produtos?${params}`
       const res = await fetch(url)
       if (res.ok) {

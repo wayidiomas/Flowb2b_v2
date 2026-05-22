@@ -11,6 +11,7 @@ import { FRETE_POR_CONTA_OPTIONS, calcularTotalPedido } from '@/types/pedido-com
 import { PedidoEmAbertoModal } from '@/components/compras/curva'
 import { ModalSincronizarCatalogo } from '@/components/compras/ModalSincronizarCatalogo'
 import { useCatalogoGate } from '@/hooks/useCatalogoGate'
+import { ProductSearchModal, type CatalogoProduto } from '@/components/pedido/ProductSearchModal'
 
 // Icons
 function ArrowLeftIcon() {
@@ -198,6 +199,7 @@ interface SugestaoItem {
   valor_total: number
   itens_por_caixa: number
   caixas: number
+  is_adicional?: boolean  // Item adicionado manualmente (linha destacada em amarelo)
 }
 
 interface Fornecedor {
@@ -266,6 +268,15 @@ function GerarAutomaticoContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const fornecedorIdParam = searchParams.get('fornecedor_id')
+  const pedidoIdParam = searchParams.get('pedido_id')
+
+  // Modo edicao: a tela tambem edita um pedido de compra existente
+  const isEdicao = !!pedidoIdParam
+  const pedidoId = pedidoIdParam ? parseInt(pedidoIdParam) : null
+  const [numeroPedido, setNumeroPedido] = useState<string>('')
+
+  // Modal de busca de produtos (item extra)
+  const [showProdutoModal, setShowProdutoModal] = useState(false)
 
   const [fornecedor, setFornecedor] = useState<Fornecedor | null>(null)
   // Gate do catálogo: bloqueia o cálculo da IA até o lojista sincronizar atualizações
@@ -372,6 +383,16 @@ function GerarAutomaticoContent() {
   // Carregar dados do fornecedor e politica
   useEffect(() => {
     const fetchData = async () => {
+      // MODO EDICAO: carregar pedido existente em vez de exigir selecao + calculo
+      if (pedidoIdParam) {
+        if (!user?.id) {
+          setLoading(false)
+          return
+        }
+        await carregarPedidoExistente(parseInt(pedidoIdParam))
+        return
+      }
+
       // Se nao tiver fornecedor_id, mostrar modal de selecao
       if (!fornecedorIdParam) {
         setLoading(false)
@@ -427,7 +448,138 @@ function GerarAutomaticoContent() {
     }
 
     fetchData()
-  }, [fornecedorIdParam, user?.id, user?.empresa_id, empresa?.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fornecedorIdParam, pedidoIdParam, user?.id, user?.empresa_id, empresa?.id])
+
+  // MODO EDICAO: carrega um pedido de compra existente e popula o formulario
+  const carregarPedidoExistente = async (id: number) => {
+    try {
+      const empresaId = empresa?.id || user?.empresa_id
+      if (!empresaId) {
+        setLoading(false)
+        return
+      }
+
+      // Buscar detalhes do pedido via RPC (mesmo padrao da tela de edicao)
+      const { data: pedidoRows, error: pError } = await supabase.rpc('flowb2b_get_pedido_compra_detalhes', {
+        p_pedido_id: id,
+        p_empresa_id: empresaId,
+      })
+
+      if (pError) throw pError
+      if (!pedidoRows || pedidoRows.length === 0) {
+        setError('Pedido nao encontrado')
+        setLoading(false)
+        return
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = pedidoRows[0] as any
+
+      setNumeroPedido(p.numero || '')
+
+      // Fornecedor
+      setFornecedor({
+        id: p.fornecedor_id,
+        id_bling: p.fornecedor_id_bling || null,
+        nome: p.fornecedor_nome || '',
+        cnpj: p.fornecedor_cnpj || null,
+      })
+
+      // Cabecalho
+      setFrete(p.frete || 0)
+      setFretePorConta(p.frete_por_conta || 'CIF')
+      setObservacoes(p.observacoes || '')
+      setObservacoesInternas(p.observacoes_internas || '')
+      setDataPrevista(p.data_prevista ? String(p.data_prevista).split('T')[0] : '')
+      setPoliticaSelecionadaId(p.politica_id || null)
+
+      // Itens -> SugestaoItem
+      if (p.itens && p.itens.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const itensFormatados: SugestaoItem[] = p.itens.map((item: any) => {
+          const itensPorCaixa = item.itens_por_caixa || 1
+          const quantidade = item.quantidade || 0
+          const valorUnitario = item.valor || 0
+          return {
+            produto_id: item.produto_id,
+            id_produto_bling: item.id_produto_bling || undefined,
+            codigo: item.codigo_produto || item.codigo || '-',
+            nome: item.descricao || '',
+            ean: item.ean || '',
+            codigo_fornecedor: item.codigo_fornecedor || undefined,
+            estoque_atual: item.estoque_atual || 0,
+            media_vendas_dia: 0,
+            sugestao_quantidade: quantidade,
+            quantidade_ajustada: quantidade,
+            valor_unitario: valorUnitario,
+            valor_total: quantidade * valorUnitario,
+            itens_por_caixa: itensPorCaixa,
+            caixas: itensPorCaixa > 0 ? Math.ceil(quantidade / itensPorCaixa) : quantidade,
+          }
+        })
+        setSugestoes(itensFormatados)
+      }
+
+      // Carregar politicas do fornecedor (para detalhes/desconto)
+      if (p.fornecedor_id) {
+        const { data: politicasData } = await supabase
+          .from('politica_compra')
+          .select('id, valor_minimo, desconto, prazo_entrega, prazo_estoque, bonificacao, forma_pagamento_dias, observacao, status')
+          .eq('fornecedor_id', p.fornecedor_id)
+          .eq('empresa_id', empresaId)
+          .or('isdeleted.is.null,isdeleted.eq.false')
+          .order('valor_minimo', { ascending: true })
+
+        if (politicasData && politicasData.length > 0) {
+          setPoliticas(politicasData)
+        }
+      }
+
+      // Carregar formas de pagamento ANTES de processar parcelas
+      const { data: formas } = await supabase
+        .from('formas_de_pagamento')
+        .select('id, id_forma_de_pagamento_bling, descricao')
+        .eq('empresa_id', empresaId)
+        .order('descricao')
+
+      const formasFormatadas: FormaPagamento[] = (formas || []).map(f => ({
+        id: f.id,
+        id_bling: f.id_forma_de_pagamento_bling,
+        descricao: f.descricao,
+      }))
+      setFormasPagamento(formasFormatadas)
+
+      // Parcelas (forma_pagamento_id da RPC vem como Bling ID)
+      if (p.parcelas && p.parcelas.length > 0) {
+        const blingToInternal = new Map<number, number>()
+        formasFormatadas.forEach(f => {
+          if (f.id_bling) blingToInternal.set(f.id_bling, f.id)
+        })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const parcelasFormatadas: ParcelaPedido[] = p.parcelas.map((parcela: any) => {
+          const blingId = parcela.forma_pagamento_id
+          const idInterno = blingId ? blingToInternal.get(blingId) : undefined
+          const formaEncontrada = formasFormatadas.find(f => f.id_bling === blingId)
+          return {
+            valor: parcela.valor,
+            data_vencimento: parcela.data_vencimento ? String(parcela.data_vencimento).split('T')[0] : '',
+            observacao: parcela.observacao || '',
+            forma_pagamento_id: idInterno,
+            forma_pagamento_id_bling: blingId || undefined,
+            forma_pagamento_nome: formaEncontrada?.descricao,
+          }
+        })
+        setParcelas(parcelasFormatadas)
+      }
+
+      setLoading(false)
+    } catch (err) {
+      console.error('Erro ao carregar pedido para edicao:', err)
+      setError('Erro ao carregar dados do pedido')
+      setLoading(false)
+    }
+  }
 
   // Selecionar fornecedor do modal
   const handleSelectFornecedor = async (selected: FornecedorOption) => {
@@ -944,6 +1096,195 @@ function GerarAutomaticoContent() {
     setSugestoes(prev => prev.filter((_, i) => i !== index))
   }
 
+  // Exportar a tabela de sugestoes para CSV (padrao BR: ; como separador + BOM para Excel)
+  const handleExportarCSV = () => {
+    if (sugestoes.length === 0) {
+      showToast('warning', 'Sem produtos', 'Nao ha itens para exportar.')
+      return
+    }
+
+    const escaparCampo = (valor: string | number | undefined | null): string => {
+      const texto = valor === undefined || valor === null ? '' : String(valor)
+      // Aspas duplas para campos com ; aspas ou quebra de linha
+      if (/[";\n]/.test(texto)) {
+        return `"${texto.replace(/"/g, '""')}"`
+      }
+      return texto
+    }
+
+    const cabecalho = ['Codigo', 'EAN', 'Produto', 'Estoque', 'Itens/Cx', 'Media/dia', 'Sugestao', 'Qtd', 'Valor Unit', 'Total']
+    const linhas = sugestoes.map(item => [
+      escaparCampo(item.codigo),
+      escaparCampo(item.ean),
+      escaparCampo(item.nome),
+      escaparCampo(item.estoque_atual),
+      escaparCampo(item.itens_por_caixa),
+      escaparCampo(item.media_vendas_dia),
+      escaparCampo(item.sugestao_quantidade),
+      escaparCampo(item.quantidade_ajustada),
+      escaparCampo(item.valor_unitario.toFixed(2).replace('.', ',')),
+      escaparCampo(item.valor_total.toFixed(2).replace('.', ',')),
+    ].join(';'))
+
+    const csv = '﻿' + [cabecalho.join(';'), ...linhas].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+
+    const dataStr = new Date().toISOString().split('T')[0]
+    const fornecedorSlug = (fornecedor?.nome || 'fornecedor')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `pedido_${fornecedorSlug}_${dataStr}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  // Adicionar item extra ao pedido a partir do catalogo do fornecedor
+  const handleAdicionarItemExtra = (produto: CatalogoProduto) => {
+    const itensPorCaixa = produto.itens_por_caixa && produto.itens_por_caixa > 0 ? produto.itens_por_caixa : 1
+    const valorUnitario = produto.preco || 0
+    // Reaproveita a logica de arredondamento por caixa (vide handleQuantidadeChange)
+    const quantidadeInicial = itensPorCaixa
+    const caixas = Math.ceil(quantidadeInicial / itensPorCaixa)
+    const quantidadeAjustada = caixas * itensPorCaixa
+
+    const novoItem: SugestaoItem = {
+      produto_id: produto.produto_id ?? 0,
+      id_produto_bling: produto.id_produto_bling,
+      codigo: produto.codigo_fornecedor || '-',
+      nome: produto.nome,
+      ean: produto.gtin || '',
+      codigo_fornecedor: produto.codigo_fornecedor || undefined,
+      estoque_atual: 0,
+      media_vendas_dia: 0,
+      sugestao_quantidade: 0,
+      quantidade_ajustada: quantidadeAjustada,
+      valor_unitario: valorUnitario,
+      valor_total: quantidadeAjustada * valorUnitario,
+      itens_por_caixa: itensPorCaixa,
+      caixas,
+      is_adicional: true,
+    }
+
+    setSugestoes(prev => [...prev, novoItem])
+    setShowProdutoModal(false)
+    showToast('success', 'Item adicionado', `"${produto.nome}" foi adicionado ao pedido.`)
+  }
+
+  // MODO EDICAO: salvar alteracoes no pedido existente (PUT)
+  const handleSalvarEdicao = async () => {
+    if (!pedidoId || !fornecedor) return
+
+    if (sugestoes.length === 0) {
+      showToast('warning', 'Sem produtos', 'Adicione pelo menos um produto ao pedido.')
+      return
+    }
+
+    const itensInvalidos = sugestoes.filter(item => item.quantidade_ajustada <= 0 || item.valor_unitario <= 0)
+    if (itensInvalidos.length > 0) {
+      showToast('error', 'Valores invalidos',
+        'Existem produtos com quantidade ou valor zerado/negativo. Corrija antes de continuar.')
+      return
+    }
+
+    // Validacao: forma de pagamento nas parcelas
+    if (parcelas.length > 0) {
+      const indiceSemForma = parcelas.findIndex(p => !p.forma_pagamento_id_bling)
+      if (indiceSemForma !== -1) {
+        showToast('error', 'Forma de pagamento obrigatoria',
+          'Selecione uma forma de pagamento para todas as parcelas antes de salvar.')
+        return
+      }
+    }
+
+    setSaving(true)
+    setError(null)
+
+    try {
+      const dataAtual = new Date().toISOString().split('T')[0]
+
+      const itensPayload = sugestoes.map(item => ({
+        descricao: item.nome,
+        codigoFornecedor: item.codigo_fornecedor || undefined,
+        unidade: 'UN',
+        valor: item.valor_unitario,
+        quantidade: item.quantidade_ajustada,
+        aliquotaIPI: 0,
+        produto_id: item.produto_id,
+        produto: item.id_produto_bling ? {
+          id: item.id_produto_bling,
+          codigo: item.codigo,
+        } : undefined,
+      }))
+
+      const parcelasPayload = parcelas.length > 0 ? parcelas.map(p => ({
+        valor: p.valor,
+        dataVencimento: p.data_vencimento,
+        observacao: p.observacao || '',
+        formaPagamento: p.forma_pagamento_id_bling ? { id: p.forma_pagamento_id_bling } : undefined,
+      })) : undefined
+
+      let observacoesFinais = observacoes || ''
+      if (politica?.bonificacao && politica.bonificacao > 0) {
+        const textoBonificacao = `Bonificacao acordada: ${politica.bonificacao}%`
+        observacoesFinais = observacoesFinais
+          ? `${observacoesFinais}\n${textoBonificacao}`
+          : textoBonificacao
+      }
+
+      const payload = {
+        fornecedor_id: fornecedor.id,
+        fornecedor_id_bling: fornecedor.id_bling,
+        data: dataAtual,
+        dataPrevista: dataPrevista || undefined,
+        totalProdutos: valorTotal,
+        total: valorTotalComFrete,
+        desconto: valorDesconto,
+        frete: frete,
+        fretePorConta: fretePorConta,
+        observacoes: observacoesFinais || undefined,
+        observacoesInternas: observacoesInternas || undefined,
+        politicaId: politicaSelecionadaId || undefined,
+        itens: itensPayload,
+        parcelas: parcelasPayload,
+      }
+
+      const response = await fetch(`/api/pedidos-compra/${pedidoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        const errorMessage = parseBlingError(result.error || 'Erro desconhecido', result.details)
+        showToast('error', 'Erro ao salvar edicao', errorMessage)
+        return
+      }
+
+      showToast('success', 'Pedido atualizado!', `Pedido #${numeroPedido || pedidoId} foi salvo com sucesso.`)
+
+      setTimeout(() => {
+        router.push(`/compras/pedidos/${pedidoId}`)
+      }, 1500)
+    } catch (err) {
+      console.error('Erro ao salvar edicao:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Erro inesperado ao salvar o pedido.'
+      showToast('error', 'Erro ao salvar edicao', parseBlingError(errorMessage))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // Criar pedido com as sugestoes - Envia para Bling e depois salva localmente
   const handleCriarPedido = async () => {
     // Validacao: Sugestoes existentes
@@ -1174,7 +1515,7 @@ function GerarAutomaticoContent() {
       {toast && <ToastNotification toast={toast} onClose={() => setToast(null)} />}
 
       <PageHeader
-        title="Gerar Pedido Automatico"
+        title={isEdicao ? `Editar Pedido${numeroPedido ? ` #${numeroPedido}` : ''}` : 'Gerar Pedido Automatico'}
         subtitle={fornecedor?.nome || ''}
       />
 
@@ -1653,7 +1994,7 @@ function GerarAutomaticoContent() {
                 </thead>
                 <tbody>
                   {sugestoes.map((item, index) => (
-                    <tr key={item.produto_id} className="border-b border-[#EFEFEF] hover:bg-gray-50">
+                    <tr key={`${item.produto_id}-${index}`} className={`border-b border-[#EFEFEF] hover:bg-gray-50 ${item.is_adicional ? 'bg-yellow-50' : ''}`}>
                       <td className="px-4 py-3 text-sm text-[#344054]">{item.codigo}</td>
                       <td className="px-4 py-3 text-sm text-[#667085] font-mono text-xs">{item.ean || '-'}</td>
                       <td className="px-4 py-3 text-sm text-[#344054] max-w-[200px] truncate" title={item.nome}>
@@ -1701,7 +2042,7 @@ function GerarAutomaticoContent() {
             {/* Mobile card list */}
             <div className="md:hidden divide-y divide-gray-100">
               {sugestoes.map((item, index) => (
-                <div key={item.produto_id} className="p-4 space-y-3">
+                <div key={`${item.produto_id}-${index}`} className={`p-4 space-y-3 ${item.is_adicional ? 'bg-yellow-50' : ''}`}>
                   {/* Header */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -2010,28 +2351,54 @@ function GerarAutomaticoContent() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Exportar CSV */}
                 <button
-                  onClick={calcularSugestoes}
-                  disabled={calculando}
-                  className="px-4 py-2.5 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 transition-colors"
+                  onClick={handleExportarCSV}
+                  disabled={sugestoes.length === 0}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#475569] bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
-                  Recalcular
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  Exportar CSV
                 </button>
+                {/* Adicionar item extra */}
+                {sugestoes.length > 0 && fornecedor && (
+                  <button
+                    onClick={() => setShowProdutoModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#336FB6] bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Adicionar item extra
+                  </button>
+                )}
+                {/* Recalcular - apenas no modo criar */}
+                {!isEdicao && (
+                  <button
+                    onClick={calcularSugestoes}
+                    disabled={calculando}
+                    className="px-4 py-2.5 text-sm font-medium text-[#336FB6] bg-white border border-[#336FB6] rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Recalcular
+                  </button>
+                )}
                 <button
-                  onClick={handleCriarPedido}
+                  onClick={isEdicao ? handleSalvarEdicao : handleCriarPedido}
                   disabled={saving || sugestoes.length === 0}
                   className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#009E3F] hover:bg-[#008735] rounded-lg transition-colors disabled:opacity-50"
                 >
                   {saving ? (
                     <>
                       <SpinnerIcon />
-                      Criando...
+                      {isEdicao ? 'Salvando...' : 'Criando...'}
                     </>
                   ) : (
                     <>
                       <CheckIcon />
-                      Criar Pedido
+                      {isEdicao ? 'Salvar edicao' : 'Criar Pedido'}
                     </>
                   )}
                 </button>
@@ -2152,6 +2519,18 @@ function GerarAutomaticoContent() {
             calcularSugestoes()
           }}
           onVoltar={() => setShowGateModal(false)}
+        />
+      )}
+
+      {/* Modal de busca de produtos para adicionar item extra (catalogo do fornecedor) */}
+      {fornecedor && (
+        <ProductSearchModal
+          isOpen={showProdutoModal}
+          onClose={() => setShowProdutoModal(false)}
+          onSelect={handleAdicionarItemExtra}
+          pedidoId={pedidoId ?? 0}
+          mode="adicionar"
+          apiEndpoint={`/api/pedidos-compra/catalogo-fornecedor?fornecedor_id=${fornecedor.id}`}
         />
       )}
 

@@ -264,6 +264,8 @@ export interface SugestaoItem {
   valor_unitario_com_desconto?: number
   subtotal_original?: number
   subtotal_sugerido?: number
+  // Item adicionado manualmente (fora da sugestao automatica) - linha destacada em amarelo
+  is_adicional?: boolean
 }
 
 // Condicoes comerciais para UI do fornecedor
