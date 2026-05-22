@@ -466,7 +466,8 @@ export async function PUT(
         total_produtos: body.totalProdutos,
         total: body.total,
         desconto: body.desconto || 0,
-        frete: body.frete || 0,
+        // CIF/SEM_FRETE: frete nao soma ao total, entao gravamos 0 (consistente com o Bling)
+        frete: (body.fretePorConta === 'CIF' || body.fretePorConta === 'SEM_FRETE') ? 0 : (body.frete || 0),
         total_icms: body.totalIcms || 0,
         total_ipi: body.totalIpi || 0,
         transportador: body.transportador || null,

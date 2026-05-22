@@ -595,7 +595,8 @@ export async function POST(request: NextRequest) {
       p_total_produtos: body.totalProdutos,
       p_total: body.total,
       p_desconto: body.desconto || 0,
-      p_frete: body.frete || 0,
+      // CIF/SEM_FRETE: frete nao soma ao total, entao gravamos 0 (consistente com o Bling)
+      p_frete: (body.fretePorConta === 'CIF' || body.fretePorConta === 'SEM_FRETE') ? 0 : (body.frete || 0),
       p_total_icms: body.totalIcms || 0,
       p_total_ipi: body.totalIpi || 0,
       p_transportador: body.transportador || null,
