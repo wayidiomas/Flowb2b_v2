@@ -796,6 +796,12 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     const nome = itemOriginal.descricao || `Item #${sug.item_id}`
     const qtdEspelho = sug.quantidade_espelho ?? null
 
+    // Item com preco desatualizado (divergente) precisa do preco ajustado
+    if (sug.status_item === 'divergente' && !sug.preco_editado && !sug.preco_unitario) {
+      contexto = 'preco desatualizado'
+      pend.push('o preco ajustado')
+    }
+
     if (sug.quantidade_sugerida > itemOriginal.quantidade) {
       const respaldado = qtdEspelho != null && sug.quantidade_sugerida <= qtdEspelho
       if (!respaldado) {
@@ -841,16 +847,6 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   // O espelho (cotacao do fornecedor) e a fonte de verdade.
   const validarGateEnvio = (): boolean => {
     if (!data) return false
-
-    // Itens divergentes precisam de preco ajustado
-    const divergenteSemPreco = sugestoes.filter(s =>
-      s.status_item === 'divergente' && !s.preco_editado && !s.preco_unitario
-    )
-    if (divergenteSemPreco.length > 0) {
-      setToast({ type: 'error', msg: `${divergenteSemPreco.length} item(ns) divergente(s) precisam ter o preco ajustado.` })
-      setCurrentStep(3)
-      return false
-    }
 
     const pendencias = sugestoes
       .map(sug => {
