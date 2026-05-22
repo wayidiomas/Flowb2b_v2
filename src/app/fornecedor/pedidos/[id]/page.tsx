@@ -174,7 +174,15 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   // Busca + paginacao da tabela principal de itens (step 3)
   const [itensSearch, setItensSearch] = useState('')
   const [itensPage, setItensPage] = useState(1)
-  const ITENS_PER_PAGE = 5
+  // 30 itens por pagina no desktop, 10 no mobile
+  const [ITENS_PER_PAGE, setItensPerPage] = useState(30)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const apply = () => setItensPerPage(mq.matches ? 10 : 30)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
   // IDs dos itens que falharam no gate de envio: sobem para o topo da tabela (sort inteligente)
   const [gatePendentesIds, setGatePendentesIds] = useState<Set<number>>(new Set())
   // Reset pagina quando muda search
