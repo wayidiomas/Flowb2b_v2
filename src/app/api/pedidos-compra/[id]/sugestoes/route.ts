@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/permissions'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 import { blingFetch } from '@/lib/bling-fetch'
 import { logActivity } from '@/lib/activity-log'
+import { normalizarPrecoSugerido } from '@/lib/sugestao-preco'
 
 // ============================================================
 // Funcoes auxiliares para resolucao de produtos (troca/novos)
@@ -427,7 +428,28 @@ export async function GET(
         .select('*, quantidade_pedida, valor_pedido')
         .eq('sugestao_id', pendente.id)
 
-      sugestaoItens = itens
+      // Enriquece cada item com itens_por_caixa do produto (usado pela
+      // normalizacao emergencial de preco em caixa — ver src/lib/sugestao-preco.ts)
+      if (itens && itens.length > 0) {
+        const produtoIds = Array.from(new Set(itens.map(i => i.produto_id).filter((v): v is number => v != null)))
+        if (produtoIds.length > 0) {
+          const { data: produtos } = await supabase
+            .from('produtos')
+            .select('id, itens_por_caixa')
+            .in('id', produtoIds)
+          const mapCx = new Map<number, number | null>(
+            (produtos || []).map(p => [p.id as number, (p as { itens_por_caixa?: number | null }).itens_por_caixa ?? null])
+          )
+          sugestaoItens = itens.map(it => ({
+            ...it,
+            itens_por_caixa: it.produto_id ? mapCx.get(it.produto_id) ?? null : null,
+          }))
+        } else {
+          sugestaoItens = itens
+        }
+      } else {
+        sugestaoItens = itens
+      }
     }
 
     return NextResponse.json({
@@ -506,10 +528,28 @@ export async function POST(
         // Primeiro, buscar os itens atuais para calcular valores
         const { data: itensAtuais } = await supabase
           .from('itens_pedido_compra')
-          .select('id, valor, quantidade')
+          .select('id, valor, quantidade, produto_id')
           .eq('pedido_compra_id', pedidoId)
 
         const itensMap = new Map((itensAtuais || []).map(i => [i.id, i]))
+
+        // Normalizacao emergencial de preco em caixa (ver src/lib/sugestao-preco.ts):
+        // busca itens_por_caixa dos produtos envolvidos para uso no loop
+        const produtoIdsNorm = Array.from(new Set(
+          (itensAtuais || [])
+            .map((i: { produto_id?: number | null }) => i.produto_id)
+            .filter((v): v is number => v != null)
+        ))
+        const itensPorCaixaMap = new Map<number, number | null>()
+        if (produtoIdsNorm.length > 0) {
+          const { data: prods } = await supabase
+            .from('produtos')
+            .select('id, itens_por_caixa')
+            .in('id', produtoIdsNorm)
+          for (const p of (prods || []) as Array<{ id: number; itens_por_caixa?: number | null }>) {
+            itensPorCaixaMap.set(p.id, p.itens_por_caixa ?? null)
+          }
+        }
 
         for (const sItem of sugestaoItens) {
           if (sItem.is_novo) {
@@ -611,9 +651,26 @@ export async function POST(
             // ---- NORMAL: fluxo atual (atualiza quantidade/desconto no item existente) ----
             const itemAtual = itensMap.get(sItem.item_pedido_compra_id)
             if (itemAtual) {
-              // Se fornecedor sugeriu novo preço, usar ele como base
-              const precoAlterado = sItem.preco_unitario != null && sItem.preco_unitario !== itemAtual.valor
-              const valorBase = precoAlterado ? sItem.preco_unitario : itemAtual.valor
+              // Normalizacao emergencial: se o fornecedor enviou preco como CAIXA por engano
+              // (ratio preco_sug/preco_orig proximo de itens_por_caixa), corrigimos antes de gravar.
+              const cxItem = itemAtual.produto_id ? itensPorCaixaMap.get(itemAtual.produto_id as number) ?? null : null
+              const norm = normalizarPrecoSugerido(sItem.preco_unitario, itemAtual.valor, cxItem)
+              if (norm.foiConvertido) {
+                console.warn('[sugestao-preco/aceitar] normalizado de caixa para unidade', {
+                  pedido_id: pedidoId,
+                  item_id: sItem.item_pedido_compra_id,
+                  produto_id: itemAtual.produto_id,
+                  preco_orig: itemAtual.valor,
+                  preco_recebido: sItem.preco_unitario,
+                  preco_corrigido: norm.precoCorrigido,
+                  ratio: norm.ratio,
+                  itens_por_caixa: norm.itensPorCaixa,
+                })
+              }
+              const precoSugCorrigido = norm.precoCorrigido
+              // Se fornecedor sugeriu novo preço (apos normalizacao), usar ele como base
+              const precoAlterado = precoSugCorrigido > 0 && precoSugCorrigido !== itemAtual.valor
+              const valorBase = precoAlterado ? precoSugCorrigido : itemAtual.valor
               const descontoItem = sItem.desconto_percentual || 0
               const valorComDesconto = valorBase * (1 - descontoItem / 100)
               const qtdBonificacao = sItem.bonificacao_quantidade || 0

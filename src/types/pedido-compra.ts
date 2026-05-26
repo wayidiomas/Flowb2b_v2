@@ -250,6 +250,7 @@ export interface SugestaoItem {
   bonificacao_quantidade: number     // Quantidade de unidades bonificadas deste item
   validade?: string
   preco_unitario?: number | null     // Preco sugerido pelo fornecedor (quando diferente do original)
+  itens_por_caixa?: number | null    // Anexado pela API (GET /sugestoes) — usado para normalizar preco em caixa
   status_item?: 'ok' | 'depreciado' | 'ruptura' | 'divergente' | null  // Status marcado pelo fornecedor
   observacao_item?: string | null    // Observacao do fornecedor pra este item
   is_substituicao?: boolean          // Produto substituto

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { StatusInterno, SugestaoFornecedor, SugestaoItem } from '@/types/pedido-compra'
 import { ESTADOS_FINAIS } from '@/types/pedido-compra'
+import { normalizarPrecoSugerido } from '@/lib/sugestao-preco'
 
 // Tooltip estilizado (branding FlowB2B), instantaneo e posicionado via fixed
 // para nao ser cortado pelo overflow da tabela.
@@ -308,9 +309,33 @@ export function StatusActionCard({
 
     const itensCalculados = sugestaoItens.map((sItem) => {
       const itemOriginal = itens.find(i => i.id === sItem.item_pedido_compra_id)
-      const valorUnitario = itemOriginal?.valor || 0
-      const precoSugerido = sItem.preco_unitario != null && sItem.preco_unitario !== valorUnitario ? sItem.preco_unitario : null
+      // Preferimos o snapshot do pedido original (gravado na criacao da sugestao)
+      // sobre o itemOriginal.valor — porque o valor do item pode ter sido alterado
+      // pelo proprio algoritmo de calculo automatico (que ja salva preco de caixa
+      // por engano). O snapshot e a fonte mais confiavel do "preco que o lojista pediu".
+      const valorUnitario = (sItem.valor_pedido != null && sItem.valor_pedido > 0)
+        ? sItem.valor_pedido
+        : (itemOriginal?.valor || 0)
+      // Correcao emergencial: se o fornecedor enviou preco em CAIXA por engano
+      // (ratio preco_sug/preco_orig proximo de itens_por_caixa), normalizamos.
+      const norm = normalizarPrecoSugerido(sItem.preco_unitario, valorUnitario, sItem.itens_por_caixa)
+      if (norm.foiConvertido && typeof window !== 'undefined') {
+        console.warn('[sugestao-preco] normalizado de caixa para unidade', {
+          produto_id: sItem.produto_id,
+          item_id: sItem.item_pedido_compra_id,
+          preco_orig: valorUnitario,
+          preco_recebido: sItem.preco_unitario,
+          preco_corrigido: norm.precoCorrigido,
+          ratio: norm.ratio,
+          itens_por_caixa: norm.itensPorCaixa,
+        })
+      }
+      const precoCorrigido = norm.precoCorrigido
+      const precoSugerido = precoCorrigido > 0 && precoCorrigido !== valorUnitario ? precoCorrigido : null
       const valorBase = precoSugerido ?? valorUnitario
+      const precoCaixaConvertido = norm.foiConvertido
+        ? { precoRecebido: sItem.preco_unitario as number, itensPorCaixa: norm.itensPorCaixa }
+        : null
       const qtdOriginal = itemOriginal?.quantidade || 0
       const qtdSugerida = sItem.quantidade_sugerida
       const descontoItem = sItem.desconto_percentual || 0
@@ -388,7 +413,7 @@ export function StatusActionCard({
         return partes.join('\n')
       })()
 
-      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct }
+      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct, precoCaixaConvertido }
     })
 
     const temPrecoSugerido = itensCalculados.some(item => item.precoSugerido != null || item.espelhoVsCusto != null)
@@ -667,6 +692,14 @@ export function StatusActionCard({
                               </div>
                             ) : (
                               <div className="text-xs mt-0.5 text-blue-500">novo (sem base)</div>
+                            )}
+                            {item.precoCaixaConvertido && (
+                              <div
+                                className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-medium border border-amber-200 cursor-help"
+                                title={`Fornecedor enviou ${formatCurrency(item.precoCaixaConvertido.precoRecebido)} (preco da caixa de ${item.precoCaixaConvertido.itensPorCaixa} un). Convertido automaticamente para preco por unidade.`}
+                              >
+                                \u2699 convertido de caixa
+                              </div>
                             )}
                           </div>
                         ) : (
