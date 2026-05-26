@@ -109,6 +109,79 @@ function approxEqual(a: number, b: number, tolerance = 0.02): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Gramatura: extracao e comparacao
+// Evita matches falsos da IA entre "X 7kg" e "X 10kg" (mesmo nome-base, peso diferente).
+// ---------------------------------------------------------------------------
+
+interface Gramatura {
+  valor: number   // sempre normalizado para a unidade base
+  unidade: 'g' | 'ml' | 'un'  // base normalizada (peso, volume, unidades)
+}
+
+// Extrai TODAS as gramaturas/volumes mencionados num texto.
+// Ex: "FN FRESH MEAT 2,5kg c/3" -> [{valor: 2500, unidade: 'g'}, {valor: 3, unidade: 'un'}]
+function extrairGramaturas(texto: string | null | undefined): Gramatura[] {
+  if (!texto) return []
+  const out: Gramatura[] = []
+  // Regex pega numeros (com . ou , decimal) seguidos de unidade. Tolera espaco opcional.
+  // Captura: 2,5kg | 100g | 1L | 1.5L | 500ml | 250g | c/12 | C/3 | 30un
+  const reMassa = /\b(\d+(?:[.,]\d+)?)\s*(kg|g)\b/gi
+  const reVolume = /\b(\d+(?:[.,]\d+)?)\s*(l|ml)\b/gi
+  const reEmbalagem = /\b(?:c|cx|c\/|cont|contendo)\.?\s*(\d+)\s*un?\b/gi
+  let m: RegExpExecArray | null
+  while ((m = reMassa.exec(texto)) !== null) {
+    const v = parseFloat(m[1].replace(',', '.'))
+    if (isFinite(v) && v > 0) {
+      out.push({ valor: m[2].toLowerCase() === 'kg' ? v * 1000 : v, unidade: 'g' })
+    }
+  }
+  while ((m = reVolume.exec(texto)) !== null) {
+    const v = parseFloat(m[1].replace(',', '.'))
+    if (isFinite(v) && v > 0) {
+      out.push({ valor: m[2].toLowerCase() === 'l' ? v * 1000 : v, unidade: 'ml' })
+    }
+  }
+  while ((m = reEmbalagem.exec(texto)) !== null) {
+    const v = parseInt(m[1], 10)
+    if (isFinite(v) && v > 0) out.push({ valor: v, unidade: 'un' })
+  }
+  return out
+}
+
+// Compara gramaturas entre dois textos. Retorna true quando ha CONFLITO claro.
+// - Se ambos nao tem gramatura -> retorna false (sem informacao, deixa passar)
+// - Se um tem e outro nao -> retorna false (sem comparacao possivel, deixa passar)
+// - Se ambos tem na mesma unidade -> compara com tolerancia 5%
+function gramaturasIncompativeis(textoA: string | null | undefined, textoB: string | null | undefined): boolean {
+  const gA = extrairGramaturas(textoA)
+  const gB = extrairGramaturas(textoB)
+  if (gA.length === 0 || gB.length === 0) return false
+
+  // Pega a maior gramatura de cada lado por unidade — geralmente o produto principal
+  const maiorPorUnidade = (lista: Gramatura[]) => {
+    const mapa = new Map<string, number>()
+    for (const g of lista) {
+      const atual = mapa.get(g.unidade) || 0
+      if (g.valor > atual) mapa.set(g.unidade, g.valor)
+    }
+    return mapa
+  }
+
+  const mapA = maiorPorUnidade(gA)
+  const mapB = maiorPorUnidade(gB)
+
+  // Se ha unidade em comum, compara
+  for (const [unidade, valorA] of mapA) {
+    const valorB = mapB.get(unidade)
+    if (valorB === undefined) continue
+    // Tolerancia de 5% (cobre arredondamento). Diferencas reais 1kg vs 2kg etc passam aqui.
+    const diff = Math.abs(valorA - valorB) / Math.max(valorA, valorB)
+    if (diff > 0.05) return true
+  }
+  return false
+}
+
+// ---------------------------------------------------------------------------
 // STEP 2: Deterministic matching (no AI)
 // ---------------------------------------------------------------------------
 
@@ -233,7 +306,20 @@ async function matchFuzzyIA(
 Tente associar por NOME do produto, entendendo abreviacoes comuns do setor pet/veterinario:
 AD=adulto, FIL=filhote, MB=mini bits, PEQ=pequeno, RÇ=racas, COMP=comprimidos, CP=comprimidos, CAES=cães, ELIZAB=elizabetano, FRALDA=fralda absorvente, SHAMP=shampoo
 
-Retorne APENAS os pares que voce tem CERTEZA que sao o MESMO produto.
+REGRA CRITICA — GRAMATURA / PESO / VOLUME:
+Produtos com gramaturas/pesos/volumes DIFERENTES sao produtos DIFERENTES,
+MESMO que o nome-base seja identico. NAO faca match nesses casos.
+
+  Exemplos do que NAO casar:
+  - "RACAO X PEQ 7kg" x "RACAO X PEQ 10kg"   -> sao SKUs diferentes
+  - "PETISCO Y 100g" x "PETISCO Y 250g"      -> sao SKUs diferentes
+  - "FN FRESH MEAT 1kg" x "FN FRESH MEAT 2,5kg" -> sao SKUs diferentes
+  - "LEITINHO Z 200ml" x "LEITINHO Z 500ml"  -> sao SKUs diferentes
+
+  Em caso de pesos diferentes, o item do PEDIDO sem espelho permanece como "ruptura/faltando",
+  e o item do ESPELHO sem pedido permanece como "extra" (item adicional enviado pelo fornecedor).
+
+Retorne APENAS os pares que voce tem CERTEZA que sao o MESMO produto (mesma gramatura).
 Na duvida, NAO faca match. Cada indice so pode ser usado UMA vez.
 
 PEDIDO sem match (${unmatchedPedido.length} itens):
@@ -267,25 +353,43 @@ Se nenhum par encontrado, retorne []`
     const pairs: Array<{ pedido_idx: number; espelho_idx: number }> = JSON.parse(json)
     if (!Array.isArray(pairs)) return []
 
-    // Convert to MatchedPair, deduplicating
+    // Convert to MatchedPair, deduplicating + filtrando matches com gramatura conflitante
     const result: MatchedPair[] = []
     const usedP = new Set<number>()
     const usedE = new Set<number>()
+    let rejeitadosPorGramatura = 0
 
     for (const { pedido_idx, espelho_idx } of pairs) {
       if (usedP.has(pedido_idx) || usedE.has(espelho_idx)) continue
       if (pedido_idx < 0 || pedido_idx >= unmatchedPedido.length) continue
       if (espelho_idx < 0 || espelho_idx >= unmatchedEspelho.length) continue
-      result.push({
-        pedido: unmatchedPedido[pedido_idx],
-        espelho: unmatchedEspelho[espelho_idx],
-        matchType: 'fuzzy_ia',
-      })
+
+      const ped = unmatchedPedido[pedido_idx]
+      const esp = unmatchedEspelho[espelho_idx]
+
+      // Guardrail deterministico: descarta matches que a IA fez ignorando
+      // diferenca de gramatura/peso/volume (causa do bug "10kg nao vira extra")
+      if (gramaturasIncompativeis(ped.descricao, esp.nome)) {
+        rejeitadosPorGramatura++
+        console.warn('[ESPELHO][guardrail] match IA rejeitado por gramatura divergente', {
+          pedido: ped.descricao,
+          espelho: esp.nome,
+        })
+        continue
+      }
+
+      result.push({ pedido: ped, espelho: esp, matchType: 'fuzzy_ia' })
       usedP.add(pedido_idx)
       usedE.add(espelho_idx)
     }
 
-    console.log(`[ESPELHO] Fuzzy IA: ${result.length} matched from ${unmatchedPedido.length}p × ${unmatchedEspelho.length}e`)
+    // Telemetria detalhada dos pares aceitos (ajuda a calibrar o prompt)
+    if (result.length > 0) {
+      console.log('[ESPELHO][fuzzy-ia] pares aceitos:', result.map(r => ({
+        pedido: r.pedido.descricao, espelho: r.espelho.nome,
+      })))
+    }
+    console.log(`[ESPELHO] Fuzzy IA: ${result.length} matched, ${rejeitadosPorGramatura} rejeitados por gramatura (de ${pairs.length} pares retornados pela IA); pool: ${unmatchedPedido.length}p × ${unmatchedEspelho.length}e`)
     return result
   } catch (err) {
     console.error('[ESPELHO] Fuzzy IA error:', err)
