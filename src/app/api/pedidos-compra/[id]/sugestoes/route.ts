@@ -350,16 +350,19 @@ async function getBlingAccessToken(empresaId: number, supabase: ReturnType<typeo
 }
 
 // Funcao para sincronizar status com Bling (com retry para rate limit)
+// Endpoint correto API Bling v3: PATCH /pedidos/compras/{id}/situacoes body { valor: <0|1|2|3> }
+// (era PUT .../situacoes/{valor} que NAO existe — retornava RESOURCE_NOT_FOUND)
 async function syncBlingStatus(blingId: number, situacao: number, accessToken: string): Promise<{ success: boolean; error?: string }> {
   try {
     const result = await blingFetch(
-      `${BLING_CONFIG.apiUrl}/pedidos/compras/${blingId}/situacoes/${situacao}`,
+      `${BLING_CONFIG.apiUrl}/pedidos/compras/${blingId}/situacoes`,
       {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
+        body: JSON.stringify({ valor: situacao }),
       },
       { context: 'sincronizar status sugestao', maxRetries: 3 }
     )

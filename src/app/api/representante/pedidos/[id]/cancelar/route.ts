@@ -119,14 +119,16 @@ export async function POST(
 
       if (accessToken) {
         try {
+          // Endpoint correto API Bling v3: PATCH /pedidos/compras/{id}/situacoes body { valor: 2 } (Cancelado)
           const blingResponse = await fetch(
-            `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes/2`,
+            `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes`,
             {
-              method: 'PUT',
+              method: 'PATCH',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${accessToken}`,
               },
+              body: JSON.stringify({ valor: 2 }),
             }
           )
 

@@ -118,17 +118,19 @@ export async function PUT(
     }
 
     // Alterar situacao no Bling (com retry para rate limit)
-    // PUT /pedidos/compras/{idPedidoCompra}/situacoes/{valor}
+    // Endpoint oficial API Bling v3: PATCH /pedidos/compras/{id}/situacoes body { valor: N }
+    // (NAO existe PUT .../situacoes/{valor} — retornava RESOURCE_NOT_FOUND)
     let blingResponse: Response
     try {
       const result = await blingFetch(
-        `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes/${body.situacao}`,
+        `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes`,
         {
-          method: 'PUT',
+          method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`,
           },
+          body: JSON.stringify({ valor: body.situacao }),
         },
         { context: 'alterar status pedido', maxRetries: 3 }
       )
