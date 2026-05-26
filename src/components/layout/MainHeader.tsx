@@ -20,6 +20,36 @@ interface Notificacao {
 }
 
 // Icone de seta para baixo
+function BuildingIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+    </svg>
+  )
+}
+function PlusCircleIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  )
+}
+function MiniSpinner({ className = 'w-3 h-3' }: { className?: string }) {
+  return (
+    <svg className={`${className} animate-spin`} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+      <path d="M22 12a10 10 0 00-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  )
+}
+// Formata CNPJ "04203130000182" -> "04.203.130/0001-82"
+function formatCnpj(cnpj: string | null | undefined): string {
+  if (!cnpj) return ''
+  const d = String(cnpj).replace(/\D/g, '')
+  if (d.length !== 14) return cnpj
+  return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12,14)}`
+}
+
 function ChevronDownIcon({ className = 'w-3 h-3' }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -95,17 +125,26 @@ const navigation: NavItem[] = [
 
 export function MainHeader() {
   const pathname = usePathname()
-  const { user, empresa, logout } = useAuth()
+  const { user, empresa, empresas, switchEmpresa, switchingEmpresa, logout } = useAuth()
   const { hasPermission, isAdmin, role } = usePermissions()
   const lojistaLp = isLojistaLp(role)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [empresaMenuOpen, setEmpresaMenuOpen] = useState(false)
   const [notificacoesOpen, setNotificacoesOpen] = useState(false)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const [naoLidas, setNaoLidas] = useState(0)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
+  const empresaMenuRef = useRef<HTMLDivElement>(null)
   const notificacoesRef = useRef<HTMLDivElement>(null)
+
+  // Troca de empresa: chama o switchEmpresa do AuthContext, fecha o dropdown
+  const handleSwitchEmpresa = async (empresaId: number) => {
+    if (empresaId === empresa?.id) return
+    setEmpresaMenuOpen(false)
+    await switchEmpresa(empresaId)
+  }
 
   // Buscar notificacoes
   const fetchNotificacoes = useCallback(async () => {
@@ -197,6 +236,9 @@ export function MainHeader() {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false)
       }
+      if (empresaMenuRef.current && !empresaMenuRef.current.contains(event.target as Node)) {
+        setEmpresaMenuOpen(false)
+      }
       if (notificacoesRef.current && !notificacoesRef.current.contains(event.target as Node)) {
         setNotificacoesOpen(false)
       }
@@ -228,6 +270,80 @@ export function MainHeader() {
             priority
           />
         </Link>
+
+        {/* Seletor de empresa: chip + dropdown (visivel desktop e mobile) */}
+        {empresa && (
+          <div className="relative shrink-0" ref={empresaMenuRef}>
+            <button
+              onClick={() => setEmpresaMenuOpen(o => !o)}
+              disabled={switchingEmpresa}
+              aria-label="Trocar de empresa"
+              className="inline-flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-md bg-white/15 hover:bg-white/25 transition-colors text-white text-xs md:text-sm font-medium disabled:opacity-60 max-w-[160px] md:max-w-[260px]"
+            >
+              <BuildingIcon className="w-4 h-4 shrink-0 opacity-90" />
+              <span className="truncate">{empresa.nome_fantasia || empresa.razao_social}</span>
+              {switchingEmpresa
+                ? <MiniSpinner className="w-3 h-3 shrink-0" />
+                : <ChevronDownIcon className={`w-3 h-3 shrink-0 transition-transform ${empresaMenuOpen ? 'rotate-180' : ''}`} />}
+            </button>
+            {empresaMenuOpen && (
+              <div className="absolute left-0 top-full mt-2 bg-white rounded-lg shadow-2xl py-2 min-w-[280px] max-w-[360px] z-50 border border-gray-100">
+                {/* Empresa ativa */}
+                <div className="px-4 py-2 border-b border-gray-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Empresa ativa</p>
+                  <p className="text-sm font-medium text-gray-900 truncate mt-0.5">
+                    {empresa.nome_fantasia || empresa.razao_social}
+                  </p>
+                  {empresa.cnpj && (
+                    <p className="text-xs text-gray-500 mt-0.5">{formatCnpj(empresa.cnpj)}</p>
+                  )}
+                </div>
+
+                {/* Outras empresas (so se houver mais de uma) */}
+                {empresas.filter(e => e.id !== empresa.id).length > 0 && (
+                  <div className="border-b border-gray-100 py-1 max-h-72 overflow-y-auto">
+                    <p className="px-4 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                      Trocar para
+                    </p>
+                    {empresas.filter(e => e.id !== empresa.id).map(emp => (
+                      <button
+                        key={emp.id}
+                        onClick={() => handleSwitchEmpresa(emp.id)}
+                        disabled={switchingEmpresa}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                      >
+                        <p className="text-sm text-gray-800 truncate">
+                          {emp.nome_fantasia || emp.razao_social}
+                        </p>
+                        {emp.cnpj && (
+                          <p className="text-xs text-gray-500 mt-0.5">{formatCnpj(emp.cnpj)}</p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Acoes */}
+                <Link
+                  href="/cadastros/empresas"
+                  onClick={() => setEmpresaMenuOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <BuildingIcon className="w-4 h-4 text-gray-400" />
+                  Minhas empresas
+                </Link>
+                <Link
+                  href="/cadastros/empresas/nova"
+                  onClick={() => setEmpresaMenuOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <PlusCircleIcon className="w-4 h-4 text-gray-400" />
+                  Cadastrar nova
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className="hidden md:flex items-center gap-1 ml-4" ref={dropdownRef}>
