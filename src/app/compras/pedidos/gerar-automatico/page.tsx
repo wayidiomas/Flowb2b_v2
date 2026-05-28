@@ -1222,11 +1222,46 @@ function GerarAutomaticoContent() {
   }
 
   // Adicionar item extra ao pedido a partir do catalogo do fornecedor
-  const handleAdicionarItemExtra = (produto: CatalogoProduto) => {
-    const itensPorCaixa = produto.itens_por_caixa && produto.itens_por_caixa > 0 ? produto.itens_por_caixa : 1
-    const valorUnitario = produto.preco || 0
-    // Reaproveita a logica de arredondamento por caixa (vide handleQuantidadeChange)
-    const quantidadeInicial = itensPorCaixa
+  const handleAdicionarItemExtra = async (produto: CatalogoProduto) => {
+    if (!fornecedor || !produto.produto_id) {
+      showToast('warning', 'Dados insuficientes', 'Nao foi possivel adicionar o item (faltam dados do produto).')
+      return
+    }
+
+    // Fecha o modal imediatamente para feedback rapido; populamos via chamada ao backend
+    setShowProdutoModal(false)
+
+    // Defaults caso a chamada falhe — usa apenas o que veio do catalogo
+    const itensPorCaixaFallback = produto.itens_por_caixa && produto.itens_por_caixa > 0 ? produto.itens_por_caixa : 1
+    const valorUnitarioFallback = produto.preco || 0
+    let estoqueAtual = 0
+    let mediaVendasDia = 0
+    let sugestaoQuantidade = 0
+    let itensPorCaixa = itensPorCaixaFallback
+    let valorUnitario = valorUnitarioFallback
+
+    try {
+      const params = new URLSearchParams({
+        fornecedor_id: String(fornecedor.id),
+        produto_id: String(produto.produto_id),
+      })
+      if (politicaSelecionadaId) params.set('politica_id', String(politicaSelecionadaId))
+      const res = await fetch(`/api/pedidos-compra/calcular-produto?${params.toString()}`)
+      if (res.ok) {
+        const dados = await res.json()
+        estoqueAtual = Number(dados.estoque_atual ?? 0)
+        mediaVendasDia = Number(dados.media_vendas_dia ?? 0)
+        sugestaoQuantidade = Number(dados.sugestao_quantidade ?? 0)
+        if (dados.itens_por_caixa) itensPorCaixa = Number(dados.itens_por_caixa)
+        if (dados.valor_unitario) valorUnitario = Number(dados.valor_unitario)
+      }
+    } catch (err) {
+      // Falha de calculo nao bloqueia adicao — o item entra com defaults e o lojista ajusta
+      console.warn('[adicionar item extra] calculo falhou, usando defaults', err)
+    }
+
+    // Quantidade inicial: sugestao calculada, ou 1 caixa se 0
+    const quantidadeInicial = sugestaoQuantidade > 0 ? sugestaoQuantidade : itensPorCaixa
     const caixas = Math.ceil(quantidadeInicial / itensPorCaixa)
     const quantidadeAjustada = caixas * itensPorCaixa
 
@@ -1237,9 +1272,9 @@ function GerarAutomaticoContent() {
       nome: produto.nome,
       ean: produto.gtin || '',
       codigo_fornecedor: produto.codigo_fornecedor || undefined,
-      estoque_atual: 0,
-      media_vendas_dia: 0,
-      sugestao_quantidade: 0,
+      estoque_atual: estoqueAtual,
+      media_vendas_dia: mediaVendasDia,
+      sugestao_quantidade: sugestaoQuantidade,
       quantidade_ajustada: quantidadeAjustada,
       valor_unitario: valorUnitario,
       valor_total: quantidadeAjustada * valorUnitario,
@@ -1249,7 +1284,6 @@ function GerarAutomaticoContent() {
     }
 
     setSugestoes(prev => [...prev, novoItem])
-    setShowProdutoModal(false)
     showToast('success', 'Item adicionado', `"${produto.nome}" foi adicionado ao pedido.`)
   }
 
