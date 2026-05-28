@@ -208,6 +208,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   // Espelho do pedido
   const [showEspelhoViewer, setShowEspelhoViewer] = useState(false)
   const [espelhoFile, setEspelhoFile] = useState<File | null>(null)
+  const [isDraggingEspelho, setIsDraggingEspelho] = useState(false)
   const [prazoEntrega, setPrazoEntrega] = useState('')
   const [enviandoEspelho, setEnviandoEspelho] = useState(false)
   const [espelhoInfo, setEspelhoInfo] = useState<{
@@ -517,6 +518,42 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
       if (res.ok) window.location.reload()
       else { const d = await res.json(); alert(d.error || 'Erro ao remover espelho') }
     } catch { alert('Erro ao remover espelho') }
+  }
+
+  // Valida e seleciona um arquivo de espelho (compartilhado entre <input> e drag-and-drop)
+  const selecionarArquivoEspelho = (file: File | null) => {
+    if (!file) return
+    const extOk = /\.(pdf|jpg|jpeg|png|webp)$/i.test(file.name)
+    if (!extOk) {
+      alert('Formato invalido. Aceitos: PDF, JPG, JPEG, PNG, WEBP.')
+      return
+    }
+    const MAX = 10 * 1024 * 1024 // 10 MB
+    if (file.size > MAX) {
+      alert(`Arquivo muito grande (max 10 MB). Tamanho enviado: ${(file.size / 1024 / 1024).toFixed(1)} MB.`)
+      return
+    }
+    setEspelhoFile(file)
+  }
+
+  // Handlers de drag-and-drop para o espelho
+  const handleEspelhoDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); e.stopPropagation()
+    setIsDraggingEspelho(true)
+  }
+  const handleEspelhoDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); e.stopPropagation()
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+  }
+  const handleEspelhoDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); e.stopPropagation()
+    setIsDraggingEspelho(false)
+  }
+  const handleEspelhoDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); e.stopPropagation()
+    setIsDraggingEspelho(false)
+    const file = e.dataTransfer?.files?.[0]
+    if (file) selecionarArquivoEspelho(file)
   }
 
   // Handler para enviar espelho do pedido
@@ -1423,15 +1460,21 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                   {/* Permitir reenvio se rejeitado */}
                   {espelhoInfo.espelho_status === 'rejeitado' && (
                     <div className="pt-4 border-t border-gray-200 space-y-4">
-                      <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-[#336FB6] transition-colors">
+                      <div
+                        className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${isDraggingEspelho ? 'border-[#336FB6] bg-[#336FB6]/5' : 'border-gray-300 hover:border-[#336FB6]'}`}
+                        onDragEnter={handleEspelhoDragEnter}
+                        onDragOver={handleEspelhoDragOver}
+                        onDragLeave={handleEspelhoDragLeave}
+                        onDrop={handleEspelhoDrop}
+                      >
                         <input
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png,.webp"
-                          onChange={(e) => setEspelhoFile(e.target.files?.[0] || null)}
+                          onChange={(e) => selecionarArquivoEspelho(e.target.files?.[0] || null)}
                           className="hidden"
                           id="espelho-reupload"
                         />
-                        <label htmlFor="espelho-reupload" className="cursor-pointer">
+                        <label htmlFor="espelho-reupload" className="cursor-pointer block">
                           <svg className="w-10 h-10 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                           </svg>
@@ -1439,7 +1482,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                             <p className="text-sm font-medium text-[#336FB6]">{espelhoFile.name}</p>
                           ) : (
                             <>
-                              <p className="text-sm font-medium text-gray-600">Clique para selecionar um novo arquivo</p>
+                              <p className="text-sm font-medium text-gray-600">{isDraggingEspelho ? 'Solte aqui para enviar' : 'Clique para selecionar ou arraste o arquivo'}</p>
                               <p className="text-xs text-gray-400 mt-1">PDF, JPG ou PNG (max 10MB)</p>
                             </>
                           )}
@@ -1468,15 +1511,21 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-[#336FB6] transition-colors">
+                  <div
+                    className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${isDraggingEspelho ? 'border-[#336FB6] bg-[#336FB6]/5' : 'border-gray-300 hover:border-[#336FB6]'}`}
+                    onDragEnter={handleEspelhoDragEnter}
+                    onDragOver={handleEspelhoDragOver}
+                    onDragLeave={handleEspelhoDragLeave}
+                    onDrop={handleEspelhoDrop}
+                  >
                     <input
                       type="file"
                       accept=".pdf,.jpg,.jpeg,.png,.webp"
-                      onChange={(e) => setEspelhoFile(e.target.files?.[0] || null)}
+                      onChange={(e) => selecionarArquivoEspelho(e.target.files?.[0] || null)}
                       className="hidden"
                       id="espelho-upload"
                     />
-                    <label htmlFor="espelho-upload" className="cursor-pointer">
+                    <label htmlFor="espelho-upload" className="cursor-pointer block">
                       <svg className="w-10 h-10 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                       </svg>
@@ -1484,7 +1533,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                         <p className="text-sm font-medium text-[#336FB6]">{espelhoFile.name}</p>
                       ) : (
                         <>
-                          <p className="text-sm font-medium text-gray-600">Clique para selecionar ou arraste o arquivo</p>
+                          <p className="text-sm font-medium text-gray-600">{isDraggingEspelho ? 'Solte aqui para enviar' : 'Clique para selecionar ou arraste o arquivo'}</p>
                           <p className="text-xs text-gray-400 mt-1">PDF, JPG ou PNG (max 10MB)</p>
                         </>
                       )}
