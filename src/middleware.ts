@@ -56,8 +56,44 @@ const publicApiPatterns = [
   /^\/api\/pedidos-compra\/\d+\/publico$/,  // /api/pedidos-compra/123/publico
 ]
 
+// Rotas de "entrada" (landing + telas de login). Se o usuario JA esta logado e
+// cai numa dessas, mandamos direto pro dashboard do tipo dele.
+const entryRoutes = ['/', '/login', '/fornecedor/login', '/representante/login']
+
+// Dashboard de destino por tipo de usuario
+const dashboardByTipo: Record<string, string> = {
+  superadmin: '/admin/dashboard',
+  lojista: '/dashboard',
+  fornecedor: '/fornecedor/dashboard',
+  representante: '/representante/dashboard',
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // Usuario JA autenticado acessando landing (/) ou tela de login -> redireciona
+  // pro dashboard. Sem isso, quem chega na raiz com cookie valido ve a landing,
+  // acha que esta deslogado e "loga duas vezes".
+  if (entryRoutes.includes(pathname)) {
+    const token = request.cookies.get(COOKIE_NAME)?.value
+    if (token) {
+      try {
+        const { payload } = await jwtVerify(token, JWT_SECRET)
+        const tipo = String(payload.tipo || 'lojista')
+        // Respeita ?redirect= interno (ex: veio de uma rota protegida) se for seguro
+        const redirectParam = request.nextUrl.searchParams.get('redirect')
+        const isSafeRedirect =
+          !!redirectParam &&
+          redirectParam.startsWith('/') &&
+          !redirectParam.startsWith('//') &&
+          !entryRoutes.includes(redirectParam)
+        const dest = isSafeRedirect ? redirectParam! : (dashboardByTipo[tipo] || '/dashboard')
+        return NextResponse.redirect(new URL(dest, request.url))
+      } catch {
+        // Token invalido/expirado -> trata como nao logado (segue pro fluxo publico)
+      }
+    }
+  }
 
   // Permitir rotas públicas
   if (publicRoutes.some(route => route === '/' ? pathname === '/' : pathname.startsWith(route))) {
