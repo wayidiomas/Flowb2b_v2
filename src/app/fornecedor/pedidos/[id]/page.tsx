@@ -9,6 +9,16 @@ import { ProductSearchModal } from '@/components/pedido/ProductSearchModal'
 import type { CatalogoProduto } from '@/components/pedido/ProductSearchModal'
 import { Button, Skeleton } from '@/components/ui'
 
+// Compara quantidade pedida x quantidade do espelho considerando itens por caixa.
+// Produtos vendidos em caixa: o lojista pede em UNIDADES (ex: 10) e o fornecedor
+// lista no espelho em CAIXAS (ex: 2). 2 caixas x 5 un = 10 un -> NAO e divergencia.
+function quantidadesBatem(qtyPedido: number, qtyEspelho: number, itensPorCaixa: number | null | undefined): boolean {
+  if (qtyPedido === qtyEspelho) return true
+  const ipc = itensPorCaixa && itensPorCaixa > 1 ? itensPorCaixa : 1
+  if (ipc > 1 && (qtyPedido === qtyEspelho * ipc || qtyEspelho === qtyPedido * ipc)) return true
+  return false
+}
+
 interface PedidoItem {
   id: number
   descricao: string
@@ -20,6 +30,7 @@ interface PedidoItem {
   quantidade: number
   aliquota_ipi: number
   produto_id: number | null
+  itens_por_caixa?: number | null
 }
 
 interface SugestaoItem {
@@ -225,7 +236,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     resumo: { total_pedido: number; total_espelho: number; ok: number; divergencias: number; faltando: number; extras: number }
     itens: Array<{
       status: 'ok' | 'divergencia' | 'faltando' | 'extra'
-      item_pedido?: { codigo: string | null; descricao: string | null; quantidade: number; valor: number | null; gtin: string | null }
+      item_pedido?: { codigo: string | null; descricao: string | null; quantidade: number; valor: number | null; gtin: string | null; itens_por_caixa?: number | null }
       item_espelho?: { codigo: string | null; nome: string | null; quantidade: number | null; preco_unitario: number | null; total: number | null }
       diferencas?: string[]
     }>
@@ -233,7 +244,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
   const [showValidacaoModal, setShowValidacaoModal] = useState(false)
   const [validacaoItens, setValidacaoItens] = useState<Array<{
     status: string
-    item_pedido?: { codigo: string | null; descricao: string | null; quantidade: number; valor: number | null; gtin: string | null }
+    item_pedido?: { codigo: string | null; descricao: string | null; quantidade: number; valor: number | null; gtin: string | null; itens_por_caixa?: number | null }
     item_espelho?: { codigo: string | null; nome: string | null; quantidade: number | null; preco_unitario: number | null; total: number | null }
     diferencas?: string[]
     motivo_faltante?: string | null
@@ -306,7 +317,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
         // Quantidade divergente: lojista pediu X e espelho tem Y diferente
         const qtyPed = Number(sug.quantidade_sugerida) || 0
         const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
-        if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
+        if (qtyPed > 0 && qtyEsp > 0 && !quantidadesBatem(qtyPed, qtyEsp, valItem?.item_pedido?.itens_por_caixa)) {
           return { ...sug, status_item: 'divergente' as const, motivo_divergencia: 'quantidade' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
         }
         // Preco espelho absurdamente diferente do catalogo (>50%) — provavel erro de leitura da IA
@@ -360,7 +371,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 }
                 const qtyPed = Number(sug.quantidade_sugerida) || 0
                 const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
-                if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
+                if (qtyPed > 0 && qtyEsp > 0 && !quantidadesBatem(qtyPed, qtyEsp, valItem?.item_pedido?.itens_por_caixa)) {
                   return { ...sug, status_item: 'divergente' as const, motivo_divergencia: 'quantidade' as const, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
                 }
                 if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.5) {
@@ -623,7 +634,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 const qtyEsp = valItem?.item_espelho?.quantidade ?? qtyPed
 
                 // Divergente se quantidade do espelho difere do pedido
-                if (qtyPed > 0 && qtyEsp > 0 && qtyPed !== qtyEsp) {
+                if (qtyPed > 0 && qtyEsp > 0 && !quantidadesBatem(qtyPed, qtyEsp, valItem?.item_pedido?.itens_por_caixa)) {
                   return { ...sug, status_item: 'divergente' as const, preco_espelho: precoEspelhoNovo }
                 }
 
@@ -2424,9 +2435,10 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                                 const diffs: string[] = []
                                 const qtyPed = Number(item.quantidade) || 0
                                 const qtyEsp = valItem?.item_espelho?.quantidade
+                                const ipcDiff = valItem?.item_pedido?.itens_por_caixa ?? item.itens_por_caixa
                                 const precoCat = item.preco_catalogo ?? 0
                                 const precoEsp = valItem?.item_espelho?.preco_unitario ?? 0
-                                if (qtyEsp != null && qtyPed !== qtyEsp) {
+                                if (qtyEsp != null && !quantidadesBatem(qtyPed, qtyEsp, ipcDiff)) {
                                   diffs.push(`Qty: pedido ${qtyPed}, espelho ${qtyEsp}`)
                                 }
                                 if (precoCat > 0 && precoEsp > 0 && Math.abs(precoCat - precoEsp) / precoCat > 0.02) {

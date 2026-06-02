@@ -22,6 +22,7 @@ export interface ValidacaoItem {
     quantidade: number
     valor: number | null
     gtin: string | null
+    itens_por_caixa: number | null
   }
   item_espelho?: {
     codigo: string | null
@@ -431,6 +432,7 @@ function classificarItens(
         item_pedido: {
           codigo: p.codigo_fornecedor, descricao: p.descricao,
           quantidade: qtyP, valor: precoP, gtin: p.gtin,
+          itens_por_caixa: p.itens_por_caixa,
         },
         item_espelho: {
           codigo: e.codigo_fornecedor, nome: e.nome,
@@ -472,6 +474,7 @@ function classificarItens(
         quantidade: qtyP,
         valor: precoP,
         gtin: p.gtin,
+        itens_por_caixa: p.itens_por_caixa,
       },
       item_espelho: {
         codigo: e.codigo_fornecedor,
@@ -494,6 +497,7 @@ function classificarItens(
         quantidade: Number(p.quantidade) || 0,
         valor: Number(p.valor) || 0,
         gtin: p.gtin,
+        itens_por_caixa: p.itens_por_caixa,
       },
       diferencas: [],
     })
