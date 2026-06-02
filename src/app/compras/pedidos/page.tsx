@@ -748,7 +748,10 @@ export default function PedidoCompraPage() {
   // Formatar data
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-'
-    const date = new Date(dateStr)
+    // Datas YYYY-MM-DD: forcar meia-noite LOCAL (sem 'T00:00:00' o JS interpreta
+    // como UTC e exibe o dia anterior no fuso do Brasil). Para timestamps com hora,
+    // usa direto.
+    const date = dateStr.length === 10 ? new Date(dateStr + 'T00:00:00') : new Date(dateStr)
     return date.toLocaleDateString('pt-BR')
   }
 

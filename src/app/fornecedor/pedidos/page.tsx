@@ -282,7 +282,7 @@ export default function FornecedorPedidosPage() {
                             )}
                             <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-100">
                               <span className="text-xs text-gray-400">
-                                {new Date(pedido.data).toLocaleDateString('pt-BR')} · {pedido.itens_count} itens
+                                {new Date(pedido.data + 'T00:00:00').toLocaleDateString('pt-BR')} · {pedido.itens_count} itens
                               </span>
                               <span className="text-sm font-bold text-gray-900">
                                 R$ {pedido.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -347,7 +347,7 @@ export default function FornecedorPedidosPage() {
                           {formatCNPJ(pedido.empresa_cnpj)}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
-                          {new Date(pedido.data).toLocaleDateString('pt-BR')}
+                          {new Date(pedido.data + 'T00:00:00').toLocaleDateString('pt-BR')}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {pedido.data_prevista
@@ -411,7 +411,7 @@ export default function FornecedorPedidosPage() {
                     </div>
                     <div className="flex items-center justify-between mt-2.5 text-xs text-gray-500">
                       <div className="flex items-center gap-3">
-                        <span>{new Date(pedido.data).toLocaleDateString('pt-BR')}</span>
+                        <span>{new Date(pedido.data + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                         <span>{pedido.itens_count} itens</span>
                       </div>
                       <span className="text-sm font-bold text-gray-900">

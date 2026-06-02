@@ -1216,7 +1216,7 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 )}
               </h1>
               <p className="text-sm text-gray-500 mt-1">
-                {pedido.empresa_nome} - {new Date(pedido.data).toLocaleDateString('pt-BR')}
+                {pedido.empresa_nome} - {new Date(pedido.data + 'T00:00:00').toLocaleDateString('pt-BR')}
                 {pedido.representante && (
                   <span className="ml-2 text-violet-600">
                     (Rep: {pedido.representante.nome})

@@ -13,6 +13,18 @@ import { ModalSincronizarCatalogo } from '@/components/compras/ModalSincronizarC
 import { useCatalogoGate } from '@/hooks/useCatalogoGate'
 import { ProductSearchModal, type CatalogoProduto } from '@/components/pedido/ProductSearchModal'
 
+// Data de hoje no formato YYYY-MM-DD usando o fuso LOCAL (nao UTC).
+// new Date().toISOString() retorna UTC: apos 21h em Brasilia (UTC-3) ja virou o
+// dia seguinte, gravando o pedido com data de "amanha". getFullYear/Month/Date
+// usam o fuso local do navegador, pegando o dia correto.
+function hojeLocalISO(): string {
+  const d = new Date()
+  const ano = d.getFullYear()
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${ano}-${mes}-${dia}`
+}
+
 // Icons
 function ArrowLeftIcon() {
   return (
@@ -1317,7 +1329,7 @@ function GerarAutomaticoContent() {
     setError(null)
 
     try {
-      const dataAtual = new Date().toISOString().split('T')[0]
+      const dataAtual = hojeLocalISO()
 
       const itensPayload = sugestoes.map(item => ({
         descricao: item.nome,
@@ -1459,7 +1471,7 @@ function GerarAutomaticoContent() {
     setError(null)
 
     try {
-      const dataAtual = new Date().toISOString().split('T')[0]
+      const dataAtual = hojeLocalISO()
 
       // Montar payload para API
       // produto_id = ID interno do Supabase (para FK)

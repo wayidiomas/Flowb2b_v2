@@ -258,7 +258,7 @@ export default function FornecedorDashboardPage() {
                             <td className="px-6 py-4 text-sm font-semibold text-gray-900">#{pedido.numero}</td>
                             <td className="px-6 py-4 text-sm text-gray-700 font-medium">{pedido.empresa_nome}</td>
                             <td className="px-6 py-4 text-sm text-gray-600">
-                              {new Date(pedido.data).toLocaleDateString('pt-BR')}
+                              {new Date(pedido.data + 'T00:00:00').toLocaleDateString('pt-BR')}
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-900 font-semibold">
                               R$ {pedido.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -300,7 +300,7 @@ export default function FornecedorDashboardPage() {
                           </span>
                         </div>
                         <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                          <span>{new Date(pedido.data).toLocaleDateString('pt-BR')}</span>
+                          <span>{new Date(pedido.data + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                           <span className="text-sm font-bold text-gray-900">
                             R$ {pedido.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </span>
