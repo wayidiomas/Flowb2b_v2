@@ -6,6 +6,7 @@ import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 import { blingFetch } from '@/lib/bling-fetch'
 import { logActivity } from '@/lib/activity-log'
 import { normalizarPrecoSugerido } from '@/lib/sugestao-preco'
+import { sincronizarPedidoCompraComBling } from '@/lib/bling-pedido-compra'
 
 // ============================================================
 // Funcoes auxiliares para resolucao de produtos (troca/novos)
@@ -737,7 +738,8 @@ export async function POST(
                   .eq('id', sItem.item_pedido_compra_id)
                   .single()
 
-                const gtin = (produto?.produtos as any)?.gtin
+                const produtoRel = Array.isArray(produto?.produtos) ? produto?.produtos[0] : produto?.produtos
+                const gtin = (produtoRel as { gtin?: string } | null | undefined)?.gtin
                 if (!gtin) {
                   // Sem EAN, atualizar só na empresa do pedido
                   await supabase
@@ -793,7 +795,11 @@ export async function POST(
         const valorMinimo = sugestao.valor_minimo_pedido || 0
         const descontoGeral = sugestao.desconto_geral || 0
 
+        // % de desconto geral efetivamente aplicado (0 = nenhum). Reaproveitado
+        // tanto para gravar o total no Supabase quanto para enviar ao Bling.
+        let descontoGeralAplicadoPct = 0
         if (valorMinimo > 0 && novoTotalProdutos >= valorMinimo && descontoGeral > 0) {
+          descontoGeralAplicadoPct = descontoGeral
           const descontoGeralAplicado = novoTotalProdutos * (descontoGeral / 100)
           novoTotalProdutos = novoTotalProdutos - descontoGeralAplicado
         }
@@ -805,20 +811,43 @@ export async function POST(
           status_interno: 'aceito',
         }
 
-        // Sincronizar com Bling - mudar para "Em Andamento" (3)
+        // Sincronizar com Bling.
+        // 1) PUT do pedido COMPLETO: reflete itens novos/substituidos e quantidades/
+        //    precos alterados pela sugestao (antes so o status era sincronizado, e o
+        //    pedido no Bling ficava desatualizado).
+        // 2) PATCH /situacoes -> "Em Andamento" (3).
         let blingSyncSuccess = false
         let blingSyncError = ''
 
         if (pedido.bling_id && pedido.situacao !== 1 && pedido.situacao !== 2) {
           const accessToken = await getBlingAccessToken(empresaId, supabase)
           if (accessToken) {
-            const syncResult = await syncBlingStatus(pedido.bling_id, 3, accessToken)
-            blingSyncSuccess = syncResult.success
-            if (!syncResult.success) {
-              blingSyncError = syncResult.error || ''
-              console.error('Erro ao sincronizar com Bling:', syncResult.error)
+            // (1) Atualizar itens/parcelas no Bling
+            const putResult = await sincronizarPedidoCompraComBling({
+              pedidoId,
+              blingId: pedido.bling_id,
+              empresaId,
+              accessToken,
+              supabase,
+              descontoGeralPercentual: descontoGeralAplicadoPct,
+            })
+
+            if (!putResult.ok) {
+              blingSyncError = putResult.error
+              console.error('Erro ao atualizar pedido no Bling (aceite):', putResult.error, putResult.details)
             } else {
-              updateData.situacao = 3 // Em Andamento
+              if (putResult.warning) {
+                console.warn('Aviso ao atualizar pedido no Bling (aceite):', putResult.warning)
+              }
+              // (2) Mudar situacao para Em Andamento
+              const syncResult = await syncBlingStatus(pedido.bling_id, 3, accessToken)
+              blingSyncSuccess = syncResult.success
+              if (!syncResult.success) {
+                blingSyncError = syncResult.error || ''
+                console.error('Erro ao sincronizar status com Bling:', syncResult.error)
+              } else {
+                updateData.situacao = 3 // Em Andamento
+              }
             }
           }
         }
