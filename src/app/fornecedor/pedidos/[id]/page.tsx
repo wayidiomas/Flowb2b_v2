@@ -532,6 +532,29 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     setModalBuscaAberto(true)
   }
 
+  // Adiciona um produto EXTRA detectado pela IA (item que esta no espelho do
+  // fornecedor mas nao estava no pedido do lojista) como item novo da sugestao.
+  const adicionarExtraComoSugestao = (extra: { codigo: string | null; nome: string | null; quantidade: number | null; preco_unitario: number | null }) => {
+    const codigo = extra.codigo || null
+    const ehEan = !!codigo && /^\d{8,14}$/.test(codigo.replace(/\D/g, '')) && codigo.replace(/\D/g, '').length >= 12
+    const novoItem: ItemSugestao = {
+      item_id: null,
+      produto_id: null,
+      quantidade_sugerida: extra.quantidade && extra.quantidade > 0 ? extra.quantidade : 1,
+      desconto_percentual: 0,
+      bonificacao_quantidade: 0,
+      validade: '',
+      status_item: 'ok',
+      observacao_item: '',
+      gtin: ehEan ? codigo : null,
+      codigo_fornecedor: ehEan ? null : codigo,
+      is_novo: true,
+      produto_nome: extra.nome || (codigo ? `Cod. ${codigo}` : 'Produto do espelho'),
+      preco_unitario: extra.preco_unitario ?? null,
+    }
+    setSugestoes(prev => [...prev, novoItem])
+  }
+
   const handleRemoverItemNovo = (index: number) => {
     setSugestoes(prev => prev.filter((_, i) => i !== index))
   }
@@ -2154,6 +2177,62 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
               </p>
             </div>
           </div>
+          )
+        })()}
+
+        {/* Produtos EXTRA detectados pela IA no espelho (nao estavam no pedido).
+            Fornecedor escolhe quais adicionar a sugestao. */}
+        {canSuggest && (!isStepper || (currentStep === 3 && !validandoEspelho)) && validacaoResult && (() => {
+          const norm = (s: string | null | undefined) => (s || '').replace(/^0+/, '').toLowerCase().trim()
+          // extras da validacao que ainda NAO foram adicionados a sugestao (dedup por codigo/nome)
+          const jaAdicionados = new Set(
+            sugestoes.filter(s => s.is_novo).flatMap(s => [norm(s.codigo_fornecedor), norm(s.gtin), norm(s.produto_nome)].filter(Boolean))
+          )
+          const extras = validacaoItens
+            .filter(it => it.status === 'extra' && it.item_espelho)
+            .map(it => it.item_espelho!)
+            .filter(esp => {
+              const chave = norm(esp.codigo) || norm(esp.nome)
+              return chave && !jaAdicionados.has(norm(esp.codigo)) && !jaAdicionados.has(norm(esp.nome))
+            })
+          if (extras.length === 0) return null
+          return (
+            <div className="bg-blue-50/60 rounded-2xl border border-blue-200 shadow-sm overflow-hidden">
+              <div className="px-4 sm:px-6 py-4 border-b border-blue-200">
+                <h2 className="text-base font-semibold text-blue-900 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                  {extras.length} produto(s) no espelho que nao estavam no pedido
+                </h2>
+                <p className="text-sm text-blue-700/80 mt-1">
+                  A IA encontrou estes itens no seu espelho. Adicione os que quiser sugerir ao lojista.
+                </p>
+              </div>
+              <div className="divide-y divide-blue-100">
+                {extras.map((esp, i) => (
+                  <div key={`${esp.codigo || esp.nome}-${i}`} className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{esp.nome || `Cod. ${esp.codigo}`}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {esp.codigo && <span>Cod: {esp.codigo} · </span>}
+                        Qtd espelho: {esp.quantidade ?? '-'}
+                        {esp.preco_unitario != null && <span> · {esp.preco_unitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => adicionarExtraComoSugestao(esp)}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-[#336FB6] rounded-lg hover:bg-[#2a5a94] transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                      Adicionar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           )
         })()}
 
