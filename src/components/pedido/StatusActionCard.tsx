@@ -90,7 +90,7 @@ interface StatusActionCardProps {
   itens: { id: number; produto_id?: number | null; descricao: string; quantidade: number; valor: number; codigo_produto?: string | null; codigo_fornecedor?: string | null; ean?: string | null }[]
   onEnviarFornecedor: () => void
   onEditar?: () => void
-  onAceitarSugestao: () => void
+  onAceitarSugestao: (itensExcluidos?: number[]) => void
   onRejeitarSugestao: () => void
   onManterOriginal?: () => void
   onCancelar?: () => void
@@ -150,6 +150,18 @@ export function StatusActionCard({
   const [busca, setBusca] = useState('')
   const [filtros, setFiltros] = useState<{ ruptura: boolean; descontinuado: boolean; alterados: boolean }>({ ruptura: false, descontinuado: false, alterados: false })
   const [pagina, setPagina] = useState(1)
+  // IDs (sugestoes_fornecedor_itens.id) de itens EXTRA que o lojista optou por NAO
+  // incluir no aceite. Itens excluidos ficam riscados, saem dos totais e nao sao
+  // enviados ao pedido/Bling.
+  const [extrasExcluidos, setExtrasExcluidos] = useState<Set<number>>(new Set())
+  const toggleExtraExcluido = (id: number) => {
+    setExtrasExcluidos(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)')
@@ -362,8 +374,10 @@ export function StatusActionCard({
       // Itens em ruptura ou descontinuados sao descartados: nao serao comprados,
       // entao nao entram nos totais (ficam riscados na tabela).
       const descartado = sItem.status_item === 'ruptura' || sItem.status_item === 'depreciado'
+      // Extra que o lojista marcou para NAO incluir no aceite.
+      const excluidoExtra = !!sItem.is_novo && extrasExcluidos.has(sItem.id)
 
-      if (!descartado) {
+      if (!descartado && !excluidoExtra) {
         totalOriginal += subtotalOriginal
         totalComDescontoItem += subtotalSugerido
         totalBonificacaoUnidades += unidadesBonificadas
@@ -429,7 +443,7 @@ export function StatusActionCard({
         return partes.join('\n')
       })()
 
-      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct, precoCaixaConvertido }
+      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, excluidoExtra, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct, precoCaixaConvertido }
     })
 
     const temPrecoSugerido = itensCalculados.some(item => item.precoSugerido != null || item.espelhoVsCusto != null)
@@ -606,7 +620,7 @@ export function StatusActionCard({
               {paginados.map((item) => {
                 const qtdMudou = item.qtdOriginal !== item.quantidade_sugerida
                 return (
-                  <tr key={item.id} className={`hover:bg-secondary-50/30 transition-colors ${item.descartado ? 'bg-gray-50/60' : ''}`}>
+                  <tr key={item.id} className={`hover:bg-secondary-50/30 transition-colors ${item.descartado ? 'bg-gray-50/60' : ''} ${item.excluidoExtra ? 'bg-red-50/40 opacity-60' : ''}`}>
                     <td className="px-3 py-2.5">
                       {(() => {
                         const s = item.status_item
@@ -625,12 +639,38 @@ export function StatusActionCard({
                     </td>
                     <td className="px-3 py-2.5 align-top">
                       {item.is_novo ? (
-                        <ConferenciaHover
-                          cor="amber"
-                          titulo="Item extra do fornecedor"
-                          linhas={[`O fornecedor incluiu este produto, que NAO estava no seu pedido original.`, ...(item.observacao_item ? [`Obs: ${item.observacao_item}`] : [])]}
-                          trigger={<span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800">+ Extra</span>}
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <ConferenciaHover
+                            cor="amber"
+                            titulo="Item extra do fornecedor"
+                            linhas={[`O fornecedor incluiu este produto, que NAO estava no seu pedido original.`, ...(item.observacao_item ? [`Obs: ${item.observacao_item}`] : [])]}
+                            trigger={<span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${item.excluidoExtra ? 'bg-gray-100 text-gray-500 line-through' : 'bg-blue-100 text-blue-800'}`}>+ Extra</span>}
+                          />
+                          {item.excluidoExtra ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleExtraExcluido(item.id)}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-primary-600 hover:bg-primary-50 transition-colors"
+                              title="Incluir este item de volta no pedido"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v6h6M3 13a9 9 0 109-9 9 9 0 00-6.36 2.64L3 9" />
+                              </svg>
+                              Incluir
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => toggleExtraExcluido(item.id)}
+                              className="inline-flex items-center justify-center w-6 h-6 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              title="Nao incluir este item extra no pedido"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
                       ) : item.espelhoFaltando ? (
                         <ConferenciaHover
                           cor="red"
@@ -747,10 +787,12 @@ export function StatusActionCard({
                     <td className="px-3 py-2.5 text-center">
                       {item.validade ? <span className="text-secondary-700 font-medium">{formatDate(item.validade)}</span> : <span className="text-gray-300">-</span>}
                     </td>
-                    <td className={`px-3 py-2.5 text-right tabular-nums ${item.descartado ? 'text-gray-300 line-through' : 'text-gray-400'}`}>{formatCurrency(item.subtotalOriginal)}</td>
+                    <td className={`px-3 py-2.5 text-right tabular-nums ${item.descartado || item.excluidoExtra ? 'text-gray-300 line-through' : 'text-gray-400'}`}>{formatCurrency(item.subtotalOriginal)}</td>
                     <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
                       {item.descartado ? (
                         <span className="text-gray-300 line-through" title="Item descartado (ruptura/descontinuado) - nao entra no total">{formatCurrency(item.subtotalSugerido)}</span>
+                      ) : item.excluidoExtra ? (
+                        <span className="text-gray-300 line-through" title="Item extra excluido pelo lojista - nao entra no total">{formatCurrency(item.subtotalSugerido)}</span>
                       ) : (
                         <span className="text-green-700">{formatCurrency(item.subtotalSugerido)}</span>
                       )}
@@ -866,10 +908,20 @@ export function StatusActionCard({
               className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/30 focus:border-primary-400 outline-none bg-white transition-all"
             />
           </div>
+          {extrasExcluidos.size > 0 && (
+            <div className="mb-4 flex items-center gap-2 px-3.5 py-2.5 bg-red-50/70 border border-red-200/60 rounded-xl text-sm text-red-700">
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166M18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397M4.772 5.79a48.11 48.11 0 013.478-.397" />
+              </svg>
+              <span>
+                <span className="font-semibold">{extrasExcluidos.size}</span> item{extrasExcluidos.size > 1 ? 's' : ''} extra{extrasExcluidos.size > 1 ? 's' : ''} ser{extrasExcluidos.size > 1 ? 'ão' : 'á'} <span className="font-semibold">excluído{extrasExcluidos.size > 1 ? 's' : ''}</span> do pedido ao aceitar.
+              </span>
+            </div>
+          )}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <ShimmerButton
-                onClick={onAceitarSugestao}
+                onClick={() => onAceitarSugestao(Array.from(extrasExcluidos))}
                 disabled={processandoSugestao}
                 className="w-full sm:w-auto px-7 py-3.5 whitespace-nowrap bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl font-semibold transition-all duration-200 disabled:opacity-50 shadow-lg shadow-green-200/50 hover:shadow-xl hover:shadow-green-300/40 hover:-translate-y-0.5"
               >

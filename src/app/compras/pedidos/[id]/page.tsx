@@ -633,7 +633,7 @@ export default function VisualizarPedidoPage() {
     }
   }
 
-  const handleProcessarSugestao = async (action: 'aceitar' | 'rejeitar' | 'manter_original') => {
+  const handleProcessarSugestao = async (action: 'aceitar' | 'rejeitar' | 'manter_original', itensExcluidos?: number[]) => {
     if (!pedido) return
     const pendente = sugestoes.find(s => s.status === 'pendente')
     if (!pendente) return
@@ -651,6 +651,8 @@ export default function VisualizarPedidoPage() {
           action,
           sugestao_id: pendente.id,
           observacao: observacaoResposta.trim() || undefined,
+          // IDs de itens extra que o lojista optou por nao incluir no aceite
+          itens_excluidos: action === 'aceitar' && itensExcluidos && itensExcluidos.length > 0 ? itensExcluidos : undefined,
         }),
       })
 
@@ -1150,7 +1152,7 @@ export default function VisualizarPedidoPage() {
               itens={pedido.itens.filter(i => i.id !== undefined).map(i => ({ id: i.id as number, produto_id: i.produto_id ?? null, descricao: i.descricao, quantidade: i.quantidade, valor: i.valor, codigo_produto: i.codigo_produto ?? null, codigo_fornecedor: i.codigo_fornecedor ?? null, ean: i.ean ?? null }))}
               onEnviarFornecedor={handleEnviarClick}
               onEditar={() => router.push(`/compras/pedidos/gerar-automatico?pedido_id=${pedido.id}`)}
-              onAceitarSugestao={() => handleProcessarSugestao('aceitar')}
+              onAceitarSugestao={(itensExcluidos) => handleProcessarSugestao('aceitar', itensExcluidos)}
               onRejeitarSugestao={() => setShowRejectModal(true)}
               onManterOriginal={() => handleProcessarSugestao('manter_original')}
               onCancelar={() => setShowCancelamentoModal(true)}

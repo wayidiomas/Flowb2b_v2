@@ -483,7 +483,11 @@ export async function POST(
 
     const { id: pedidoId } = await params
     const body = await request.json()
-    const { action, observacao, sugestao_id, motivo_rejeicao }: { action: 'aceitar' | 'rejeitar' | 'manter_original'; observacao?: string; sugestao_id: number; motivo_rejeicao?: string } = body
+    const { action, observacao, sugestao_id, motivo_rejeicao, itens_excluidos }: { action: 'aceitar' | 'rejeitar' | 'manter_original'; observacao?: string; sugestao_id: number; motivo_rejeicao?: string; itens_excluidos?: number[] } = body
+
+    // IDs (sugestoes_fornecedor_itens.id) de itens EXTRA que o lojista optou por
+    // NAO incluir no pedido. So se aplicam a itens is_novo no fluxo de aceite.
+    const itensExcluidos = new Set<number>(Array.isArray(itens_excluidos) ? itens_excluidos : [])
 
     if (!action || !sugestao_id) {
       return NextResponse.json({ error: 'Acao e sugestao_id sao obrigatorios' }, { status: 400 })
@@ -556,6 +560,11 @@ export async function POST(
         }
 
         for (const sItem of sugestaoItens) {
+          // Lojista optou por NAO incluir este item extra: pula (nao insere no pedido)
+          if (sItem.is_novo && itensExcluidos.has(sItem.id)) {
+            console.log(`[aceitar] Item extra ${sItem.id} excluido pelo lojista — nao sera incluido no pedido`)
+            continue
+          }
           if (sItem.is_novo) {
             // ---- NOVO ITEM: resolver produto e criar item no pedido ----
             let resolved = await resolverProduto(
@@ -864,9 +873,10 @@ export async function POST(
           .insert({
             pedido_compra_id: parseInt(pedidoId),
             evento: 'sugestao_aceita',
-            descricao: observacao
+            descricao: (observacao
               ? `Sugestao aceita pelo lojista: "${observacao}"${blingSyncSuccess ? ' (Bling: Em Andamento)' : ''}`
-              : `Sugestao do fornecedor foi aceita${blingSyncSuccess ? ' (Bling: Em Andamento)' : ''}`,
+              : `Sugestao do fornecedor foi aceita${blingSyncSuccess ? ' (Bling: Em Andamento)' : ''}`)
+              + (itensExcluidos.size > 0 ? ` — ${itensExcluidos.size} item(ns) extra excluido(s) pelo lojista` : ''),
             autor_tipo: 'lojista',
             autor_nome: user.email,
           })
