@@ -257,30 +257,45 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [currentStep])
 
-  // Persistir validacaoResult em localStorage
+  // Persistir validacaoResult em localStorage, carimbando com a URL do espelho
+  // atual. Assim, se o espelho for trocado, a validacao salva e considerada
+  // obsoleta e descartada na proxima carga (forcando nova validacao com IA).
   useEffect(() => {
     if (validacaoResult) {
-      try { localStorage.setItem(`validacao_${id}`, JSON.stringify(validacaoResult)) } catch {}
+      try {
+        localStorage.setItem(`validacao_${id}`, JSON.stringify(validacaoResult))
+        if (espelhoInfo?.espelho_url) {
+          localStorage.setItem(`validacao_espelho_url_${id}`, espelhoInfo.espelho_url)
+        }
+      } catch {}
     }
-  }, [validacaoResult, id])
+  }, [validacaoResult, id, espelhoInfo?.espelho_url])
 
-  // Carregar validacao do localStorage ao montar
+  // Carregar validacao do localStorage ao montar — somente se for do MESMO espelho
+  // que esta carregado agora. Se o espelho mudou (ou nao ha espelho), descarta.
   useEffect(() => {
     if (!validacaoResult) {
       try {
         const saved = localStorage.getItem(`validacao_${id}`)
-        if (saved) {
+        const savedEspelhoUrl = localStorage.getItem(`validacao_espelho_url_${id}`)
+        const urlAtual = espelhoInfo?.espelho_url || null
+        // So restaura se ha espelho atual e a validacao salva foi feita para ele
+        if (saved && urlAtual && savedEspelhoUrl === urlAtual) {
           const parsed = JSON.parse(saved)
           setValidacaoResult(parsed)
           setValidacaoItens((parsed.itens || []).map((item: any) => ({
             ...item, status_manual: null, observacao_item: '',
             motivo_faltante: item.status === 'faltando' ? 'ruptura' : null,
           })))
+        } else if (saved && urlAtual && savedEspelhoUrl && savedEspelhoUrl !== urlAtual) {
+          // Espelho trocado: limpa a validacao obsoleta
+          localStorage.removeItem(`validacao_${id}`)
+          localStorage.removeItem(`validacao_espelho_url_${id}`)
         }
       } catch {}
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, espelhoInfo?.espelho_url])
 
   // Auto-fill status_item sempre que validacaoResult mudar e sugestoes existirem
   useEffect(() => {
@@ -526,7 +541,17 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
     if (!confirm('Deseja remover o espelho atual e enviar outro?')) return
     try {
       const res = await fetch(`/api/fornecedor/pedidos/${id}/espelho`, { method: 'DELETE' })
-      if (res.ok) window.location.reload()
+      if (res.ok) {
+        // Invalida a validacao da IA do espelho removido (state + localStorage)
+        // para que o proximo espelho force uma nova validacao.
+        setValidacaoResult(null)
+        setValidacaoItens([])
+        try {
+          localStorage.removeItem(`validacao_${id}`)
+          localStorage.removeItem(`validacao_espelho_url_${id}`)
+        } catch {}
+        window.location.reload()
+      }
       else { const d = await res.json(); alert(d.error || 'Erro ao remover espelho') }
     } catch { alert('Erro ao remover espelho') }
   }
