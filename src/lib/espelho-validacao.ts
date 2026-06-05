@@ -302,26 +302,47 @@ async function matchFuzzyIA(
     `${i}. CodForn:${e.codigo_fornecedor || 'N/A'} | EAN:${e.codigo_barras || 'N/A'} | "${e.nome || ''}" | Qtd:${e.quantidade ?? 'N/A'}`
   ).join('\n')
 
-  const prompt = `Voce recebe itens de um pedido de compra que NAO foram encontrados por codigo no espelho do fornecedor, e itens do espelho que NAO foram associados a nenhum pedido.
+  const prompt = `Voce e um ESPECIALISTA em cruzamento de nomes de produtos do setor PET e VETERINARIO.
+Sua tarefa: associar itens de um PEDIDO de compra (que nao casaram por codigo) com itens do ESPELHO do
+fornecedor. Os nomes vem de fontes diferentes e quase sempre divergem MUITO na forma — abreviacoes
+agressivas, ordem de palavras diferente, com/sem a marca, "E"/"&" omitidos, acentos faltando. O MESMO
+produto pode aparecer como "GP GMT CAO AD MI OVE ARR 3KG" de um lado e "GRAN PLUS GOURMET CAO ADULTO
+MINI OVELHA E ARROZ 3kg" do outro. Seu trabalho e enxergar atraves dessas diferencas.
 
-Tente associar por NOME do produto, entendendo abreviacoes comuns do setor pet/veterinario:
-AD=adulto, FIL=filhote, MB=mini bits, PEQ=pequeno, RÇ=racas, COMP=comprimidos, CP=comprimidos, CAES=cães, ELIZAB=elizabetano, FRALDA=fralda absorvente, SHAMP=shampoo
+METODOLOGIA (siga para cada par candidato):
+1. EXPANDA todas as abreviacoes dos dois nomes.
+2. Decomponha cada nome nestes componentes: MARCA, LINHA/SUBLINHA, ESPECIE (cao/gato), FASE
+   (filhote/adulto/senior), PORTE (mini/pequeno/medio/grande), SABOR/INGREDIENTE principal, GRAMATURA.
+3. Considere o MESMO produto quando MARCA + LINHA + ESPECIE + FASE + PORTE + SABOR baterem — mesmo que
+   a ordem, a forma das palavras ou a presenca da marca sejam diferentes. A semelhanca textual NAO
+   importa; o que importa e descrever o mesmo produto fisico.
+
+DICIONARIO DE ABREVIACOES (nao exaustivo — infira outras pelo contexto):
+- Marcas/linhas: GP=Gran Plus, GMT=Gourmet, SD=Special Dog, UL/ULTRALIFE=Ultralife, FN=Formula Natural,
+  MENU, CHOICE, MIX, BIONATURAL, PRIME
+- Especie: CAO/CAES/CN=caes, GAT/GT/GATO=gatos
+- Fase: AD=adulto, FIL/FILH=filhote, JR/JUNIOR=junior, SR/SENIOR=senior, CAST=castrado
+- Porte: MI/MINI=mini, PEQ/RP/"RACAS PEQ"=racas pequenas, MED/MD=medio, GR/GDE=grande, MG=medio e grande
+- Sabor/ingrediente: OVE=ovelha, ARR=arroz, FG/FRG=frango, CN/CARNE=carne, SAL/SALM=salmao, CER=cereais,
+  COR=cordeiro, FRESH MEAT, BAT=batata
+- Formas/outros: MB=mini bits, COMP/CP=comprimidos, ELIZAB=elizabetano, SHAMP=shampoo, SOL=solucao,
+  SPRAY, FRALDA=fralda descartavel, BIFINHO, PETISCO, SACHE
 
 REGRA CRITICA — GRAMATURA / PESO / VOLUME:
-Produtos com gramaturas/pesos/volumes DIFERENTES sao produtos DIFERENTES,
-MESMO que o nome-base seja identico. NAO faca match nesses casos.
+Produtos com gramaturas/pesos/volumes DIFERENTES sao SKUs DIFERENTES, mesmo que todo o resto seja igual.
+NUNCA case pesos diferentes.
+  - "RACAO X PEQ 7kg" x "RACAO X PEQ 10kg"   -> NAO casar
+  - "PETISCO Y 100g" x "PETISCO Y 250g"      -> NAO casar
+  - "LEITINHO Z 200ml" x "LEITINHO Z 500ml"  -> NAO casar
+  (Atencao: "1kg" != "1,5kg"; "3kg" != "3KG" e IGUAL — caixa e espaco nao contam.)
 
-  Exemplos do que NAO casar:
-  - "RACAO X PEQ 7kg" x "RACAO X PEQ 10kg"   -> sao SKUs diferentes
-  - "PETISCO Y 100g" x "PETISCO Y 250g"      -> sao SKUs diferentes
-  - "FN FRESH MEAT 1kg" x "FN FRESH MEAT 2,5kg" -> sao SKUs diferentes
-  - "LEITINHO Z 200ml" x "LEITINHO Z 500ml"  -> sao SKUs diferentes
-
-  Em caso de pesos diferentes, o item do PEDIDO sem espelho permanece como "ruptura/faltando",
-  e o item do ESPELHO sem pedido permanece como "extra" (item adicional enviado pelo fornecedor).
-
-Retorne APENAS os pares que voce tem CERTEZA que sao o MESMO produto (mesma gramatura).
-Na duvida, NAO faca match. Cada indice so pode ser usado UMA vez.
+CRITERIO DE DECISAO:
+- Case quando voce, como especialista, concluir que descrevem o MESMO produto fisico (mesmos componentes
+  + mesma gramatura), por mais diferentes que os textos parecam.
+- Se houver mais de um candidato plausivel para o mesmo item, escolha o que melhor casa nos componentes.
+- So deixe SEM match quando nenhum candidato corresponder em marca/linha/variante, OU quando a unica
+  diferenca for a gramatura. Nesse caso o item do pedido fica como ruptura e o do espelho como extra.
+- Cada indice (pedido e espelho) so pode ser usado UMA vez.
 
 PEDIDO sem match (${unmatchedPedido.length} itens):
 ${pedidoTexto}
@@ -329,14 +350,14 @@ ${pedidoTexto}
 ESPELHO sem match (${unmatchedEspelho.length} itens):
 ${espelhoTexto}
 
-Retorne APENAS JSON array, sem markdown:
+Retorne APENAS um JSON array, sem markdown e sem comentarios:
 [{"pedido_idx": 0, "espelho_idx": 2}]
-Se nenhum par encontrado, retorne []`
+Se nenhum par for o mesmo produto, retorne []`
 
   try {
     const resp = await openai.responses.create({
       model: 'gpt-5.4-mini',
-      reasoning: { effort: 'medium' },
+      reasoning: { effort: 'high' },
       input: [{ role: 'user', content: prompt }],
     })
 
