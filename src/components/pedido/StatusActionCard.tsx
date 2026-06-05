@@ -87,7 +87,7 @@ interface StatusActionCardProps {
   statusInterno: StatusInterno
   sugestoes: SugestaoFornecedor[]
   sugestaoItens: SugestaoItem[] | null
-  itens: { id: number; descricao: string; quantidade: number; valor: number; codigo_produto?: string | null; codigo_fornecedor?: string | null }[]
+  itens: { id: number; produto_id?: number | null; descricao: string; quantidade: number; valor: number; codigo_produto?: string | null; codigo_fornecedor?: string | null; ean?: string | null }[]
   onEnviarFornecedor: () => void
   onEditar?: () => void
   onAceitarSugestao: () => void
@@ -307,8 +307,20 @@ export function StatusActionCard({
       if (v.gtin) espelhoPorGtin.set(normKey(v.gtin), v)
     }
 
+    const normCodigo = (c: string | null | undefined) => (c || '').replace(/^0+/, '').trim()
     const itensCalculados = sugestaoItens.map((sItem) => {
-      const itemOriginal = itens.find(i => i.id === sItem.item_pedido_compra_id)
+      // Casa o item original por varios criterios — item_pedido_compra_id costuma
+      // vir null nas sugestoes (nunca foi preenchido), entao o vinculo real e por
+      // produto_id, e fallback por gtin/codigo_fornecedor/codigo_produto.
+      const itemOriginal =
+        (sItem.item_pedido_compra_id != null
+          ? itens.find(i => i.id === sItem.item_pedido_compra_id) : undefined) ||
+        (sItem.produto_id != null
+          ? itens.find(i => i.produto_id != null && i.produto_id === sItem.produto_id) : undefined) ||
+        (sItem.gtin
+          ? itens.find(i => i.ean && normCodigo(i.ean) === normCodigo(sItem.gtin)) : undefined) ||
+        (sItem.codigo_fornecedor
+          ? itens.find(i => i.codigo_fornecedor && normCodigo(i.codigo_fornecedor) === normCodigo(sItem.codigo_fornecedor)) : undefined)
       // Preferimos o snapshot do pedido original (gravado na criacao da sugestao)
       // sobre o itemOriginal.valor — porque o valor do item pode ter sido alterado
       // pelo proprio algoritmo de calculo automatico (que ja salva preco de caixa
@@ -336,7 +348,11 @@ export function StatusActionCard({
       const precoCaixaConvertido = norm.foiConvertido
         ? { precoRecebido: sItem.preco_unitario as number, itensPorCaixa: norm.itensPorCaixa }
         : null
-      const qtdOriginal = itemOriginal?.quantidade || 0
+      // Snapshot (quantidade_pedida) e a fonte mais confiavel do que o lojista pediu;
+      // cai para o item original casado quando nao houver snapshot (sugestoes antigas).
+      const qtdOriginal = (sItem.quantidade_pedida != null && sItem.quantidade_pedida > 0)
+        ? sItem.quantidade_pedida
+        : (itemOriginal?.quantidade || 0)
       const qtdSugerida = sItem.quantidade_sugerida
       const descontoItem = sItem.desconto_percentual || 0
       const unidadesBonificadas = sItem.bonificacao_quantidade || 0
@@ -654,9 +670,9 @@ export function StatusActionCard({
                           <span className="block text-blue-700 truncate">{item.produto_nome}</span>
                         </div>
                       ) : item.is_novo ? (
-                        <span className="text-blue-700 block truncate">{item.produto_nome || `Item #${item.item_pedido_compra_id}`}</span>
+                        <span className="text-blue-700 block truncate">{item.produto_nome || item.itemOriginal?.descricao || (item.codigo_fornecedor ? `Cod. ${item.codigo_fornecedor}` : 'Produto sem nome')}</span>
                       ) : (
-                        <span className="block truncate">{item.itemOriginal?.descricao || `Item #${item.item_pedido_compra_id}`}</span>
+                        <span className="block truncate">{item.itemOriginal?.descricao || item.produto_nome || (item.codigo_fornecedor ? `Cod. ${item.codigo_fornecedor}` : 'Produto sem nome')}</span>
                       )}
                       {(item.itemOriginal?.codigo_produto || item.codigo_fornecedor) && (
                         <p className="text-[10px] text-gray-400 mt-0.5 truncate">

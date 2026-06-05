@@ -1147,7 +1147,7 @@ export default function VisualizarPedidoPage() {
               statusInterno={statusInterno}
               sugestoes={sugestoes}
               sugestaoItens={sugestaoItens}
-              itens={pedido.itens.filter(i => i.id !== undefined).map(i => ({ id: i.id as number, descricao: i.descricao, quantidade: i.quantidade, valor: i.valor, codigo_produto: i.codigo_produto ?? null, codigo_fornecedor: i.codigo_fornecedor ?? null }))}
+              itens={pedido.itens.filter(i => i.id !== undefined).map(i => ({ id: i.id as number, produto_id: i.produto_id ?? null, descricao: i.descricao, quantidade: i.quantidade, valor: i.valor, codigo_produto: i.codigo_produto ?? null, codigo_fornecedor: i.codigo_fornecedor ?? null, ean: i.ean ?? null }))}
               onEnviarFornecedor={handleEnviarClick}
               onEditar={() => router.push(`/compras/pedidos/gerar-automatico?pedido_id=${pedido.id}`)}
               onAceitarSugestao={() => handleProcessarSugestao('aceitar')}
