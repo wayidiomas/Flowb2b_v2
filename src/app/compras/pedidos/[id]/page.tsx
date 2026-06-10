@@ -153,6 +153,10 @@ export default function VisualizarPedidoPage() {
   const [validacaoItens, setValidacaoItens] = useState<ValidacaoItemResult[]>([])
   const [salvandoValidacao, setSalvandoValidacao] = useState(false)
   const [validacaoObservacao, setValidacaoObservacao] = useState('')
+  // Controle da auto-validacao do espelho (roda 1x quando ha espelho e nenhuma
+  // validacao salva, pra a conferencia do lojista nao ficar zerada).
+  const [validacaoSalvaCarregada, setValidacaoSalvaCarregada] = useState(false)
+  const autoValidacaoTentadaRef = useRef(false)
 
   // Modais de escolha destinatario (fornecedor vs representante)
   const [showTipoDestinatarioModal, setShowTipoDestinatarioModal] = useState(false)
@@ -286,7 +290,71 @@ export default function VisualizarPedidoPage() {
         }
       })
       .catch(() => {})
+      .finally(() => setValidacaoSalvaCarregada(true))
   }, [pedidoId])
+
+  // Persiste a validacao do espelho (reutilizado pelo salvar manual e pela auto-validacao)
+  const persistirValidacao = async (itens: ValidacaoItemResult[], observacao: string) => {
+    return fetch(`/api/pedidos-compra/${pedidoId}/espelho/validacao`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'validado',
+        observacao,
+        itens: itens.map(item => ({
+          status_ia: item.status,
+          status_manual: item.status_manual || item.status,
+          item_pedido_codigo: item.item_pedido?.codigo,
+          item_pedido_descricao: item.item_pedido?.descricao,
+          item_pedido_quantidade: item.item_pedido?.quantidade,
+          item_pedido_valor: item.item_pedido?.valor,
+          item_pedido_gtin: item.item_pedido?.gtin,
+          item_espelho_codigo: item.item_espelho?.codigo,
+          item_espelho_nome: item.item_espelho?.nome,
+          item_espelho_quantidade: item.item_espelho?.quantidade,
+          item_espelho_preco: item.item_espelho?.preco_unitario,
+          diferencas: item.diferencas,
+          observacao_item: item.observacao_item,
+          motivo_faltante: item.motivo_faltante || null,
+          previsao_retorno: item.previsao_retorno || null,
+        })),
+      }),
+    })
+  }
+
+  // Auto-validacao do espelho: roda 1x quando ha espelho anexado, o pedido esta em
+  // sugestao pendente e NAO ha validacao salva. Assim a coluna Conferencia do lojista
+  // aparece preenchida sozinha (revela divergencias que o "ok" do fornecedor esconde),
+  // e o resultado fica salvo (proximas aberturas usam o salvo, sem custo de IA repetido).
+  useEffect(() => {
+    if (autoValidacaoTentadaRef.current) return
+    if (!validacaoSalvaCarregada) return            // espera o load da validacao salva
+    if (validacaoItens.length > 0) return            // ja existe validacao
+    if (!espelhoInfo?.espelho_url) return            // sem espelho, nada a validar
+    if (statusInterno !== 'sugestao_pendente') return // conferencia so importa aqui
+    autoValidacaoTentadaRef.current = true
+
+    ;(async () => {
+      setValidandoEspelho(true)
+      try {
+        const res = await fetch(`/api/pedidos-compra/${pedidoId}/espelho/validar`, { method: 'POST' })
+        const data = await res.json()
+        if (!res.ok || !data.success || !Array.isArray(data.itens)) return
+        const itens: ValidacaoItemResult[] = data.itens.map((item: ValidacaoItemResult) => ({
+          ...item,
+          status_manual: item.status,
+        }))
+        setValidacaoResult(data)
+        setValidacaoItens(itens)
+        // salva silenciosamente (sem abrir modal)
+        await persistirValidacao(itens, '').catch(() => {})
+      } catch (err) {
+        console.error('Auto-validacao do espelho falhou:', err)
+      } finally {
+        setValidandoEspelho(false)
+      }
+    })()
+  }, [validacaoSalvaCarregada, validacaoItens.length, espelhoInfo?.espelho_url, statusInterno, pedidoId])
 
   // Handler para aprovar/rejeitar espelho
   // CODIGO MORTO (mantido propositalmente): os botoes "Aprovar/Rejeitar Espelho" foram
@@ -348,31 +416,7 @@ export default function VisualizarPedidoPage() {
   const handleSalvarValidacao = async () => {
     setSalvandoValidacao(true)
     try {
-      const res = await fetch(`/api/pedidos-compra/${pedidoId}/espelho/validacao`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'validado',
-          observacao: validacaoObservacao,
-          itens: validacaoItens.map(item => ({
-            status_ia: item.status,
-            status_manual: item.status_manual || item.status,
-            item_pedido_codigo: item.item_pedido?.codigo,
-            item_pedido_descricao: item.item_pedido?.descricao,
-            item_pedido_quantidade: item.item_pedido?.quantidade,
-            item_pedido_valor: item.item_pedido?.valor,
-            item_pedido_gtin: item.item_pedido?.gtin,
-            item_espelho_codigo: item.item_espelho?.codigo,
-            item_espelho_nome: item.item_espelho?.nome,
-            item_espelho_quantidade: item.item_espelho?.quantidade,
-            item_espelho_preco: item.item_espelho?.preco_unitario,
-            diferencas: item.diferencas,
-            observacao_item: item.observacao_item,
-            motivo_faltante: item.motivo_faltante || null,
-            previsao_retorno: item.previsao_retorno || null,
-          })),
-        }),
-      })
+      const res = await persistirValidacao(validacaoItens, validacaoObservacao)
       if (res.ok) {
         setShowValidacaoModal(false)
       } else {
