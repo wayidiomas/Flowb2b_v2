@@ -153,9 +153,16 @@ function extrairGramaturas(texto: string | null | undefined): Gramatura[] {
 // - Se ambos nao tem gramatura -> retorna false (sem informacao, deixa passar)
 // - Se um tem e outro nao -> retorna false (sem comparacao possivel, deixa passar)
 // - Se ambos tem na mesma unidade -> compara com tolerancia 5%
+//
+// IMPORTANTE: so PESO ('g') e VOLUME ('ml') distinguem SKU. A contagem por caixa
+// ('un', ex.: "c/4", "c/12un") NAO pode bloquear um match — produtos iguais com
+// embalagens de quantidades diferentes sao o MESMO SKU, e a diferenca de caixa ja
+// e tratada como DIVERGENCIA na classificacao (conversao qtyP === qtyE * itens_por_caixa).
+// Comparar 'un' aqui causava ruptura falsa em itens que so diferiam na embalagem.
 function gramaturasIncompativeis(textoA: string | null | undefined, textoB: string | null | undefined): boolean {
-  const gA = extrairGramaturas(textoA)
-  const gB = extrairGramaturas(textoB)
+  const UNIDADES_SKU: ReadonlyArray<Gramatura['unidade']> = ['g', 'ml']
+  const gA = extrairGramaturas(textoA).filter(g => UNIDADES_SKU.includes(g.unidade))
+  const gB = extrairGramaturas(textoB).filter(g => UNIDADES_SKU.includes(g.unidade))
   if (gA.length === 0 || gB.length === 0) return false
 
   // Pega a maior gramatura de cada lado por unidade — geralmente o produto principal
