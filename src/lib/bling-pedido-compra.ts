@@ -58,6 +58,54 @@ export type SyncPedidoResult =
   | { ok: true; warning?: string }
   | { ok: false; bloqueado?: boolean; error: string; details?: string }
 
+// Marcadores do bloco de itens extra dentro da observacao do Bling. O bloco e
+// REconstruido a cada sync (idempotente): removemos um bloco antigo e reanexamos
+// o atual, entao re-sincronizar nunca duplica.
+const EXTRAS_MARK_START = '--- Itens adicionais (FlowB2B) ---'
+const EXTRAS_MARK_END = '--- fim itens adicionais ---'
+
+function fmtBRL(v: number): string {
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+/**
+ * Monta a observacao do Bling preservando o texto do usuario e (re)anexando o
+ * bloco de itens extra. Remove qualquer bloco anterior antes de reanexar.
+ */
+export function montarObservacaoComExtras(
+  obsAtual: string | null | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  itensExtra: any[],
+): string {
+  // Remove bloco antigo (se existir) entre os marcadores
+  const reBloco = new RegExp(
+    `\\n*${EXTRAS_MARK_START.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${EXTRAS_MARK_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+    'g'
+  )
+  const base = (obsAtual || '').replace(reBloco, '').trim()
+
+  if (!itensExtra || itensExtra.length === 0) return base
+
+  const linhas = itensExtra.map((it) => {
+    const qtd = Number(it.quantidade) || 0
+    const valor = (it.valor_unitario_final ?? it.valor) || 0
+    const cod = it.codigo_fornecedor || it.ean
+    const partes = [`- ${qtd}x ${it.descricao || 'Produto'}`]
+    if (cod) partes.push(`(cod ${cod})`)
+    if (valor > 0) partes.push(`${fmtBRL(valor)}/un`)
+    return partes.join(' ')
+  })
+
+  const bloco = [
+    EXTRAS_MARK_START,
+    'Itens negociados a faturar pela nota fiscal (nao incluidos no total deste pedido):',
+    ...linhas,
+    EXTRAS_MARK_END,
+  ].join('\n')
+
+  return base ? `${base}\n\n${bloco}` : bloco
+}
+
 /**
  * Re-envia o pedido de compra COMPLETO para o Bling (PUT), refletindo o estado
  * atual de itens_pedido_compra + parcelas_pedido_compra do Supabase.
@@ -115,15 +163,26 @@ export async function sincronizarPedidoCompraComBling(params: {
   // 3. Itens atuais (estado pos-aceite) + dados do produto para id_produto_bling
   const { data: itens } = await supabase
     .from('itens_pedido_compra')
-    .select('descricao, unidade, valor, valor_unitario_final, quantidade, aliquota_ipi, codigo_fornecedor, codigo_produto, ean, produto_id, produtos(id_produto_bling, codigo, gtin)')
+    .select('descricao, unidade, valor, valor_unitario_final, quantidade, aliquota_ipi, codigo_fornecedor, codigo_produto, ean, produto_id, somente_flowb2b, produtos(id_produto_bling, codigo, gtin)')
     .eq('pedido_compra_id', pedidoId)
 
   if (!itens || itens.length === 0) {
     return { ok: false, error: 'Pedido sem itens para sincronizar com Bling' }
   }
 
+  // Itens "extra" (somente_flowb2b) NAO vao ao Bling como linha: entram na
+  // observacao do pedido e ficam fora do total/parcelas. Os demais sincronizam.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const itensPayload = itens.map((it: any) => {
+  const itensBling = itens.filter((it: any) => !it.somente_flowb2b)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itensExtra = itens.filter((it: any) => it.somente_flowb2b)
+
+  if (itensBling.length === 0) {
+    return { ok: false, error: 'Pedido sem itens sincronizaveis com o Bling (apenas itens extra FlowB2B).' }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itensPayload = itensBling.map((it: any) => {
     const prod = Array.isArray(it.produtos) ? it.produtos[0] : it.produtos
     // valor_unitario_final ja embute o desconto por item (quando houve)
     const valorUnit = (it.valor_unitario_final ?? it.valor) || 0
@@ -168,7 +227,9 @@ export async function sincronizarPedidoCompraComBling(params: {
   }
   if (pedido.data_prevista) payload.dataPrevista = pedido.data_prevista
   if (pedido.ordem_compra) payload.ordemCompra = pedido.ordem_compra
-  if (pedido.observacoes) payload.observacoes = pedido.observacoes
+  // Observacao do Bling = obs do usuario + bloco com os itens extra (FlowB2B-only)
+  const obsComExtras = montarObservacaoComExtras(pedido.observacoes, itensExtra)
+  if (obsComExtras) payload.observacoes = obsComExtras
   if (pedido.observacoes_internas) payload.observacoesInternas = pedido.observacoes_internas
   if (descontoGeral > 0) payload.desconto = { valor: descontoGeral, unidade: 'PERCENTUAL' }
   if (pedido.total_icms && Number(pedido.total_icms) > 0) {

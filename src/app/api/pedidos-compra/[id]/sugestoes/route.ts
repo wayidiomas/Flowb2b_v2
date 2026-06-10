@@ -136,55 +136,17 @@ async function vincularProdutoBling(
         }, { onConflict: 'fornecedor_id,produto_id' })
     }
 
-    // Helper: criar produto no Bling da empresa
-    async function criarProdutoNoBling(dados: {
+    // Helper: criar produto no Bling da empresa.
+    // DESATIVADO por decisao do cliente: nao auto-cadastramos produto novo no Bling —
+    // o cadastro vem da NOTA FISCAL (feito manualmente no Bling). Sempre retorna null,
+    // entao o produto e criado apenas localmente (id_produto_bling = null) e, quando
+    // sincronizado, a linha vai ao Bling como item avulso (sem produto.id).
+    async function criarProdutoNoBling(_dados: {
       nome: string; codigo?: string | null; preco?: number | null; unidade?: string | null;
       gtin?: string | null; marca?: string | null; tipo?: string | null;
       formato?: string | null; peso_liquido?: number | null; peso_bruto?: number | null;
     }): Promise<number | null> {
-      try {
-        const accessToken = await getBlingAccessToken(empresaId, supabase)
-        if (!accessToken) return null
-
-        const blingPayload: Record<string, unknown> = {
-          nome: dados.nome,
-          tipo: dados.tipo || 'P',
-          situacao: 'A',
-          formato: dados.formato || 'S',
-        }
-        if (dados.codigo) blingPayload.codigo = dados.codigo
-        if (dados.preco) blingPayload.preco = dados.preco
-        if (dados.unidade) blingPayload.unidade = dados.unidade
-        if (dados.gtin) blingPayload.gtin = dados.gtin
-        if (dados.marca) blingPayload.marca = dados.marca
-        if (dados.peso_liquido) blingPayload.pesoLiquido = dados.peso_liquido
-        if (dados.peso_bruto) blingPayload.pesoBruto = dados.peso_bruto
-
-        const result = await blingFetch(
-          `${BLING_CONFIG.apiUrl}/produtos`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify(blingPayload),
-          },
-          { context: 'criar produto (sugestao fornecedor)', maxRetries: 2 }
-        )
-
-        if (result.response.ok) {
-          const blingData = await result.response.json()
-          return blingData?.data?.id || null
-        } else {
-          const errorText = await result.response.text()
-          console.warn(`[criarProdutoBling] Bling criacao erro: ${result.response.status} - ${errorText}`)
-          return null
-        }
-      } catch (err) {
-        console.warn('[criarProdutoBling] Falha ao criar no Bling (best-effort):', err)
-        return null
-      }
+      return null
     }
 
     // ──────────────────────────────────────────────
@@ -566,47 +528,28 @@ export async function POST(
             continue
           }
           if (sItem.is_novo) {
-            // ---- NOVO ITEM: resolver produto e criar item no pedido ----
-            let resolved = await resolverProduto(
-              sItem.gtin || null,
-              sItem.codigo_fornecedor || null,
-              empresaId,
-              fornecedorId,
-              supabase
-            )
-
-            if (!resolved) {
-              // Tentar vincular no Bling (best-effort)
-              const vinculado = await vincularProdutoBling(
-                sItem.gtin || null,
-                sItem.codigo_fornecedor || null,
-                sItem.produto_nome || null,
-                sItem.preco_unitario || 0,
-                empresaId,
-                fornecedorId,
-                supabase
-              )
-              if (vinculado.produto_id) {
-                resolved = { produto_id: vinculado.produto_id, nome: vinculado.nome, valor: vinculado.valor }
-              } else {
-                // Nao conseguiu resolver — criar item sem produto_id linkado
-                console.warn(`[aceitar] Item novo sem produto resolvido: gtin=${sItem.gtin}, codigo_fornecedor=${sItem.codigo_fornecedor}`)
-              }
-            }
-
-            const valorBase = resolved?.valor || sItem.preco_unitario || 0
+            // ---- ITEM EXTRA (apenas FlowB2B) ----
+            // Decisao do cliente: extras aceitos NAO viram produto nem linha no Bling.
+            // Ficam so na FlowB2B (somente_flowb2b=true), entram na OBSERVACAO do pedido
+            // no Bling pela sincronizacao, e NAO somam no total/parcelas do Bling — somam
+            // apenas no total da FlowB2B. Nao criamos produto no Bling: o cadastro vem da
+            // nota fiscal (manual). produto_id fica null; os dados ficam na propria linha.
+            const valorBase = sItem.preco_unitario || 0
             const descontoItem = sItem.desconto_percentual || 0
             const valorComDesconto = valorBase * (1 - descontoItem / 100)
 
             await supabase.from('itens_pedido_compra').insert({
               pedido_compra_id: parseInt(pedidoId),
-              produto_id: resolved?.produto_id || null,
-              descricao: sItem.produto_nome || resolved?.nome || 'Produto sugerido',
+              produto_id: null,
+              descricao: sItem.produto_nome || (sItem.codigo_fornecedor ? `Cod. ${sItem.codigo_fornecedor}` : 'Produto extra'),
+              codigo_fornecedor: sItem.codigo_fornecedor || null,
+              ean: sItem.gtin || null,
               quantidade: sItem.quantidade_sugerida,
               valor: valorBase,
               valor_unitario_final: valorComDesconto,
               quantidade_bonificacao: sItem.bonificacao_quantidade || 0,
               unidade: 'UN',
+              somente_flowb2b: true,
             })
 
           } else if (sItem.is_substituicao && sItem.item_pedido_compra_id) {

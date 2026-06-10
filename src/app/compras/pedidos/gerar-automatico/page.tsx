@@ -433,6 +433,9 @@ function GerarAutomaticoContent() {
     valor: number
   }>>([])
   const [descontarPedidos, setDescontarPedidos] = useState(false)
+  // Itens extra (somente_flowb2b) preservados: nao editaveis aqui, nao vao ao Bling,
+  // entram na observacao. Exibidos so como aviso para o editor.
+  const [itensExtraFlow, setItensExtraFlow] = useState<Array<{ nome: string; quantidade: number }>>([])
 
   // Busca e filtros avancados da tabela de sugestoes
   const [buscaSugestao, setBuscaSugestao] = useState('')
@@ -580,10 +583,17 @@ function GerarAutomaticoContent() {
       setDataPrevista(p.data_prevista ? String(p.data_prevista).split('T')[0] : '')
       setPoliticaSelecionadaId(p.politica_id || null)
 
-      // Itens -> SugestaoItem
+      // Itens -> SugestaoItem.
+      // Itens "extra" (somente_flowb2b) sao FlowB2B-only: NAO entram na lista editavel
+      // (nao vao ao Bling, nao somam total/parcelas aqui) — sao preservados pelo backend
+      // e injetados na observacao. Exibimos so como aviso.
       if (p.itens && p.itens.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const itensFormatados: SugestaoItem[] = p.itens.map((item: any) => {
+        setItensExtraFlow((p.itens as any[]).filter((it) => it.somente_flowb2b).map((it) => ({
+          nome: it.descricao || 'Produto extra', quantidade: it.quantidade || 0,
+        })))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const itensFormatados: SugestaoItem[] = (p.itens as any[]).filter((it) => !it.somente_flowb2b).map((item: any) => {
           const itensPorCaixa = item.itens_por_caixa || 1
           const quantidade = item.quantidade || 0
           const valorUnitario = item.valor || 0
@@ -2229,6 +2239,23 @@ function GerarAutomaticoContent() {
                 </div>
               )}
             </div>
+
+            {itensExtraFlow.length > 0 && (
+              <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-sm text-blue-800">
+                <p className="font-semibold">
+                  {itensExtraFlow.length} item(ns) extra (somente FlowB2B) preservado(s)
+                </p>
+                <p className="mt-0.5 text-blue-700/90">
+                  Itens negociados que entram pela nota fiscal — nao sao enviados ao Bling como produto
+                  (vao na observacao) e nao somam no total/parcelas do Bling. Nao sao editaveis aqui.
+                </p>
+                <ul className="mt-1.5 list-disc pl-5 text-xs text-blue-700/90">
+                  {itensExtraFlow.map((e, i) => (
+                    <li key={i}>{e.quantidade}x {e.nome}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full">

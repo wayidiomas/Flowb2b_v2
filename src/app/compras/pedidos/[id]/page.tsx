@@ -1340,10 +1340,22 @@ export default function VisualizarPedidoPage() {
                     const qtdOriginal = snap?.quantidade ?? item.quantidade
                     const valorOriginal = snap?.valor ?? item.valor
                     return (
-                    <tr key={item.id || index} className="hover:bg-gray-50">
+                    <tr key={item.id || index} className={`hover:bg-gray-50 ${item.somente_flowb2b ? 'bg-blue-50/40' : ''}`}>
                       <td className="px-4 py-3 text-sm text-gray-500">{item.codigo_produto || '-'}</td>
                       <td className="px-4 py-3 text-sm text-blue-600 font-medium">{item.codigo_fornecedor || '-'}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate" title={item.descricao}>{item.descricao}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate" title={item.descricao}>
+                        <span className="inline-flex items-center gap-1.5">
+                          {item.somente_flowb2b && (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700 shrink-0"
+                              title="Item extra: entra pela nota fiscal. Nao enviado ao Bling, nao soma no total/parcelas do Bling."
+                            >
+                              Extra · via NF
+                            </span>
+                          )}
+                          <span className="truncate">{item.descricao}</span>
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-500 text-center">{item.unidade}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{qtdOriginal}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(valorOriginal)}</td>
@@ -1361,9 +1373,17 @@ export default function VisualizarPedidoPage() {
                 const qtdOriginal = snap?.quantidade ?? item.quantidade
                 const valorOriginal = snap?.valor ?? item.valor
                 return (
-                <div key={item.id || index} className="px-4 py-3">
+                <div key={item.id || index} className={`px-4 py-3 ${item.somente_flowb2b ? 'bg-blue-50/40' : ''}`}>
                   <div className="flex justify-between items-start">
                     <div className="flex-1 min-w-0">
+                      {item.somente_flowb2b && (
+                        <span
+                          className="inline-flex items-center px-1.5 py-0.5 mb-1 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700"
+                          title="Item extra: entra pela nota fiscal. Nao enviado ao Bling."
+                        >
+                          Extra · via NF
+                        </span>
+                      )}
                       <p className="text-sm font-medium text-gray-900 truncate">{item.descricao}</p>
                       <p className="text-xs text-gray-500 mt-0.5">
                         {item.codigo_produto && `SKU: ${item.codigo_produto}`}

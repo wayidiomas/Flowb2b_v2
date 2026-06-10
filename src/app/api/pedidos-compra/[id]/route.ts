@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/permissions'
 import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
 import { blingFetch, BlingRateLimitError } from '@/lib/bling-fetch'
 import { FRETE_POR_CONTA_MAP, FretePorContaLabel } from '@/types/pedido-compra'
+import { montarObservacaoComExtras } from '@/lib/bling-pedido-compra'
 
 // Interface para item do pedido
 interface ItemPedidoRequest {
@@ -271,6 +272,22 @@ export async function PUT(
     // 3. Montar payload do Bling
     const blingPayload = buildBlingPayload(body)
 
+    // 3.0 Itens extra (somente_flowb2b): NAO sao enviados como linha ao Bling (o
+    // front nao os inclui no body). Aqui injetamos eles na OBSERVACAO do pedido,
+    // e mais abaixo o DELETE preserva esses itens no banco (remove so os nao-extra).
+    const { data: extrasFlow } = await supabase
+      .from('itens_pedido_compra')
+      .select('descricao, codigo_fornecedor, ean, quantidade, valor, valor_unitario_final')
+      .eq('pedido_compra_id', pedidoId)
+      .eq('somente_flowb2b', true)
+    const obsComExtras = montarObservacaoComExtras(body.observacoes, extrasFlow || [])
+    if (obsComExtras) blingPayload.observacoes = obsComExtras
+    else delete blingPayload.observacoes
+    const extrasValor = (extrasFlow || []).reduce(
+      (s, e) => s + (((e.valor_unitario_final ?? e.valor) || 0) * (e.quantidade || 0)),
+      0
+    )
+
     // 3.1 Validar e ajustar parcelas para bater com total dos itens (evita erro 220 do Bling)
     if (blingPayload.parcelas && blingPayload.parcelas.length > 0) {
       // Calcular total que o Bling vera (itens + IPI - desconto + frete)
@@ -463,8 +480,9 @@ export async function PUT(
         fornecedor_id: body.fornecedor_id,
         data: body.data,
         data_prevista: body.dataPrevista || null,
-        total_produtos: body.totalProdutos,
-        total: body.total,
+        // Total da FlowB2B inclui os itens extra (que nao vao ao Bling)
+        total_produtos: body.totalProdutos + extrasValor,
+        total: body.total + extrasValor,
         desconto: body.desconto || 0,
         // CIF/SEM_FRETE: frete nao soma ao total, entao gravamos 0 (consistente com o Bling)
         frete: (body.fretePorConta === 'CIF' || body.fretePorConta === 'SEM_FRETE') ? 0 : (body.frete || 0),
@@ -487,11 +505,14 @@ export async function PUT(
       console.error('Erro ao atualizar cabecalho no Supabase:', updateError)
     }
 
-    // 8. Atualizar itens - DELETE existentes + INSERT novos
+    // 8. Atualizar itens - DELETE existentes + INSERT novos.
+    // Preserva os itens extra (somente_flowb2b): eles nao vem no body e nao devem
+    // ser apagados nem re-enviados ao Bling — sao mantidos intactos no banco.
     const { error: deleteItensError } = await supabase
       .from('itens_pedido_compra')
       .delete()
       .eq('pedido_compra_id', pedidoId)
+      .eq('somente_flowb2b', false)
 
     if (deleteItensError) {
       console.error('Erro ao deletar itens antigos:', deleteItensError)

@@ -61,6 +61,9 @@ export interface ItemPedidoCompra {
   // Campos de sugestao aplicada
   valor_unitario_final?: number      // Valor unitario com desconto aplicado
   quantidade_bonificacao?: number    // Quantidade de unidades bonificadas (gratis)
+  // Item extra apenas FlowB2B: nao vai ao Bling como linha (vai na observacao),
+  // nao soma no total/parcelas do Bling. Reconciliado quando a NF entra.
+  somente_flowb2b?: boolean
 }
 
 // Dados do formulario de pedido
