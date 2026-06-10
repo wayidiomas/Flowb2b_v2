@@ -103,6 +103,57 @@ function looksLikeEan(code: string): boolean {
   return clean.length >= 8 && /^\d+$/.test(clean) && /^[789]/.test(clean)
 }
 
+// Normaliza nome para chave de identidade: minusculo, espacos colapsados.
+// NAO remove gramatura/digitos — "GOLDEN 1KG" e "GOLDEN 3KG" devem ter chaves
+// diferentes (SKUs diferentes).
+function normalizeNome(nome: string | null | undefined): string {
+  return (nome || '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+// Remove linhas duplicadas extraidas do espelho pelo OCR (PDF de varias paginas,
+// repeticoes, mesma SKU em secoes diferentes). Duplicatas causavam "extras" falsos:
+// o item do pedido casa apenas com a 1a ocorrencia (usedEspelho), e as demais
+// sobravam como nao-casadas -> extra.
+//
+// Uma linha e considerada duplicata quando QUALQUER uma de suas identidades
+// (EAN / codigo_fornecedor / nome normalizado) ja foi vista. Mantemos a 1a
+// ocorrencia (que tende a ser a mais completa, no topo do documento).
+function dedupEspelho(itens: ItemEspelhoInterno[]): ItemEspelhoInterno[] {
+  const seenEan = new Set<string>()
+  const seenCod = new Set<string>()
+  const seenNome = new Set<string>()
+  const out: ItemEspelhoInterno[] = []
+
+  for (const e of itens) {
+    // Coleta as identidades desta linha
+    const ean = (() => {
+      const barras = normalizeCode(e.codigo_barras)
+      if (barras && looksLikeEan(barras)) return barras
+      const cf = normalizeCode(e.codigo_fornecedor)
+      return cf && looksLikeEan(cf) ? cf : ''
+    })()
+    const cod = (() => {
+      const cf = normalizeCode(e.codigo_fornecedor)
+      return cf && !looksLikeEan(cf) ? cf : ''
+    })()
+    const nome = normalizeNome(e.nome)
+
+    const ehDuplicata =
+      (ean && seenEan.has(ean)) ||
+      (cod && seenCod.has(cod)) ||
+      (nome && seenNome.has(nome))
+
+    if (ehDuplicata) continue
+
+    if (ean) seenEan.add(ean)
+    if (cod) seenCod.add(cod)
+    if (nome) seenNome.add(nome)
+    out.push(e)
+  }
+
+  return out
+}
+
 function approxEqual(a: number, b: number, tolerance = 0.02): boolean {
   if (a === 0 && b === 0) return true
   if (a === 0 || b === 0) return false
@@ -719,7 +770,7 @@ Retorne APENAS um JSON array, sem markdown:
   console.log(`[ESPELHO] Extração: ${itensEspelhoRaw.length} itens do espelho, ${itensPedido.length} itens do pedido`)
 
   // Build internal espelho items
-  const itensEspelho: ItemEspelhoInterno[] = itensEspelhoRaw.map((item, idx) => ({
+  const itensEspelhoExtraidos: ItemEspelhoInterno[] = itensEspelhoRaw.map((item, idx) => ({
     idx,
     codigo_fornecedor: String(item.codigo_fornecedor || item.codigo || '') || null,
     codigo_barras: String(item.codigo_barras || '') || null,
@@ -730,6 +781,12 @@ Retorne APENAS um JSON array, sem markdown:
     unidade: String(item.unidade || '') || null,
     embalagem: String(item.embalagem || '') || null,
   }))
+
+  // Dedup: colapsa linhas duplicadas do OCR (causa de "extras" falsos).
+  const itensEspelho = dedupEspelho(itensEspelhoExtraidos)
+  if (itensEspelho.length !== itensEspelhoExtraidos.length) {
+    console.log(`[ESPELHO] Dedup espelho: ${itensEspelhoExtraidos.length} -> ${itensEspelho.length} (${itensEspelhoExtraidos.length - itensEspelho.length} duplicata(s) removida(s))`)
+  }
 
   // =========================================================================
   // STEP 2: Deterministic matching (TypeScript, no AI)
