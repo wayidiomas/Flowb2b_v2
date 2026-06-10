@@ -175,19 +175,24 @@ interface Gramatura {
 function extrairGramaturas(texto: string | null | undefined): Gramatura[] {
   if (!texto) return []
   const out: Gramatura[] = []
+  // Remove o multiplicador de CAIXA "NxM" antes da gramatura (ex.: "4X1,5KG" -> "1,5KG",
+  // "5X3KG" -> "3KG"). O N e a quantidade por caixa, NAO a gramatura. Sem isso, a virgula
+  // de "4X1,5KG" quebrava o parse e "5KG" (5000g) era lido no lugar de 1,5kg (1500g),
+  // gerando rejeicao falsa por gramatura -> ruptura/extra falsos.
+  const t = texto.replace(/\b\d+\s*[xX]\s*(?=\d)/g, ' ')
   // Regex pega numeros (com . ou , decimal) seguidos de unidade. Tolera espaco opcional.
   // Captura: 2,5kg | 100g | 1L | 1.5L | 500ml | 250g | c/12 | C/3 | 30un
   const reMassa = /\b(\d+(?:[.,]\d+)?)\s*(kg|g)\b/gi
   const reVolume = /\b(\d+(?:[.,]\d+)?)\s*(l|ml)\b/gi
   const reEmbalagem = /\b(?:c|cx|c\/|cont|contendo)\.?\s*(\d+)\s*un?\b/gi
   let m: RegExpExecArray | null
-  while ((m = reMassa.exec(texto)) !== null) {
+  while ((m = reMassa.exec(t)) !== null) {
     const v = parseFloat(m[1].replace(',', '.'))
     if (isFinite(v) && v > 0) {
       out.push({ valor: m[2].toLowerCase() === 'kg' ? v * 1000 : v, unidade: 'g' })
     }
   }
-  while ((m = reVolume.exec(texto)) !== null) {
+  while ((m = reVolume.exec(t)) !== null) {
     const v = parseFloat(m[1].replace(',', '.'))
     if (isFinite(v) && v > 0) {
       out.push({ valor: m[2].toLowerCase() === 'l' ? v * 1000 : v, unidade: 'ml' })
@@ -345,18 +350,41 @@ function matchDeterministico(
 // STEP 3: Fuzzy matching by AI (only unmatched items)
 // ---------------------------------------------------------------------------
 
-async function matchFuzzyIA(
-  openai: OpenAI,
-  unmatchedPedido: ItemPedidoInterno[],
-  unmatchedEspelho: ItemEspelhoInterno[],
-): Promise<MatchedPair[]> {
-  if (unmatchedPedido.length === 0 || unmatchedEspelho.length === 0) return []
+// Aliases de marca para BUCKETIZAR o matching fuzzy (#2). Expande abreviacoes de
+// marca conhecidas no 1o token para agrupar pedido/espelho na mesma "familia"
+// (ex.: "SD ..." e "Special Dog ..." caem juntos). Bucketizar nunca IMPEDE um
+// match: o que sobra de cada bucket vai pro passe GLOBAL multi-passo (#1).
+const BRAND_ALIASES: Record<string, string> = {
+  sd: 'special', s: 'special',
+  gp: 'granplus', gran: 'granplus',
+  fn: 'formula', formula: 'formula',
+  ul: 'ultralife', ultralife: 'ultralife',
+}
 
-  const pedidoTexto = unmatchedPedido.map((p, i) =>
+function brandKey(nome: string | null | undefined): string {
+  const n = normalizeNome(nome).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (!n) return ''
+  const tokens = n.split(/[^a-z0-9]+/).filter(Boolean)
+  if (tokens.length === 0) return ''
+  const first = tokens[0]
+  return BRAND_ALIASES[first] || first
+}
+
+// Uma unica chamada de IA para casar um subconjunto de pedido x espelho.
+// Mantem o guardrail de gramatura. label apenas para telemetria.
+async function matchFuzzyIABatch(
+  openai: OpenAI,
+  pedido: ItemPedidoInterno[],
+  espelho: ItemEspelhoInterno[],
+  label: string,
+): Promise<MatchedPair[]> {
+  if (pedido.length === 0 || espelho.length === 0) return []
+
+  const pedidoTexto = pedido.map((p, i) =>
     `${i}. CodForn:${p.codigo_fornecedor || 'N/A'} | CodProd:${p.codigo_produto || 'N/A'} | GTIN:${p.gtin || 'N/A'} | "${p.descricao || ''}" | Qtd:${p.quantidade}`
   ).join('\n')
 
-  const espelhoTexto = unmatchedEspelho.map((e, i) =>
+  const espelhoTexto = espelho.map((e, i) =>
     `${i}. CodForn:${e.codigo_fornecedor || 'N/A'} | EAN:${e.codigo_barras || 'N/A'} | "${e.nome || ''}" | Qtd:${e.quantidade ?? 'N/A'}`
   ).join('\n')
 
@@ -392,7 +420,15 @@ NUNCA case pesos diferentes.
   - "RACAO X PEQ 7kg" x "RACAO X PEQ 10kg"   -> NAO casar
   - "PETISCO Y 100g" x "PETISCO Y 250g"      -> NAO casar
   - "LEITINHO Z 200ml" x "LEITINHO Z 500ml"  -> NAO casar
-  (Atencao: "1kg" != "1,5kg"; "3kg" != "3KG" e IGUAL — caixa e espaco nao contam.)
+  (Atencao: "1kg" != "1,5kg"; "3kg" != "3KG" e IGUAL — caixa e espaco nao contam. "5X3KG" tem gramatura
+   3kg — o "5X" e quantidade por caixa, NAO faz parte da gramatura.)
+
+EXAUSTIVIDADE (MUITO IMPORTANTE):
+- Percorra CADA item do espelho e CADA item do pedido. Para cada um, procure ativamente o correspondente
+  do MESMO produto fisico na outra lista — NAO pare nos pares de nome parecido.
+- Itens do mesmo produto podem ter nomes MUITO diferentes (abreviacoes pesadas, marca omitida, ordem
+  trocada). Esgote a analise de TODOS os candidatos antes de desistir de um item.
+- Nao casar por preguica gera "ruptura" e "extra" FALSOS. Case sempre que for, de fato, o mesmo produto.
 
 CRITERIO DE DECISAO:
 - Case quando voce, como especialista, concluir que descrevem o MESMO produto fisico (mesmos componentes
@@ -402,10 +438,10 @@ CRITERIO DE DECISAO:
   diferenca for a gramatura. Nesse caso o item do pedido fica como ruptura e o do espelho como extra.
 - Cada indice (pedido e espelho) so pode ser usado UMA vez.
 
-PEDIDO sem match (${unmatchedPedido.length} itens):
+PEDIDO sem match (${pedido.length} itens):
 ${pedidoTexto}
 
-ESPELHO sem match (${unmatchedEspelho.length} itens):
+ESPELHO sem match (${espelho.length} itens):
 ${espelhoTexto}
 
 Retorne APENAS um JSON array, sem markdown e sem comentarios:
@@ -441,11 +477,11 @@ Se nenhum par for o mesmo produto, retorne []`
 
     for (const { pedido_idx, espelho_idx } of pairs) {
       if (usedP.has(pedido_idx) || usedE.has(espelho_idx)) continue
-      if (pedido_idx < 0 || pedido_idx >= unmatchedPedido.length) continue
-      if (espelho_idx < 0 || espelho_idx >= unmatchedEspelho.length) continue
+      if (pedido_idx < 0 || pedido_idx >= pedido.length) continue
+      if (espelho_idx < 0 || espelho_idx >= espelho.length) continue
 
-      const ped = unmatchedPedido[pedido_idx]
-      const esp = unmatchedEspelho[espelho_idx]
+      const ped = pedido[pedido_idx]
+      const esp = espelho[espelho_idx]
 
       // Guardrail deterministico: descarta matches que a IA fez ignorando
       // diferenca de gramatura/peso/volume (causa do bug "10kg nao vira extra")
@@ -463,18 +499,85 @@ Se nenhum par for o mesmo produto, retorne []`
       usedE.add(espelho_idx)
     }
 
-    // Telemetria detalhada dos pares aceitos (ajuda a calibrar o prompt)
-    if (result.length > 0) {
-      console.log('[ESPELHO][fuzzy-ia] pares aceitos:', result.map(r => ({
-        pedido: r.pedido.descricao, espelho: r.espelho.nome,
-      })))
-    }
-    console.log(`[ESPELHO] Fuzzy IA: ${result.length} matched, ${rejeitadosPorGramatura} rejeitados por gramatura (de ${pairs.length} pares retornados pela IA); pool: ${unmatchedPedido.length}p × ${unmatchedEspelho.length}e`)
+    console.log(`[ESPELHO] Fuzzy[${label}]: ${result.length} matched, ${rejeitadosPorGramatura} rej. gramatura (de ${pairs.length} pares IA); pool: ${pedido.length}p × ${espelho.length}e`)
     return result
   } catch (err) {
-    console.error('[ESPELHO] Fuzzy IA error:', err)
+    console.error(`[ESPELHO] Fuzzy[${label}] error:`, err)
     return []
   }
+}
+
+// Orquestrador do matching fuzzy:
+//   #2 passe BUCKETIZADO por marca (pools menores -> recall melhor)
+//   #1 passe(s) GLOBAL(is) multi-passo nos itens que sobraram (rede de seguranca:
+//      recupera pares cuja marca foi nomeada de forma diferente entre os lados)
+async function matchFuzzyIA(
+  openai: OpenAI,
+  unmatchedPedido: ItemPedidoInterno[],
+  unmatchedEspelho: ItemEspelhoInterno[],
+): Promise<MatchedPair[]> {
+  if (unmatchedPedido.length === 0 || unmatchedEspelho.length === 0) return []
+
+  const usedP = new Set<number>()  // por item.idx (unico)
+  const usedE = new Set<number>()
+  const all: MatchedPair[] = []
+
+  const registrar = (pairs: MatchedPair[]) => {
+    for (const m of pairs) {
+      if (usedP.has(m.pedido.idx) || usedE.has(m.espelho.idx)) continue
+      usedP.add(m.pedido.idx)
+      usedE.add(m.espelho.idx)
+      all.push(m)
+    }
+  }
+  const restamP = () => unmatchedPedido.filter(p => !usedP.has(p.idx))
+  const restamE = () => unmatchedEspelho.filter(e => !usedE.has(e.idx))
+
+  // ---- #2: passe bucketizado por marca (so quando o pool global e grande) ----
+  const poolGrande = unmatchedPedido.length * unmatchedEspelho.length > 200
+  if (poolGrande) {
+    const buckets = new Map<string, { p: ItemPedidoInterno[]; e: ItemEspelhoInterno[] }>()
+    for (const p of unmatchedPedido) {
+      const k = brandKey(p.descricao)
+      if (!k) continue
+      if (!buckets.has(k)) buckets.set(k, { p: [], e: [] })
+      buckets.get(k)!.p.push(p)
+    }
+    for (const e of unmatchedEspelho) {
+      const k = brandKey(e.nome)
+      if (!k) continue
+      if (!buckets.has(k)) buckets.set(k, { p: [], e: [] })
+      buckets.get(k)!.e.push(e)
+    }
+    for (const [k, b] of buckets) {
+      if (b.p.length === 0 || b.e.length === 0) continue
+      // bucket que abrange o pool inteiro nao ajuda — deixa pro passe global
+      if (b.p.length === unmatchedPedido.length && b.e.length === unmatchedEspelho.length) continue
+      registrar(await matchFuzzyIABatch(openai, b.p, b.e, `marca:${k}`))
+    }
+    console.log(`[ESPELHO] Fuzzy bucketizado: ${all.length} matched apos ${buckets.size} bucket(s)`)
+  }
+
+  // ---- #1: passe(s) global(is) multi-passo nos que sobraram ----
+  const MAX_PASSES = 3
+  for (let pass = 1; pass <= MAX_PASSES; pass++) {
+    const rp = restamP()
+    const re = restamE()
+    if (rp.length === 0 || re.length === 0) break
+    const antes = all.length
+    registrar(await matchFuzzyIABatch(openai, rp, re, `global-p${pass}`))
+    const novos = all.length - antes
+    console.log(`[ESPELHO] Fuzzy global passe ${pass}: +${novos} (restam ${restamP().length}p × ${restamE().length}e)`)
+    if (novos === 0) break
+  }
+
+  if (all.length > 0) {
+    console.log('[ESPELHO][fuzzy-ia] pares aceitos:', all.map(r => ({
+      pedido: r.pedido.descricao, espelho: r.espelho.nome,
+    })))
+  }
+  console.log(`[ESPELHO] Fuzzy IA total: ${all.length} matched (pool inicial ${unmatchedPedido.length}p × ${unmatchedEspelho.length}e)`)
+  return all
 }
 
 // ---------------------------------------------------------------------------
