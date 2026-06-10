@@ -394,6 +394,33 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                 }
                 return { ...sug, status_item: 'ok' as const, motivo_divergencia: null, preco_espelho: precoEspelhoNovo, quantidade_espelho: qtdEspelhoNova }
               }))
+
+              // Persiste a validacao IA (verdade do espelho, ANTES das edicoes do
+              // fornecedor) para o lojista herdar. skipTimeline: nao e "informar
+              // disponibilidade", e so o registro automatico da validacao. Best-effort.
+              try {
+                const itensSave = (validacao.itens || []).map((it: any) => ({
+                  status_ia: it.status,
+                  status_manual: it.status,
+                  item_pedido_codigo: it.item_pedido?.codigo ?? null,
+                  item_pedido_descricao: it.item_pedido?.descricao ?? null,
+                  item_pedido_quantidade: it.item_pedido?.quantidade ?? null,
+                  item_pedido_valor: it.item_pedido?.valor ?? null,
+                  item_pedido_gtin: it.item_pedido?.gtin ?? null,
+                  item_espelho_codigo: it.item_espelho?.codigo ?? null,
+                  item_espelho_nome: it.item_espelho?.nome ?? null,
+                  item_espelho_quantidade: it.item_espelho?.quantidade ?? null,
+                  item_espelho_preco: it.item_espelho?.preco_unitario ?? null,
+                  diferencas: it.diferencas ?? null,
+                  motivo_faltante: it.status === 'faltando' ? 'ruptura' : null,
+                  previsao_retorno: null,
+                }))
+                fetch(`/api/fornecedor/pedidos/${id}/espelho/disponibilidade`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ itens: itensSave, skipTimeline: true }),
+                }).catch(() => {})
+              } catch { /* best-effort */ }
             }
           }
         } catch (err) {

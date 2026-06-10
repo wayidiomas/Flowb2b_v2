@@ -41,7 +41,10 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { itens } = body as {
+    // skipTimeline: usado quando salvamos a validacao IA automaticamente (no auto-validate
+    // do fornecedor) — nao queremos registrar "Fornecedor informou disponibilidade" nesse caso.
+    const { itens, skipTimeline } = body as {
+      skipTimeline?: boolean
       itens: Array<{
         status_ia: string
         status_manual: string
@@ -183,26 +186,28 @@ export async function POST(
         .eq('validacao_id', validacaoId)
     }
 
-    // Register in timeline
-    const itensFaltandoComMotivo = itens.filter(i => i.status_ia === 'faltando' && i.motivo_faltante)
-    const rupturas = itensFaltandoComMotivo.filter(i => i.motivo_faltante === 'ruptura').length
-    const descontinuados = itensFaltandoComMotivo.filter(i => i.motivo_faltante === 'descontinuado').length
+    // Register in timeline (pulado quando e save automatico da validacao IA)
+    if (!skipTimeline) {
+      const itensFaltandoComMotivo = itens.filter(i => i.status_ia === 'faltando' && i.motivo_faltante)
+      const rupturas = itensFaltandoComMotivo.filter(i => i.motivo_faltante === 'ruptura').length
+      const descontinuados = itensFaltandoComMotivo.filter(i => i.motivo_faltante === 'descontinuado').length
 
-    let descricaoTimeline = 'Fornecedor informou disponibilidade dos itens faltantes'
-    const partes: string[] = []
-    if (rupturas > 0) partes.push(`${rupturas} em ruptura`)
-    if (descontinuados > 0) partes.push(`${descontinuados} descontinuado${descontinuados > 1 ? 's' : ''}`)
-    if (partes.length > 0) descricaoTimeline += ` (${partes.join(', ')})`
+      let descricaoTimeline = 'Fornecedor informou disponibilidade dos itens faltantes'
+      const partes: string[] = []
+      if (rupturas > 0) partes.push(`${rupturas} em ruptura`)
+      if (descontinuados > 0) partes.push(`${descontinuados} descontinuado${descontinuados > 1 ? 's' : ''}`)
+      if (partes.length > 0) descricaoTimeline += ` (${partes.join(', ')})`
 
-    await supabase
-      .from('pedido_timeline')
-      .insert({
-        pedido_compra_id: parseInt(pedidoId, 10),
-        evento: 'disponibilidade_informada',
-        descricao: descricaoTimeline,
-        autor_tipo: 'fornecedor',
-        autor_nome: validadoPor,
-      })
+      await supabase
+        .from('pedido_timeline')
+        .insert({
+          pedido_compra_id: parseInt(pedidoId, 10),
+          evento: 'disponibilidade_informada',
+          descricao: descricaoTimeline,
+          autor_tipo: 'fornecedor',
+          autor_nome: validadoPor,
+        })
+    }
 
     return NextResponse.json({
       success: true,
