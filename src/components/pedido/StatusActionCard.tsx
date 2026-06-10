@@ -5,6 +5,17 @@ import type { StatusInterno, SugestaoFornecedor, SugestaoItem } from '@/types/pe
 import { ESTADOS_FINAIS } from '@/types/pedido-compra'
 import { normalizarPrecoSugerido } from '@/lib/sugestao-preco'
 
+// Compara duas quantidades reconciliando caixa<->unidade via itens_por_caixa.
+// Ex.: comprado 20 un x espelho 2 caixas (ipc 10) => batem (2*10=20). Usado para
+// detectar quando o ESPELHO do fornecedor traz quantidade diferente da comprada
+// (o fornecedor pode ter deixado a sugestao "ok" mas enviado a mais/menos no espelho).
+function qtdsBatemCaixa(a: number, b: number, ipc?: number | null): boolean {
+  if (a === b) return true
+  const k = ipc && ipc > 1 ? ipc : 0
+  if (k && (a === b * k || b === a * k)) return true
+  return false
+}
+
 // Tooltip estilizado (branding FlowB2B), instantaneo e posicionado via fixed
 // para nao ser cortado pelo overflow da tabela.
 function ConferenciaHover({ trigger, titulo, linhas, cor }: {
@@ -394,14 +405,19 @@ export function StatusActionCard({
       const espQtd = espelho?.espelho_quantidade ?? null
       const espelhoPreco = espelho?.espelho_preco ?? null
 
-      // REGRA: a conferencia compara o que VOCE PEDIU com o que o FORNECEDOR EDITOU.
-      // Se pedido == fornecedor, e OK (confere) MESMO que o espelho traga valor diferente.
-      // So e divergencia quando o fornecedor entregou diferente do que voce pediu.
+      // REGRA: a conferencia compara o que VOCE PEDIU com o que o FORNECEDOR EDITOU
+      // E TAMBEM com o que o fornecedor lancou no proprio ESPELHO.
+      // O fornecedor pode deixar a sugestao igual ao pedido ("ok") mas lancar no
+      // espelho uma quantidade diferente (a mais/a menos) — isso PRECISA aparecer
+      // como divergencia pro lojista, senao a alteracao fica escondida.
       const fornecedorMudouQtd = qtdOriginal !== qtdSugeridaFinal
       const fornecedorMudouPreco = Math.abs(valorUnitario - valorBase) > 0.001
+      // Quantidade do espelho diverge da que sera comprada? (reconciliado por caixa)
+      const espelhoQtdDiverge = temEspelhoItem && espQtd != null &&
+        !qtdsBatemCaixa(qtdSugeridaFinal, espQtd, sItem.itens_por_caixa)
       const pedidoEncaixaFornecedor = !fornecedorMudouQtd && !fornecedorMudouPreco
-      const espelhoConfere = temEspelhoItem && pedidoEncaixaFornecedor && !descartado
-      const espelhoDiverge = temEspelhoItem && !pedidoEncaixaFornecedor && !descartado
+      const espelhoDiverge = temEspelhoItem && (!pedidoEncaixaFornecedor || espelhoQtdDiverge) && !descartado
+      const espelhoConfere = temEspelhoItem && !espelhoDiverge && !descartado
 
       // Preco do espelho (venda atual do fornecedor) comparado ao CUSTO (o que o lojista comprava = valorUnitario).
       const espelhoVsCusto = espelhoPreco != null && Math.abs(espelhoPreco - valorUnitario) > 0.001 ? espelhoPreco - valorUnitario : null
@@ -431,6 +447,13 @@ export function StatusActionCard({
           } else linha += '.'
           espelhoDiffPartes.push(linha)
         }
+        // Fornecedor marcou "ok"/sugestao igual ao pedido, mas o espelho dele traz
+        // quantidade diferente — a alteracao estava escondida.
+        if (espelhoQtdDiverge && !fornecedorMudouQtd) {
+          espelhoDiffPartes.push(
+            `Quantidade: o fornecedor confirmou ${qtdSugeridaFinal}, mas no espelho dele consta ${espQtd}. Ele pode ter enviado ${espQtd! < qtdSugeridaFinal ? 'a MENOS' : 'a MAIS'} sem informar — confira.`
+          )
+        }
       }
       const espelhoDiffTexto = espelhoDiffPartes.join('\n')
 
@@ -443,7 +466,7 @@ export function StatusActionCard({
         return partes.join('\n')
       })()
 
-      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, excluidoExtra, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct, precoCaixaConvertido }
+      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, excluidoExtra, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoQtdDiverge, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct, precoCaixaConvertido }
     })
 
     const temPrecoSugerido = itensCalculados.some(item => item.precoSugerido != null || item.espelhoVsCusto != null)
@@ -634,6 +657,9 @@ export function StatusActionCard({
                         // Status do lojista: preco sugerido difere do original
                         if (precoAlterado) return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-50 text-orange-700">Preco alterado</span>
                         if (qtdMudou) return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700">Qtd alterada</span>
+                        // Fornecedor manteve a sugestao igual ao pedido, mas o espelho dele traz
+                        // quantidade diferente — sinaliza a alteracao escondida.
+                        if (item.espelhoQtdDiverge) return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800" title="O fornecedor confirmou a quantidade, mas no espelho dele consta um valor diferente. Confira.">Qtd alterada</span>
                         return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700">OK</span>
                       })()}
                     </td>
