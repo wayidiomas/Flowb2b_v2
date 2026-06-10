@@ -366,7 +366,11 @@ export function StatusActionCard({
         })
       }
       const precoCorrigido = norm.precoCorrigido
-      const precoSugerido = precoCorrigido > 0 && precoCorrigido !== valorUnitario ? precoCorrigido : null
+      // Diferencas de ate 1 centavo sao ruido de arredondamento (preco unitario com
+      // fracao de centavo), NAO alteracao de preco — tratamos como "sem mudanca" pra
+      // nao marcar "Preco alterado" indevidamente (ex.: 65,50 -> 65,51).
+      const precoDiferenteCentavos = Math.round(Math.abs(precoCorrigido - valorUnitario) * 100) / 100
+      const precoSugerido = precoCorrigido > 0 && precoDiferenteCentavos > 0.01 ? precoCorrigido : null
       const valorBase = precoSugerido ?? valorUnitario
       const precoCaixaConvertido = norm.foiConvertido
         ? { precoRecebido: sItem.preco_unitario as number, itensPorCaixa: norm.itensPorCaixa }
