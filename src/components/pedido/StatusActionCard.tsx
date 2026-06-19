@@ -331,19 +331,50 @@ export function StatusActionCard({
     }
 
     const normCodigo = (c: string | null | undefined) => (c || '').replace(/^0+/, '').trim()
-    const itensCalculados = sugestaoItens.map((sItem) => {
-      // Casa o item original por varios criterios — item_pedido_compra_id costuma
-      // vir null nas sugestoes (nunca foi preenchido), entao o vinculo real e por
-      // produto_id, e fallback por gtin/codigo_fornecedor/codigo_produto.
-      const itemOriginal =
-        (sItem.item_pedido_compra_id != null
-          ? itens.find(i => i.id === sItem.item_pedido_compra_id) : undefined) ||
-        (sItem.produto_id != null
-          ? itens.find(i => i.produto_id != null && i.produto_id === sItem.produto_id) : undefined) ||
-        (sItem.gtin
-          ? itens.find(i => i.ean && normCodigo(i.ean) === normCodigo(sItem.gtin)) : undefined) ||
-        (sItem.codigo_fornecedor
-          ? itens.find(i => i.codigo_fornecedor && normCodigo(i.codigo_fornecedor) === normCodigo(sItem.codigo_fornecedor)) : undefined)
+
+    // Resolve o item do pedido para CADA item da sugestao, consumindo cada item do
+    // pedido no maximo uma vez. Ordem de tentativa:
+    //  (1) chaves fortes: item_pedido_compra_id -> produto_id -> gtin -> codigo_fornecedor
+    //  (2) fallback por SNAPSHOT unico (valor_pedido + quantidade_pedida)
+    //  (3) fallback POSICIONAL, so para itens totalmente ORFAOS (nenhuma chave nem nome)
+    // Os fallbacks existem por causa de sugestoes raras gravadas sem nenhuma chave de
+    // identidade (bug que gerava "Produto sem nome"); so consomem itens ainda nao casados.
+    type ItemPedidoRef = (typeof itens)[number]
+    const matchOriginal: Array<ItemPedidoRef | undefined> = []
+    const usados = new Set<number>()
+    sugestaoItens.forEach((s, idx) => {
+      const m =
+        (s.item_pedido_compra_id != null
+          ? itens.find(i => i.id === s.item_pedido_compra_id) : undefined) ||
+        (s.produto_id != null
+          ? itens.find(i => i.produto_id != null && i.produto_id === s.produto_id) : undefined) ||
+        (s.gtin
+          ? itens.find(i => i.ean && normCodigo(i.ean) === normCodigo(s.gtin)) : undefined) ||
+        (s.codigo_fornecedor
+          ? itens.find(i => i.codigo_fornecedor && normCodigo(i.codigo_fornecedor) === normCodigo(s.codigo_fornecedor)) : undefined)
+      matchOriginal[idx] = m
+      if (m?.id != null) usados.add(m.id)
+    })
+    // (2) snapshot unico
+    sugestaoItens.forEach((s, idx) => {
+      if (matchOriginal[idx]) return
+      if (s.valor_pedido == null || s.quantidade_pedida == null) return
+      const cands = itens.filter(i => !usados.has(i.id)
+        && Math.abs((i.valor || 0) - (s.valor_pedido as number)) < 0.005
+        && Number(i.quantidade) === Number(s.quantidade_pedida))
+      if (cands.length === 1) { matchOriginal[idx] = cands[0]; usados.add(cands[0].id) }
+    })
+    // (3) posicional, so para orfaos totais
+    const livresPosicao = itens.filter(i => !usados.has(i.id))
+    let cursorPos = 0
+    sugestaoItens.forEach((s, idx) => {
+      if (matchOriginal[idx]) return
+      const orfao = s.item_pedido_compra_id == null && s.produto_id == null && !s.gtin && !s.codigo_fornecedor && !s.produto_nome
+      if (orfao && cursorPos < livresPosicao.length) { matchOriginal[idx] = livresPosicao[cursorPos]; cursorPos++ }
+    })
+
+    const itensCalculados = sugestaoItens.map((sItem, sIdx) => {
+      const itemOriginal = matchOriginal[sIdx]
       // Preferimos o snapshot do pedido original (gravado na criacao da sugestao)
       // sobre o itemOriginal.valor — porque o valor do item pode ter sido alterado
       // pelo proprio algoritmo de calculo automatico (que ja salva preco de caixa
@@ -470,7 +501,12 @@ export function StatusActionCard({
         return partes.join('\n')
       })()
 
-      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, excluidoExtra, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoQtdDiverge, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct, precoCaixaConvertido }
+      // Ultimo recurso de nome (so se nem match, nem produto_nome, nem codigo): mostra o
+      // snapshot (qtd/valor pedidos) em vez de "Produto sem nome".
+      const nomeFallback = (sItem.quantidade_pedida != null && sItem.valor_pedido != null)
+        ? `Item · Qtd ${sItem.quantidade_pedida} · ${formatCurrency(sItem.valor_pedido)}`
+        : 'Produto sem nome'
+      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, excluidoExtra, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoQtdDiverge, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct, precoCaixaConvertido, nomeFallback }
     })
 
     const temPrecoSugerido = itensCalculados.some(item => item.precoSugerido != null || item.espelhoVsCusto != null)
@@ -733,19 +769,19 @@ export function StatusActionCard({
                         <span className="text-gray-300 text-[10px]">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-gray-900 max-w-[180px] font-medium" title={item.itemOriginal?.descricao}>
+                    <td className="px-4 py-2.5 text-gray-900 max-w-[220px] min-w-[180px] font-medium align-top" title={item.itemOriginal?.descricao}>
                       {item.is_substituicao && item.produto_nome ? (
                         <div>
-                          <span className="line-through text-gray-400 text-xs block truncate">{item.itemOriginal?.descricao}</span>
-                          <span className="block text-blue-700 truncate">{item.produto_nome}</span>
+                          <span className="line-through text-gray-400 text-xs block break-words">{item.itemOriginal?.descricao}</span>
+                          <span className="block text-blue-700 break-words">{item.produto_nome}</span>
                         </div>
                       ) : item.is_novo ? (
-                        <span className="text-blue-700 block truncate">{item.produto_nome || item.itemOriginal?.descricao || (item.codigo_fornecedor ? `Cod. ${item.codigo_fornecedor}` : 'Produto sem nome')}</span>
+                        <span className="text-blue-700 block break-words">{item.produto_nome || item.itemOriginal?.descricao || (item.codigo_fornecedor ? `Cod. ${item.codigo_fornecedor}` : item.nomeFallback)}</span>
                       ) : (
-                        <span className="block truncate">{item.itemOriginal?.descricao || item.produto_nome || (item.codigo_fornecedor ? `Cod. ${item.codigo_fornecedor}` : 'Produto sem nome')}</span>
+                        <span className="block break-words">{item.itemOriginal?.descricao || item.produto_nome || (item.codigo_fornecedor ? `Cod. ${item.codigo_fornecedor}` : item.nomeFallback)}</span>
                       )}
                       {(item.itemOriginal?.codigo_produto || item.codigo_fornecedor) && (
-                        <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                        <p className="text-[10px] text-gray-400 mt-0.5 break-words">
                           {item.itemOriginal?.codigo_produto && <span>SKU: {item.itemOriginal.codigo_produto}</span>}
                           {item.itemOriginal?.codigo_produto && item.codigo_fornecedor && <span> · </span>}
                           {item.codigo_fornecedor && <span>Forn: {item.codigo_fornecedor}</span>}

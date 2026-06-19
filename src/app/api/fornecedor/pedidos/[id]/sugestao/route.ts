@@ -77,6 +77,19 @@ export async function POST(
           { status: 400 }
         )
       }
+      // Item normal: exige ao menos UMA chave de identidade para o lojista conseguir
+      // casar/nomear o item (evita orfaos "Produto sem nome"). Fecha o vetor de
+      // gravar item totalmente sem identidade via payload fora da UI.
+      if (!item.is_novo && !item.is_substituicao) {
+        const temIdentidade = item.item_pedido_compra_id != null || item.produto_id != null
+          || !!item.codigo_fornecedor || !!item.gtin || !!item.produto_nome
+        if (!temIdentidade) {
+          return NextResponse.json(
+            { error: 'Item sem identificacao: informe item_pedido_compra_id, produto_id, codigo_fornecedor, gtin ou produto_nome.' },
+            { status: 400 }
+          )
+        }
+      }
     }
 
     const supabase = createServerSupabaseClient()
