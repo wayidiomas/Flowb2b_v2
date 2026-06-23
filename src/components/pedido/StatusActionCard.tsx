@@ -4,6 +4,10 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { StatusInterno, SugestaoFornecedor, SugestaoItem } from '@/types/pedido-compra'
 import { ESTADOS_FINAIS } from '@/types/pedido-compra'
 import { normalizarPrecoSugerido } from '@/lib/sugestao-preco'
+import { ComparativoPrecosModal, type ComparativoLoja } from './ComparativoPrecosModal'
+
+// Normaliza GTIN/EAN para casar produtos entre lojas (so digitos).
+const soDigitos = (s: string | null | undefined) => (s || '').replace(/\D/g, '')
 
 // Compara duas quantidades reconciliando caixa<->unidade via itens_por_caixa.
 // Ex.: comprado 20 un x espelho 2 caixas (ipc 10) => batem (2*10=20). Usado para
@@ -128,6 +132,9 @@ interface StatusActionCardProps {
     espelho_preco: number | null
     diferencas?: string[]
   }[]
+  // Comparativo de preco cross-loja: GTIN -> precos do mesmo fornecedor em cada loja do usuario.
+  comparativoPorGtin?: Record<string, { produto_nome: string | null; lojas: ComparativoLoja[] }>
+  fornecedorNome?: string
 }
 
 export function StatusActionCard({
@@ -156,6 +163,8 @@ export function StatusActionCard({
   validandoEspelho,
   onValidarEspelho,
   validacaoEspelho,
+  comparativoPorGtin,
+  fornecedorNome,
 }: StatusActionCardProps) {
   // ─── Estados para search / filtros / paginacao da tabela de sugestao ───
   const [busca, setBusca] = useState('')
@@ -173,6 +182,13 @@ export function StatusActionCard({
       return next
     })
   }
+  // Modal de comparativo de preco entre lojas (aberto ao clicar no preco de um item)
+  const [comparativoModal, setComparativoModal] = useState<{
+    produtoNome: string | null
+    gtin: string
+    lojas: ComparativoLoja[]
+    precoCotado: number | null
+  } | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)')
@@ -506,7 +522,32 @@ export function StatusActionCard({
       const nomeFallback = (sItem.quantidade_pedida != null && sItem.valor_pedido != null)
         ? `Item · Qtd ${sItem.quantidade_pedida} · ${formatCurrency(sItem.valor_pedido)}`
         : 'Produto sem nome'
-      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, excluidoExtra, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoQtdDiverge, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct, precoCaixaConvertido, nomeFallback }
+
+      // Comparativo de preco do MESMO fornecedor nas OUTRAS lojas do usuario (match por GTIN).
+      const gtinComp = soDigitos(sItem.gtin || itemOriginal?.ean || '')
+      const compInfo = (gtinComp && comparativoPorGtin) ? comparativoPorGtin[gtinComp] : undefined
+      const precoAqui = precoSugerido != null ? precoSugerido : valorUnitario
+      const outrasLojas = (compInfo?.lojas || []).filter(l => !l.is_atual && l.preco > 0)
+      const menorOutraLoja = outrasLojas.length
+        ? outrasLojas.reduce((a, b) => (b.preco < a.preco ? b : a))
+        : null
+      let comparativoNivel: 'none' | 'real' | 'confira' | 'ruido' | 'info' = compInfo ? 'info' : 'none'
+      let comparativoEconomiaPct = 0
+      if (compInfo && menorOutraLoja && menorOutraLoja.preco > 0 && precoAqui > 0) {
+        // Classifica por RAZAO de preco (nao divide por itens_por_caixa — vide auditoria):
+        // 5-30% = divergencia real | 30-100% = confira | >100% = ruido (caixa/preco quebrado).
+        const ratio = precoAqui / menorOutraLoja.preco
+        comparativoEconomiaPct = ((precoAqui - menorOutraLoja.preco) / precoAqui) * 100
+        if (ratio > 2.0) comparativoNivel = 'ruido'
+        else if (ratio > 1.30) comparativoNivel = 'confira'
+        else if (ratio > 1.05) comparativoNivel = 'real'
+        else comparativoNivel = 'info'
+      }
+      const comparativoInfo = compInfo
+        ? { gtin: gtinComp, produto_nome: compInfo.produto_nome, lojas: compInfo.lojas }
+        : null
+
+      return { ...sItem, itemOriginal, valorUnitario, precoSugerido, valorBase, qtdOriginal, valorComDesconto, subtotalOriginal, subtotalSugerido, unidadesBonificadas, descartado, excluidoExtra, espelho, espelhoStatus, espelhoFaltando, espelhoDiverge, espelhoConfere, espelhoQtdDiverge, espelhoDiffTexto, espelhoConfereTexto, espelhoPreco, espelhoVsCusto, espelhoVsCustoPct, precoCaixaConvertido, nomeFallback, comparativoInfo, comparativoNivel, comparativoEconomiaPct, menorOutraLoja, precoAqui }
     })
 
     const temPrecoSugerido = itensCalculados.some(item => item.precoSugerido != null || item.espelhoVsCusto != null)
@@ -837,6 +878,33 @@ export function StatusActionCard({
                             )}
                           </span>
                         )}
+                        {item.comparativoInfo && (
+                          <button
+                            type="button"
+                            onClick={() => setComparativoModal({
+                              produtoNome: item.comparativoInfo!.produto_nome,
+                              gtin: item.comparativoInfo!.gtin,
+                              lojas: item.comparativoInfo!.lojas,
+                              precoCotado: item.precoAqui,
+                            })}
+                            className="block w-full text-right mt-0.5"
+                            title="Ver preco deste fornecedor nas suas outras lojas"
+                          >
+                            {item.comparativoNivel === 'real' && item.menorOutraLoja ? (
+                              <span className="text-[10px] font-semibold text-green-600 leading-tight">
+                                ↓ {item.menorOutraLoja.empresa_nome}: {formatCurrency(item.menorOutraLoja.preco)} (-{item.comparativoEconomiaPct.toFixed(0)}%) ▸
+                              </span>
+                            ) : item.comparativoNivel === 'confira' && item.menorOutraLoja ? (
+                              <span className="text-[10px] font-medium text-gray-500 leading-tight">
+                                {item.menorOutraLoja.empresa_nome}: {formatCurrency(item.menorOutraLoja.preco)} · confira ▸
+                              </span>
+                            ) : item.comparativoNivel === 'ruido' ? (
+                              <span className="text-[10px] font-medium text-amber-600 leading-tight">⚠ revisar cadastro ▸</span>
+                            ) : (
+                              <span className="text-[10px] text-gray-400 leading-tight underline decoration-dotted">ver preço nas lojas ▸</span>
+                            )}
+                          </button>
+                        )}
                       </td>
                     )}
                     <td className="px-3 py-2.5 text-right">
@@ -869,6 +937,18 @@ export function StatusActionCard({
             </tbody>
           </table>
         </div>
+
+        {comparativoModal && (
+          <ComparativoPrecosModal
+            produtoNome={comparativoModal.produtoNome}
+            gtin={comparativoModal.gtin}
+            fornecedorNome={fornecedorNome}
+            precoCotado={comparativoModal.precoCotado}
+            lojas={comparativoModal.lojas}
+            formatCurrency={formatCurrency}
+            onClose={() => setComparativoModal(null)}
+          />
+        )}
 
         {/* Paginacao */}
         {totalPaginas > 1 && (

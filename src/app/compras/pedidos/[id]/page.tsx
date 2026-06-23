@@ -9,6 +9,7 @@ import { FornecedorSelectModal } from '@/components/pedido-compra/FornecedorSele
 import { PedidoTimeline } from '@/components/pedido/PedidoTimeline'
 import { WorkflowStepper } from '@/components/pedido/WorkflowStepper'
 import { StatusActionCard } from '@/components/pedido/StatusActionCard'
+import type { ComparativoLoja } from '@/components/pedido/ComparativoPrecosModal'
 import { CancelamentoModal } from '@/components/pedido/CancelamentoModal'
 import { ProductSearchModal } from '@/components/pedido/ProductSearchModal'
 import type { CatalogoProduto } from '@/components/pedido/ProductSearchModal'
@@ -110,6 +111,8 @@ export default function VisualizarPedidoPage() {
   const [statusInterno, setStatusInterno] = useState<StatusInterno>('rascunho')
   const [sugestoes, setSugestoes] = useState<SugestaoFornecedor[]>([])
   const [sugestaoItens, setSugestaoItens] = useState<SugestaoItem[] | null>(null)
+  // Comparativo de preco do mesmo fornecedor entre as lojas do usuario (GTIN -> lojas)
+  const [comparativoPrecos, setComparativoPrecos] = useState<Record<string, { produto_nome: string | null; lojas: ComparativoLoja[] }> | null>(null)
   const [enviandoFornecedor, setEnviandoFornecedor] = useState(false)
   const [processandoSugestao, setProcessandoSugestao] = useState(false)
   const [observacaoResposta, setObservacaoResposta] = useState('')
@@ -235,6 +238,19 @@ export default function VisualizarPedidoPage() {
           }
         } catch (espelhoErr) {
           console.error('Erro ao buscar espelho:', espelhoErr)
+        }
+
+        // Comparativo de preco do mesmo fornecedor nas outras lojas do usuario (so na revisao da sugestao)
+        if (pedidoData?.status_interno === 'sugestao_pendente') {
+          try {
+            const compRes = await fetch(`/api/compras/comparativo-precos?pedido_id=${pedidoId}`)
+            if (compRes.ok) {
+              const compData = await compRes.json()
+              setComparativoPrecos(compData.comparativo || null)
+            }
+          } catch (compErr) {
+            console.error('Erro ao buscar comparativo de precos:', compErr)
+          }
         }
       } catch (err) {
         console.error('Erro ao buscar status/sugestoes:', err)
@@ -1222,6 +1238,8 @@ export default function VisualizarPedidoPage() {
                 espelho_preco: v.item_espelho?.preco_unitario ?? null,
                 diferencas: v.diferencas,
               }))}
+              comparativoPorGtin={comparativoPrecos ?? undefined}
+              fornecedorNome={pedido.fornecedor_nome}
             />
           </div>
 
