@@ -659,7 +659,10 @@ export async function POST(
         })
 
         if (itensComPrecoAlterado.length > 0) {
-          // Fire-and-forget: atualizar preços em fornecedores_produtos (todas as empresas)
+          // Fire-and-forget: sincroniza o preco aceito nas OUTRAS lojas DESTE usuario
+          // (mesmo fornecedor por CNPJ + mesmo produto por GTIN). ESCOPO restrito as
+          // empresas em users_empresas do usuario que aceitou — NUNCA o banco inteiro,
+          // senao sobrescreveria o custo de fornecedores compartilhados com outros lojistas.
           void (async () => {
             try {
               // Buscar CNPJ do fornecedor
@@ -671,11 +674,21 @@ export async function POST(
 
               if (!fornecedorData?.cnpj) return
 
-              // Buscar todos os fornecedores com mesmo CNPJ
+              // Empresas que ESTE usuario possui vinculo ativo (barreira de isolamento)
+              const { data: vinculosUsuario } = await supabase
+                .from('users_empresas')
+                .select('empresa_id')
+                .eq('user_id', user.userId)
+                .eq('ativo', true)
+              const empresasPermitidas = (vinculosUsuario || []).map(v => v.empresa_id)
+              if (empresasPermitidas.length === 0) return
+
+              // Buscar fornecedores com mesmo CNPJ APENAS nas empresas do usuario
               const { data: todosFornecedores } = await supabase
                 .from('fornecedores')
                 .select('id, empresa_id')
                 .eq('cnpj', fornecedorData.cnpj)
+                .in('empresa_id', empresasPermitidas)
 
               if (!todosFornecedores?.length) return
 
