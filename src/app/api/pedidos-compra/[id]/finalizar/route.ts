@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { getCurrentUser } from '@/lib/auth'
 import { requirePermission } from '@/lib/permissions'
-import { BLING_CONFIG, refreshBlingTokens } from '@/lib/bling'
-import { blingFetch } from '@/lib/bling-fetch'
+import { refreshBlingTokens } from '@/lib/bling'
+import { estornarContasPedidoCompra } from '@/lib/bling-pedido-compra'
 import { ESTADOS_FINAIS } from '@/types/pedido-compra'
 
 // Funcao para obter e validar o token do Bling
@@ -91,14 +91,6 @@ export async function POST(
       )
     }
 
-    // Verificar situacao no Bling
-    if (pedido.situacao === 1) {
-      return NextResponse.json(
-        { error: 'Pedido ja esta atendido no Bling' },
-        { status: 400 }
-      )
-    }
-
     if (pedido.situacao === 2) {
       return NextResponse.json(
         { error: 'Pedido cancelado nao pode ser finalizado' },
@@ -106,54 +98,34 @@ export async function POST(
       )
     }
 
-    let blingSyncSuccess = false
-    let blingSyncError = ''
-
-    // Tentar sincronizar com Bling se tiver bling_id
-    if (pedido.bling_id) {
+    // ── CORRECAO A: finalizar NAO altera o status do pedido no Bling. ──
+    // A cliente controla a baixa manualmente: so marca "Atendido" no Bling quando a
+    // mercadoria de fato chega — e e ai que o Bling lanca estoque + conta a pagar
+    // (Gerenciador de Transicoes). Por isso NAO fazemos mais o
+    // PATCH /pedidos/compras/{id}/situacoes { valor: 1 } aqui.
+    //
+    // REDE DE SEGURANCA (estorno): o Bling pode lancar conta a pagar automaticamente na
+    // criacao/abertura do pedido. Como a conta so deve existir quando a mercadoria chega,
+    // estornamos a conta auto-lancada ao finalizar. So estorna se o pedido NAO estiver
+    // Atendido (situacao 1) — pedido ja atendido tem conta legitima. Best-effort:
+    // conta paga/baixada nao e mexida; "sem conta" e tratado como sucesso.
+    let estornoWarning = ''
+    if (pedido.bling_id && pedido.situacao !== 1) {
       const accessToken = await getBlingAccessToken(empresaId, supabase)
-
       if (accessToken) {
-        try {
-          // Endpoint correto API Bling v3: PATCH /pedidos/compras/{id}/situacoes body { valor: 1 } (Atendido)
-          const result = await blingFetch(
-            `${BLING_CONFIG.apiUrl}/pedidos/compras/${pedido.bling_id}/situacoes`,
-            {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-              },
-              body: JSON.stringify({ valor: 1 }),
-            },
-            { context: 'finalizar pedido', maxRetries: 3 }
-          )
-
-          if (result.response.ok) {
-            blingSyncSuccess = true
-            if (result.hadRateLimit) {
-              console.log(`Pedido finalizado apos ${result.retriesUsed} retries por rate limit`)
-            }
-          } else {
-            const errorText = await result.response.text()
-            blingSyncError = `Bling: ${errorText}`
-            console.error('Erro ao finalizar no Bling:', errorText)
-          }
-        } catch (err) {
-          blingSyncError = err instanceof Error ? err.message : 'Erro desconhecido'
-          console.error('Erro na chamada Bling:', err)
+        const estorno = await estornarContasPedidoCompra(pedido.bling_id, accessToken)
+        if (!estorno.ok) {
+          estornoWarning = estorno.warning
+          console.warn('[finalizar] estorno de contas (rede de seguranca):', estorno.warning)
         }
       }
     }
 
-    // Atualizar status no Supabase
+    // Atualizar status no Supabase — apenas o estado interno; a situacao do Bling
+    // (e a do Supabase) ficam intactas. O "Atendido" so acontece manualmente.
     const updateData: Record<string, unknown> = {
       status_interno: 'finalizado',
       updated_at: new Date().toISOString(),
-    }
-
-    if (blingSyncSuccess) {
-      updateData.situacao = 1 // Atendido
     }
 
     const { error: updateError } = await supabase
@@ -174,7 +146,7 @@ export async function POST(
       .insert({
         pedido_compra_id: parseInt(pedidoId),
         evento: 'finalizado',
-        descricao: `Pedido finalizado pelo lojista${blingSyncSuccess ? ' (sincronizado com Bling)' : ''}`,
+        descricao: 'Pedido finalizado pelo lojista (status no Bling inalterado; baixa/conta sao manuais na chegada da mercadoria)',
         autor_tipo: 'lojista',
         autor_nome: user.email,
       })
@@ -182,8 +154,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       message: 'Pedido finalizado com sucesso',
-      bling_sync: blingSyncSuccess,
-      bling_error: blingSyncError || undefined,
+      estorno_aviso: estornoWarning || undefined,
     })
 
   } catch (error) {

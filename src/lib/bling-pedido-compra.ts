@@ -3,6 +3,55 @@ import { blingFetch } from './bling-fetch'
 import { createServerSupabaseClient } from './supabase'
 import { FRETE_POR_CONTA_MAP, FretePorContaLabel } from '@/types/pedido-compra'
 
+export type EstornoContasResult =
+  | { ok: true; semContas?: boolean }
+  | { ok: false; bloqueado?: boolean; warning: string }
+
+/**
+ * Estorna (reverte) as contas a pagar de um pedido de compra no Bling.
+ * Endpoint oficial (Bling API v3): POST /pedidos/compras/{id}/estornar-contas
+ *
+ * Usado como REDE DE SEGURANCA: o Bling pode lancar conta a pagar automaticamente
+ * (config do Gerenciador de Transicoes ao criar/atender o pedido). A cliente quer
+ * que a conta so exista quando a mercadoria chega (lancamento manual). Este estorno
+ * limpa a conta auto-lancada. Best-effort e idempotente:
+ *  - "nenhuma conta" => ok (nada a estornar)
+ *  - conta ja paga/baixada => bloqueado (NAO mexe; preserva o financeiro real)
+ */
+export async function estornarContasPedidoCompra(
+  blingId: number | string,
+  accessToken: string
+): Promise<EstornoContasResult> {
+  try {
+    const estorno = await blingFetch(
+      `${BLING_CONFIG.apiUrl}/pedidos/compras/${blingId}/estornar-contas`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({}),
+      },
+      { context: 'estornar contas (rede de seguranca)', maxRetries: 3 }
+    )
+
+    if (estorno.response.ok) return { ok: true }
+
+    const txt = (await estorno.response.text().catch(() => '')).toLowerCase()
+    const semContas =
+      txt.includes('nenhuma conta') || txt.includes('nao ha conta') ||
+      txt.includes('não há conta') || txt.includes('sem conta') || txt.includes('nota fiscal')
+    if (semContas) return { ok: true, semContas: true }
+
+    const contaPaga =
+      txt.includes('paga') || txt.includes('baixad') || txt.includes('liquidad') || txt.includes('quitad')
+    if (contaPaga) {
+      return { ok: false, bloqueado: true, warning: 'Conta a pagar ja baixada/paga no Bling — nao foi estornada.' }
+    }
+    return { ok: false, warning: 'Nao foi possivel estornar as contas a pagar. Verifique no Bling.' }
+  } catch {
+    return { ok: false, warning: 'Falha ao estornar contas a pagar (best-effort).' }
+  }
+}
+
 export type CancelamentoBlingResult =
   | { ok: true; jaCancelado?: boolean }
   | { ok: false; naoEncontrado?: boolean; status: number; errorText: string }

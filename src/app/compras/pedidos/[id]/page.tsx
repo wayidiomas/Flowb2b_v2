@@ -845,9 +845,9 @@ export default function VisualizarPedidoPage() {
       const data = await res.json()
       if (res.ok && data.success) {
         setStatusInterno('finalizado')
-        if (data.bling_sync) {
-          setPedido(prev => prev ? { ...prev, situacao: 1 } : null)
-        }
+        // Correcao A: finalizar NAO marca "Atendido" no Bling — a situacao do pedido
+        // permanece como esta (a baixa/conta a pagar sao manuais, na chegada da mercadoria).
+        if (data.estorno_aviso) alert(`Pedido finalizado. Atencao: ${data.estorno_aviso}`)
       } else {
         alert(`Erro: ${data.error || 'Falha ao finalizar'}`)
       }
