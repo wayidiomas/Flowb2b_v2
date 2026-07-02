@@ -1334,21 +1334,21 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
             )}
           </td>
         )}
-        {/* Produto */}
-        <td className="px-4 py-3 text-sm text-gray-900 max-w-[200px]" title={item?.descricao || sug?.produto_nome || ''}>
+        {/* Produto — nome quebra em linhas (nao trunca), igual a tabela de sugestao do lojista */}
+        <td className="px-4 py-3 text-sm text-gray-900 max-w-[220px] min-w-[180px] align-top" title={item?.descricao || sug?.produto_nome || ''}>
           {isNovo ? (
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-secondary-100 text-secondary-700">Novo</span>
-              <span className="font-medium text-gray-900 truncate">{sug?.produto_nome}</span>
+            <div className="flex items-start gap-2">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-secondary-100 text-secondary-700 shrink-0">Novo</span>
+              <span className="font-medium text-gray-900 break-words min-w-0">{sug?.produto_nome}</span>
             </div>
           ) : sug?.is_substituicao ? (
             <div>
-              <p className="line-through text-gray-400 text-xs truncate">{item!.descricao}</p>
-              <p className="font-semibold text-gray-900 truncate">{sug.produto_nome}</p>
+              <p className="line-through text-gray-400 text-xs break-words">{item!.descricao}</p>
+              <p className="font-semibold text-gray-900 break-words">{sug.produto_nome}</p>
               <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-secondary-100 text-secondary-700 mt-0.5">Substituido</span>
             </div>
           ) : (
-            <span className="truncate block">{item!.descricao}</span>
+            <span className="break-words block">{item!.descricao}</span>
           )}
         </td>
         {/* Codigos */}
