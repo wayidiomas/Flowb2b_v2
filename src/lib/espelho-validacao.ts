@@ -179,7 +179,14 @@ function extrairGramaturas(texto: string | null | undefined): Gramatura[] {
   // "5X3KG" -> "3KG"). O N e a quantidade por caixa, NAO a gramatura. Sem isso, a virgula
   // de "4X1,5KG" quebrava o parse e "5KG" (5000g) era lido no lugar de 1,5kg (1500g),
   // gerando rejeicao falsa por gramatura -> ruptura/extra falsos.
-  const t = texto.replace(/\b\d+\s*[xX]\s*(?=\d)/g, ' ')
+  //
+  // 1) Separa letra colada a numero (fornecedor cola tudo: "PQ3X2,5KG" -> "PQ 3X2,5KG").
+  //    Sem isso o \b antes do numero falha, o "3X" nao e removido e "2,5KG" era lido como
+  //    "5KG" (5000g) — quebrando o match de itens iguais (ex.: FN FM FILH 2,5KG). 2) Depois
+  //    remove o multiplicador de caixa NxM.
+  const t = texto
+    .replace(/([A-Za-z])(\d)/g, '$1 $2')
+    .replace(/\b\d+\s*[xX]\s*(?=\d)/g, ' ')
   // Regex pega numeros (com . ou , decimal) seguidos de unidade. Tolera espaco opcional.
   // Captura: 2,5kg | 100g | 1L | 1.5L | 500ml | 250g | c/12 | C/3 | 30un
   const reMassa = /\b(\d+(?:[.,]\d+)?)\s*(kg|g)\b/gi
