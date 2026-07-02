@@ -2705,6 +2705,23 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                         </td>
                       )}
                       {canSuggest && (
+                        <td className="px-2 py-3 align-top">
+                          <textarea
+                            id={`obs-novo-${globalIndex}`}
+                            maxLength={100}
+                            rows={2}
+                            value={sug.observacao_item}
+                            onChange={(e) => {
+                              updateSugestao(null, 'observacao_item', e.target.value, globalIndex)
+                              e.target.style.height = 'auto'
+                              e.target.style.height = e.target.scrollHeight + 'px'
+                            }}
+                            placeholder="Obs..."
+                            className="w-full min-w-[140px] text-[11px] px-2 py-1.5 border border-gray-200 rounded-lg focus:border-[#336FB6] focus:ring-1 focus:ring-[#336FB6]/20 resize-none overflow-hidden leading-relaxed"
+                          />
+                        </td>
+                      )}
+                      {canSuggest && (
                         <td className="px-2 py-2 text-center">
                           <button
                             onClick={() => handleRemoverItemNovo(globalIndex)}
@@ -3148,6 +3165,19 @@ export default function FornecedorPedidoDetailPage({ params }: { params: Promise
                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] transition-all"
                           />
                         </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Observacao</label>
+                        <textarea
+                          id={`obs-novo-m-${globalIndex}`}
+                          maxLength={100}
+                          rows={2}
+                          value={sug.observacao_item}
+                          onChange={(e) => updateSugestao(null, 'observacao_item', e.target.value, globalIndex)}
+                          placeholder="Ex: bonificacao/desconto ou motivo da inclusao"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#336FB6] focus:border-[#336FB6] resize-none"
+                        />
                       </div>
 
                       {/* Subtotal sugerido */}
