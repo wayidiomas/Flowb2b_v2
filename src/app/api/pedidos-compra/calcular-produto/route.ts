@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
         .maybeSingle(),
       supabase
         .from('fornecedores_produtos')
-        .select('valor_de_compra, codigo_fornecedor')
+        .select('valor_de_compra, precocusto, codigo_fornecedor')
         .eq('fornecedor_id', fornecedorId)
         .eq('empresa_id', empresaId)
         .eq('produto_id', produtoId)
@@ -80,7 +80,11 @@ export async function GET(request: NextRequest) {
     const estoqueAtual = Number(produto.estoque_atual ?? 0)
     const itensPorCaixa = Number(produto.itens_por_caixa ?? 1) || 1
     const unidadeProduto = String(produto.unidade ?? 'UN').toUpperCase()
-    const valorUnitario = Number(fp?.valor_de_compra ?? produto.preco ?? 0)
+    // valor_unitario e SEMPRE por UNIDADE. Preferir precocusto (custo por unidade), pois
+    // valor_de_compra vem do Bling como preco da CAIXA/fardo quando itens_por_caixa > 1 —
+    // usa-lo direto inflava o preco do item adicionado (~itens_por_caixa x). Mesma ordem
+    // de preferencia do algoritmo Python /calcular (precocusto ?? valor_de_compra).
+    const valorUnitario = Number(fp?.precocusto ?? fp?.valor_de_compra ?? produto.preco ?? 0)
 
     // 3) Datas (max saida e max compra) — RPCs do Supabase ja usadas pela API Python
     const [{ data: saidaRows }, { data: compraRows }] = await Promise.all([
