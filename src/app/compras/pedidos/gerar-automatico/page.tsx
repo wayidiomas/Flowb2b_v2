@@ -1261,6 +1261,9 @@ function GerarAutomaticoContent() {
     let sugestaoQuantidade = 0
     let itensPorCaixa = itensPorCaixaFallback
     let valorUnitario = valorUnitarioFallback
+    // codigo = SKU do PRODUTO (coluna "Codigo"), igual aos itens auto-gerados. NAO usar
+    // codigo_fornecedor aqui (esse tem campo proprio) — senao o item entra com codigo errado.
+    let codigoProduto = produto.codigo || ''
 
     try {
       const params = new URLSearchParams({
@@ -1276,6 +1279,7 @@ function GerarAutomaticoContent() {
         sugestaoQuantidade = Number(dados.sugestao_quantidade ?? 0)
         if (dados.itens_por_caixa) itensPorCaixa = Number(dados.itens_por_caixa)
         if (dados.valor_unitario) valorUnitario = Number(dados.valor_unitario)
+        if (dados.codigo) codigoProduto = String(dados.codigo)
       }
     } catch (err) {
       // Falha de calculo nao bloqueia adicao — o item entra com defaults e o lojista ajusta
@@ -1290,7 +1294,7 @@ function GerarAutomaticoContent() {
     const novoItem: SugestaoItem = {
       produto_id: produto.produto_id ?? 0,
       id_produto_bling: produto.id_produto_bling,
-      codigo: produto.codigo_fornecedor || '-',
+      codigo: codigoProduto || '-',
       nome: produto.nome,
       ean: produto.gtin || '',
       codigo_fornecedor: produto.codigo_fornecedor || undefined,

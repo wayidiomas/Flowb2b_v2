@@ -15,6 +15,7 @@ export interface CatalogoProduto {
   produto_id?: number
   id_produto_bling?: number
   itens_por_caixa?: number
+  codigo?: string | null  // SKU do produto (lojista); coluna "Codigo" ao adicionar item extra
 }
 
 interface ProductSearchModalProps {

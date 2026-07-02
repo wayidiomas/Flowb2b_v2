@@ -54,6 +54,9 @@ export async function GET(request: NextRequest) {
         id_produto_bling: prod.id_produto_bling ?? null,
         nome: (prod.nome as string) || '',
         gtin: (prod.gtin as string) ?? null,
+        // codigo do PRODUTO (SKU do lojista) — coluna "Codigo" da tabela; separado do
+        // codigo_fornecedor. Sem isto, o item adicionado herdava o codigo_fornecedor.
+        codigo: (prod.codigo as string) ?? null,
         codigo_fornecedor: (fp.codigo_fornecedor as string) ?? null,
         unidade: (prod.unidade as string) || 'UN',
         preco: fp.valor_de_compra ?? prod.preco ?? null,
