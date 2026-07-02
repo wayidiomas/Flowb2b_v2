@@ -159,6 +159,9 @@ export default function VisualizarPedidoPage() {
   // Controle da auto-validacao do espelho (roda 1x quando ha espelho e nenhuma
   // validacao salva, pra a conferencia do lojista nao ficar zerada).
   const [validacaoSalvaCarregada, setValidacaoSalvaCarregada] = useState(false)
+  // updated_at da validacao salva — usado pra detectar espelho reenviado depois dela
+  // (fornecedor devolveu, alterou o espelho e reenviou) e disparar re-validacao.
+  const [validacaoSalvaEm, setValidacaoSalvaEm] = useState<string | null>(null)
   const autoValidacaoTentadaRef = useRef(false)
 
   // Modais de escolha destinatario (fornecedor vs representante)
@@ -303,6 +306,7 @@ export default function VisualizarPedidoPage() {
           })
           setValidacaoItens(itensFormatados)
           setValidacaoObservacao(data.validacao.observacao || '')
+          setValidacaoSalvaEm(data.validacao.updated_at || null)
         }
       })
       .catch(() => {})
@@ -345,9 +349,17 @@ export default function VisualizarPedidoPage() {
   useEffect(() => {
     if (autoValidacaoTentadaRef.current) return
     if (!validacaoSalvaCarregada) return            // espera o load da validacao salva
-    if (validacaoItens.length > 0) return            // ja existe validacao
     if (!espelhoInfo?.espelho_url) return            // sem espelho, nada a validar
     if (statusInterno !== 'sugestao_pendente') return // conferencia so importa aqui
+    // Se ja ha validacao salva, so re-valida quando o espelho foi (re)enviado pelo
+    // fornecedor DEPOIS dela — caso "Devolver ao Fornecedor" -> fornecedor altera o
+    // espelho e reenvia. Se a validacao esta em dia com o espelho, usa a salva (sem IA).
+    if (validacaoItens.length > 0) {
+      const espSentMs = espelhoInfo.espelho_enviado_em ? new Date(espelhoInfo.espelho_enviado_em).getTime() : 0
+      const valSavedMs = validacaoSalvaEm ? new Date(validacaoSalvaEm).getTime() : 0
+      const espelhoReenviadoDepois = espSentMs > 0 && valSavedMs > 0 && espSentMs > valSavedMs + 1000
+      if (!espelhoReenviadoDepois) return
+    }
     autoValidacaoTentadaRef.current = true
 
     ;(async () => {
@@ -370,7 +382,7 @@ export default function VisualizarPedidoPage() {
         setValidandoEspelho(false)
       }
     })()
-  }, [validacaoSalvaCarregada, validacaoItens.length, espelhoInfo?.espelho_url, statusInterno, pedidoId])
+  }, [validacaoSalvaCarregada, validacaoItens.length, espelhoInfo?.espelho_url, espelhoInfo?.espelho_enviado_em, validacaoSalvaEm, statusInterno, pedidoId])
 
   // Handler para aprovar/rejeitar espelho
   // CODIGO MORTO (mantido propositalmente): os botoes "Aprovar/Rejeitar Espelho" foram
